@@ -205,7 +205,16 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Device list & active device
   const [devices, setDevices] = useState<DeviceInfo[]>(() => {
     const saved = localStorage.getItem('nova_launcher_devices');
-    return saved ? JSON.parse(saved) : INITIAL_DEVICES;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const valid = parsed.filter((d: any) => d.id !== 'tab-pc');
+          if (valid.length > 0) return valid;
+        }
+      } catch (e) {}
+    }
+    return INITIAL_DEVICES;
   });
 
   const [activeDeviceId, setActiveDeviceId] = useState<string>(() => {
@@ -327,6 +336,41 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   useEffect(() => {
     localStorage.setItem('nova_launcher_devices', JSON.stringify(devices));
   }, [devices]);
+
+  // Dynamic Hardware Node Health & Connection Polling
+  useEffect(() => {
+    const checkNodes = async () => {
+      for (const dev of devices) {
+        if (dev.id === 'tab-pc') continue;
+        try {
+          const res = await simulateBridgeRpc('GET_TELEMETRY', dev.id);
+          const isConnected = res.response.status === 'OK';
+          setDevices((prev) =>
+            prev.map((d) => {
+              if (d.id === dev.id) {
+                if (isConnected && res.response.result) {
+                  const tel = res.response.result as any;
+                  return {
+                    ...d,
+                    status: d.id === activeDeviceId ? 'connected' : 'online',
+                    cpuLoad: typeof tel.cpuLoadPercent === 'number' ? tel.cpuLoadPercent : d.cpuLoad,
+                  };
+                }
+                return d;
+              }
+              return d;
+            })
+          );
+        } catch (e) {
+          // Keep active hardware reachable status intact
+        }
+      }
+    };
+
+    checkNodes();
+    const timer = setInterval(checkNodes, 6000);
+    return () => clearInterval(timer);
+  }, [activeDeviceId]);
 
   useEffect(() => {
     localStorage.setItem('nova_launcher_active_device', activeDeviceId);
