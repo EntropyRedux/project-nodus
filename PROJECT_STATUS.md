@@ -101,3 +101,4 @@ Rooted devices running **Linux Deploy (chroot)** operate as full-tier nodes with
 - [x] **Phase 2.2**: Cross-device telemetry charts (live CPU/RAM graphs streaming from `agent-go` to `ProcessMonitorApp.tsx`).
 - [x] **Phase 2.3**: Headless File Transfer & Remote Cluster Explorer (`FileExplorerApp.tsx` & P2P file transfers).
 - [x] **Phase 3**: Android Companion Deployment & Hardware Provisioning (`nodus://pair` deep-linking, KitKat TLS fallback, `deploy_nodes.sh`).
+- [x] **Phase 4**: KitKat Linux Deploy Chroot Architecture (`GOOS=linux GOARCH=arm GOARM=7`, Tailscale subnet router `--advertise-routes=192.168.1.0/24`, `executeSuCommand` root shell).
