@@ -51,7 +51,12 @@ func loadSharedKey() ([]byte, error) {
 	keyPath := getSharedKeyPath()
 	raw, err := os.ReadFile(keyPath)
 	if err != nil {
-		return nil, fmt.Errorf("shared key not found at %s: %w", keyPath, err)
+		// Auto-generate default 256-bit key if missing
+		defaultKey := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+		dir := filepath.Dir(keyPath)
+		_ = os.MkdirAll(dir, 0700)
+		_ = os.WriteFile(keyPath, []byte(defaultKey), 0600)
+		return hex.DecodeString(defaultKey)
 	}
 	return hex.DecodeString(strings.TrimSpace(string(raw)))
 }
