@@ -20,6 +20,7 @@ import { PlatformCodeStudioApp } from '../apps/PlatformCodeStudioApp';
 import { ProcessMonitorApp } from '../apps/ProcessMonitorApp';
 import { NetworkMeshApp } from '../apps/NetworkMeshApp';
 import { UniversalClipboardApp } from '../apps/UniversalClipboardApp';
+import { FileExplorerApp } from '../apps/FileExplorerApp';
 import { audio } from '../../utils/audio';
 import { 
   FolderPlus, 
@@ -89,6 +90,8 @@ export const DesktopLauncherShell: React.FC = () => {
         return <NetworkMeshApp />;
       case 'clipboard':
         return <UniversalClipboardApp />;
+      case 'files':
+        return <FileExplorerApp />;
       default:
         return <SettingsApp />;
     }

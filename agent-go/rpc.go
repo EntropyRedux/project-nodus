@@ -225,6 +225,13 @@ func dispatch(key []byte, msg RpcMessage) RpcResponse {
 		}
 		return RpcResponse{ID: msg.ID, Status: "OK", Result: out}
 
+	case "GET_TELEMETRY":
+		telemetry, err := getTelemetry()
+		if err != nil {
+			return RpcResponse{ID: msg.ID, Status: "ERROR", Error: err.Error()}
+		}
+		return RpcResponse{ID: msg.ID, Status: "OK", Result: telemetry}
+
 	default:
 		return RpcResponse{ID: msg.ID, Status: "ERROR", Error: fmt.Sprintf("unrecognized action: %s", msg.Action)}
 	}

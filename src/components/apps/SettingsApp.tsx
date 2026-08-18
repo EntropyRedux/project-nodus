@@ -44,6 +44,7 @@ import { WALLPAPER_PRESETS } from '../../utils/constants';
 import { IconStyle, WallpaperId, RemoteExecutable, DeviceOS, NodeRole } from '../../types/launcher';
 import { audio } from '../../utils/audio';
 import { DynamicIcon } from '../common/DynamicIcon';
+import { QrCode } from '../common/QrCode';
 
 type SettingsTab = 'appearance' | 'server' | 'executables' | 'bridges' | 'clipboard' | 'security' | 'system';
 
@@ -75,6 +76,10 @@ export const SettingsApp: React.FC = () => {
   const [resetSuccess, setResetSuccess] = useState(false);
   const [execStatusMessage, setExecStatusMessage] = useState<string | null>(null);
   const [filterDevice, setFilterDevice] = useState<string>('all');
+
+  // HMAC Pairing State
+  const [sharedKey, setSharedKey] = useState('c0a3c99f8d7b6e5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a');
+  const [copiedKey, setCopiedKey] = useState(false);
 
   // Add Executable Modal / Form State
   const [showAddExecModal, setShowAddExecModal] = useState(false);
@@ -1217,6 +1222,79 @@ export const SettingsApp: React.FC = () => {
         {/* ========================================================================= */}
         {activeTab === 'security' && (
           <div className="space-y-6">
+            {/* Phase 2.1: Automated QR Code Pairing Generator */}
+            <div className="p-4 bg-[#1C1C1E] border border-white/10 rounded-2xl space-y-4 shadow-lg">
+              <div className="flex items-center justify-between border-b border-white/5 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-[#34C759]/15 text-[#34C759] flex items-center justify-center border border-[#34C759]/30">
+                    <Key size={15} />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-white">HMAC-SHA256 Shared Key & QR Pairing</h3>
+                    <p className="text-[10px] text-[#8E8E93]">Scan with Nodus Home Android app or pair cluster nodes over Tailnet</p>
+                  </div>
+                </div>
+                <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-[#34C759]/15 text-[#34C759] border border-[#34C759]/30 font-bold">
+                  AES / WebCrypto
+                </span>
+              </div>
+
+              <div className="flex flex-col md:flex-row items-center gap-5">
+                {/* QR Code Graphic */}
+                <div className="shrink-0">
+                  <QrCode
+                    value={`nodus://pair?host=${settings.networkServer?.serverHost || 'nodus-desktop'}&port=${settings.networkServer?.serverPort || 8890}&key=${sharedKey}`}
+                    size={160}
+                    fgColor="#34C759"
+                    bgColor="#121214"
+                  />
+                </div>
+
+                {/* Key Details & Copy Action */}
+                <div className="flex-1 space-y-3 min-w-0 w-full">
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-[#8E8E93] uppercase font-semibold">Active Node Shared Secret (Hex)</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={sharedKey}
+                        className="w-full bg-[#121214] border border-white/10 rounded-xl px-3 py-2 text-xs font-mono text-[#34C759] font-bold select-all focus:outline-none"
+                      />
+                      <button
+                        onClick={() => {
+                          audio.playTap();
+                          navigator.clipboard.writeText(sharedKey);
+                          setCopiedKey(true);
+                          setTimeout(() => setCopiedKey(false), 2000);
+                        }}
+                        className="px-3 py-2 bg-[#34C759] hover:bg-[#30B752] text-black font-bold rounded-xl text-xs flex items-center gap-1.5 shrink-0 transition"
+                      >
+                        <Check size={14} />
+                        {copiedKey ? 'Copied!' : 'Copy Key'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 pt-1 text-[11px] text-[#8E8E93]">
+                    <span>Saved path: <code className="text-white font-mono">~/.nodus/shared.key</code></span>
+                    <button
+                      onClick={() => {
+                        audio.playTap();
+                        const hex = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+                          .map((b) => b.toString(16).padStart(2, '0'))
+                          .join('');
+                        setSharedKey(hex);
+                      }}
+                      className="text-xs text-[#007AFF] hover:underline flex items-center gap-1"
+                    >
+                      <RefreshCw size={12} /> Regenerate Key
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-xs font-semibold text-[#8E8E93] uppercase tracking-widest flex items-center gap-2">

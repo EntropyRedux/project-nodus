@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Activity, 
   Cpu, 
@@ -16,11 +16,32 @@ import {
   Tablet, 
   Server,
   Play,
-  RotateCcw
+  RotateCcw,
+  Clock
 } from 'lucide-react';
 import { useLauncher } from '../../context/LauncherContext';
 import { DeviceProcess } from '../../types/launcher';
 import { audio } from '../../utils/audio';
+import { simulateBridgeRpc } from '../../utils/bridgeProtocol';
+
+const SparklineChart: React.FC<{ data: number[]; color: string; height?: number }> = ({ data, color, height = 28 }) => {
+  if (data.length < 2) return null;
+  const max = Math.max(...data, 10);
+  const min = Math.min(...data, 0);
+  const points = data
+    .map((val, idx) => {
+      const x = (idx / (data.length - 1)) * 110;
+      const y = height - ((val - min) / (max - min || 1)) * (height - 6) - 3;
+      return `${x},${y}`;
+    })
+    .join(' ');
+
+  return (
+    <svg width="110" height={height} className="overflow-visible">
+      <polyline fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={points} />
+    </svg>
+  );
+};
 
 export const ProcessMonitorApp: React.FC = () => {
   const { 
@@ -38,6 +59,33 @@ export const ProcessMonitorApp: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'user' | 'system' | 'service' | 'daemon'>('all');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  // Live Telemetry History State
+  const [cpuHistory, setCpuHistory] = useState<number[]>([12.4, 15.2, 18.0, 14.5, 22.1, 19.8, 16.4, 21.0, 18.5, 24.2]);
+  const [ramHistory, setRamHistory] = useState<number[]>([3800, 3850, 3820, 3910, 3890, 3950, 4020, 3980, 4050, 4120]);
+  const [uptimeSeconds, setUptimeSeconds] = useState<number>(86420);
+
+  useEffect(() => {
+    const fetchTelemetry = async () => {
+      const res = await simulateBridgeRpc('GET_TELEMETRY', selectedNodeId);
+      if (res.response.status === 'OK' && res.response.result) {
+        const tel = res.response.result as any;
+        if (typeof tel.cpuLoadPercent === 'number') {
+          setCpuHistory((prev) => [...prev.slice(-14), tel.cpuLoadPercent]);
+        }
+        if (typeof tel.memoryUsedMb === 'number') {
+          setRamHistory((prev) => [...prev.slice(-14), tel.memoryUsedMb]);
+        }
+        if (typeof tel.uptimeSeconds === 'number') {
+          setUptimeSeconds(tel.uptimeSeconds);
+        }
+      }
+    };
+
+    fetchTelemetry();
+    const interval = setInterval(fetchTelemetry, 2500);
+    return () => clearInterval(interval);
+  }, [selectedNodeId]);
 
   const targetDevice = devices.find((d) => d.id === selectedNodeId) || devices[0];
   const procs = deviceProcesses[selectedNodeId] || [];
@@ -144,21 +192,39 @@ export const ProcessMonitorApp: React.FC = () => {
           ))}
         </div>
 
-        {/* Resource Telemetry Summary */}
-        <div className="flex items-center gap-4 text-xs font-mono">
-          <div className="flex items-center gap-2 bg-[#1C1C1E] px-3 py-1.5 rounded-xl border border-white/5">
+        {/* Resource Telemetry Summary with Sparklines */}
+        <div className="flex items-center gap-3 text-xs font-mono">
+          <div className="flex items-center gap-2.5 bg-[#1C1C1E] px-3 py-1.5 rounded-xl border border-white/5 shadow-inner">
             <Cpu size={14} className="text-[#34C759]" />
-            <span className="text-[#8E8E93]">CPU Load:</span>
-            <span className="text-white font-bold">{totalCpuLoad}%</span>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[#8E8E93]">CPU:</span>
+                <span className="text-white font-bold">{cpuHistory[cpuHistory.length - 1] ?? totalCpuLoad}%</span>
+              </div>
+              <SparklineChart data={cpuHistory} color="#34C759" height={18} />
+            </div>
           </div>
-          <div className="flex items-center gap-2 bg-[#1C1C1E] px-3 py-1.5 rounded-xl border border-white/5">
+
+          <div className="flex items-center gap-2.5 bg-[#1C1C1E] px-3 py-1.5 rounded-xl border border-white/5 shadow-inner">
             <HardDrive size={14} className="text-[#007AFF]" />
-            <span className="text-[#8E8E93]">Allocated RAM:</span>
-            <span className="text-white font-bold">{totalMemMb} MB</span>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[#8E8E93]">RAM:</span>
+                <span className="text-white font-bold">{ramHistory[ramHistory.length - 1] ?? totalMemMb} MB</span>
+              </div>
+              <SparklineChart data={ramHistory} color="#007AFF" height={18} />
+            </div>
           </div>
-          <div className="flex items-center gap-2 bg-[#1C1C1E] px-3 py-1.5 rounded-xl border border-white/5">
+
+          <div className="flex items-center gap-2 bg-[#1C1C1E] px-3 py-2 rounded-xl border border-white/5">
+            <Clock size={14} className="text-[#FF9500]" />
+            <span className="text-[#8E8E93]">Uptime:</span>
+            <span className="text-white font-bold">{Math.floor(uptimeSeconds / 3600)}h {Math.floor((uptimeSeconds % 3600) / 60)}m</span>
+          </div>
+
+          <div className="flex items-center gap-2 bg-[#1C1C1E] px-3 py-2 rounded-xl border border-white/5">
             <Layers size={14} className="text-[#BF5AF2]" />
-            <span className="text-[#8E8E93]">Active Tasks:</span>
+            <span className="text-[#8E8E93]">Tasks:</span>
             <span className="text-white font-bold">{filteredProcs.length}</span>
           </div>
         </div>

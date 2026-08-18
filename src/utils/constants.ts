@@ -187,11 +187,12 @@ export const INITIAL_APPS: AppItem[] = [
   { id: 'studio', name: 'Dual-Platform Studio', iconName: 'Code', color: '#5856D6', category: 'tools', pageIndex: 0, order: 1 },
   { id: 'terminal', name: 'Remote Terminal', iconName: 'Terminal', color: '#007AFF', category: 'tools', pageIndex: 0, order: 2 },
   { id: 'monitor', name: 'Process Monitor', iconName: 'Activity', color: '#FF3B30', category: 'system', pageIndex: 0, order: 3 },
-  { id: 'network', name: 'Mesh Network', iconName: 'Radio', color: '#64D2FF', category: 'tools', pageIndex: 0, order: 4 },
-  { id: 'clipboard', name: 'Fleet Clipboard', iconName: 'Clipboard', color: '#FF9500', category: 'tools', pageIndex: 0, order: 5 },
+  { id: 'files', name: 'Cluster Explorer', iconName: 'HardDrive', color: '#007AFF', category: 'tools', pageIndex: 0, order: 4 },
+  { id: 'network', name: 'Mesh Network', iconName: 'Radio', color: '#64D2FF', category: 'tools', pageIndex: 0, order: 5 },
+  { id: 'clipboard', name: 'Fleet Clipboard', iconName: 'Clipboard', color: '#FF9500', category: 'tools', pageIndex: 0, order: 6 },
 ];
 
-export const DOCK_APP_IDS = ['settings', 'studio', 'terminal', 'monitor', 'network', 'clipboard'];
+export const DOCK_APP_IDS = ['settings', 'studio', 'terminal', 'monitor', 'files', 'network', 'clipboard'];
 
 export const INITIAL_NOTIFICATIONS: NotificationItem[] = [
   {

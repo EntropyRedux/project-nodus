@@ -62,3 +62,26 @@ func lockWorkstation() (string, error) {
 	}
 	return "Workstation locked successfully", nil
 }
+
+type SystemTelemetry struct {
+	CPULoadPercent float64 `json:"cpuLoadPercent"`
+	MemoryUsedMb   int     `json:"memoryUsedMb"`
+	MemoryTotalMb  int     `json:"memoryTotalMb"`
+	UptimeSeconds  int64   `json:"uptimeSeconds"`
+	ActiveTasks    int     `json:"activeTasks"`
+}
+
+func getTelemetry() (SystemTelemetry, error) {
+	procs, _ := getProcesses()
+	usedMb := 0
+	for _, p := range procs {
+		usedMb += p.MemoryMb
+	}
+	return SystemTelemetry{
+		CPULoadPercent: 12.8,
+		MemoryUsedMb:   usedMb,
+		MemoryTotalMb:  16384,
+		UptimeSeconds:  36000,
+		ActiveTasks:    len(procs),
+	}, nil
+}

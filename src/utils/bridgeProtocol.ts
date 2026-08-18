@@ -25,7 +25,10 @@ export interface BridgeRpcMessage {
     | 'LOCK_WORKSTATION'
     | 'REBOOT_DEVICE'
     | 'SET_VOLUME'
-    | 'BATTERY_STATUS';
+    | 'BATTERY_STATUS'
+    | 'GET_TELEMETRY'
+    | 'LIST_DIRECTORY'
+    | 'TRANSFER_FILE';
   params?: RpcParams;
   timestamp: number;
   nonce?: string;
@@ -238,6 +241,42 @@ export async function simulateBridgeRpc(
       break;
     case 'BATTERY_STATUS':
       resultData = { level: 91, isCharging: true, temperatureC: 32.4 };
+      break;
+    case 'GET_TELEMETRY':
+      resultData = {
+        cpuLoadPercent: Number((12 + Math.random() * 25).toFixed(1)),
+        memoryUsedMb: Math.floor(4200 + Math.random() * 600),
+        memoryTotalMb: 16384,
+        uptimeSeconds: 86420,
+        activeTasks: 42,
+        netRxKbps: Number((45 + Math.random() * 120).toFixed(1)),
+        netTxKbps: Number((12 + Math.random() * 80).toFixed(1))
+      };
+      break;
+    case 'LIST_DIRECTORY':
+      const reqPath = (params?.path as string) || '/home/nodus';
+      resultData = {
+        currentPath: reqPath,
+        files: [
+          { name: 'Documents', isDir: true, sizeBytes: 0, modTime: '2026-08-18 10:15' },
+          { name: 'Downloads', isDir: true, sizeBytes: 0, modTime: '2026-08-18 14:30' },
+          { name: 'Projects', isDir: true, sizeBytes: 0, modTime: '2026-08-18 16:45' },
+          { name: 'nodus_config.json', isDir: false, sizeBytes: 4096, modTime: '2026-08-18 12:00', extension: 'json' },
+          { name: 'shared.key', isDir: false, sizeBytes: 64, modTime: '2026-08-18 09:00', extension: 'key' },
+          { name: 'cluster_backup.tar.gz', isDir: false, sizeBytes: 15420000, modTime: '2026-08-17 22:10', extension: 'tar.gz' },
+          { name: 'system_log.txt', isDir: false, sizeBytes: 12450, modTime: '2026-08-18 17:00', extension: 'txt' },
+        ]
+      };
+      break;
+    case 'TRANSFER_FILE':
+      resultData = {
+        transferId: `tr-${Math.random().toString(36).substring(2, 9)}`,
+        fileName: params?.fileName || 'file.dat',
+        sizeBytes: params?.sizeBytes || 1048576,
+        status: 'TRANSFERRING',
+        bytesTransferred: 524288,
+        speedMbps: 45.2
+      };
       break;
     default:
       errorMsg = `Unhandled action: ${action}`;

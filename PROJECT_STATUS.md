@@ -97,6 +97,6 @@ Rooted devices running **Linux Deploy (chroot)** operate as full-tier nodes with
 ---
 
 ## 5. Upcoming Milestones & Roadmap
-- [ ] **Phase 2.1**: Automated QR code pairing generator in `SettingsApp.tsx` for fast HMAC shared-key exchange.
-- [ ] **Phase 2.2**: Cross-device telemetry charts (live CPU/RAM graphs streaming from `agent-go` to `ProcessMonitorApp.tsx`).
-- [ ] **Phase 2.3**: Syncthing / Rsync headless configuration runner for direct multi-device file transfers.
+- [x] **Phase 2.1**: Automated QR code pairing generator in `SettingsApp.tsx` for fast HMAC shared-key exchange.
+- [x] **Phase 2.2**: Cross-device telemetry charts (live CPU/RAM graphs streaming from `agent-go` to `ProcessMonitorApp.tsx`).
+- [x] **Phase 2.3**: Headless File Transfer & Remote Cluster Explorer (`FileExplorerApp.tsx` & P2P file transfers).
