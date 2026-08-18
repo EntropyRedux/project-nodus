@@ -13,7 +13,7 @@ export const AddDeviceModal: React.FC<AddDeviceModalProps> = ({ isOpen, onClose,
   const [name, setName] = useState('');
   const [type, setType] = useState<DeviceType>('tablet');
   const [os, setOs] = useState('Android 14');
-  const [ipAddress, setIpAddress] = useState('192.168.1.199');
+  const [ipAddress, setIpAddress] = useState('');
   const [resolution, setResolution] = useState('1920 × 1200');
   const [ramUsage, setRamUsage] = useState('4.0 / 8.0 GB');
 

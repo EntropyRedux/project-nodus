@@ -43,7 +43,7 @@ export const PlatformCodeStudioApp: React.FC = () => {
   const [copied, setCopied] = useState(false);
 
   // Simulator State
-  const [simTargetDevice, setSimTargetDevice] = useState<string>('MAIN PC (192.168.1.150:9120)');
+  const [simTargetDevice, setSimTargetDevice] = useState<string>(devices[0] ? `${devices[0].name} (${devices[0].ipAddress})` : 'POCO Pad 2405CPCFBG');
   const [simAction, setSimAction] = useState<BridgeRpcMessage['action']>('GET_PROCESSES');
   const [simCustomCmd, setSimCustomCmd] = useState('wt.exe -p "PowerShell"');
   const [simClipboardText, setSimClipboardText] = useState('https://github.com/nova-launcher/cluster');

@@ -71,7 +71,7 @@ export const UniversalClipboardApp: React.FC = () => {
       appId: 'clipboard',
       appName: 'Universal Clipboard',
       title: 'Clipboard Broadcasted',
-      message: 'Text synced to all 4 cluster nodes.',
+      message: `Text synced to all ${devices.length} cluster nodes.`,
       iconName: 'Clipboard',
       color: '#FF9500',
     });

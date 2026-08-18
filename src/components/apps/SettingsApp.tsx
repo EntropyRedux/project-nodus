@@ -478,7 +478,7 @@ export const SettingsApp: React.FC = () => {
                   <label className="text-[10px] text-[#8E8E93] uppercase font-semibold">Local Host IP / Address</label>
                   <input
                     type="text"
-                    value={settings.networkServer?.serverHost || '192.168.1.104'}
+                    value={settings.networkServer?.serverHost || (typeof window !== 'undefined' ? window.location.hostname : 'localhost')}
                     onChange={(e) => updateNetworkServerConfig({ serverHost: e.target.value })}
                     className="w-full bg-[#121214] border border-white/10 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-[#34C759]"
                   />
@@ -501,7 +501,7 @@ export const SettingsApp: React.FC = () => {
                   <div className="flex gap-2">
                     <input
                       type="text"
-                      value={settings.networkServer?.pairingSecret || '748-921'}
+                      value={settings.networkServer?.pairingSecret || 'nodus-sec-key'}
                       onChange={(e) => updateNetworkServerConfig({ pairingSecret: e.target.value })}
                       className="w-full bg-[#121214] border border-white/10 rounded-xl px-3 py-2 text-xs font-mono text-[#34C759] font-bold focus:outline-none focus:border-[#34C759]"
                     />

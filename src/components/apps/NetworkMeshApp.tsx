@@ -142,11 +142,13 @@ export const NetworkMeshApp: React.FC = () => {
               <Activity size={14} className="text-[#007AFF]" /> WebSocket Event Stream Logs
             </h3>
             <div className="p-3 bg-[#0A0A0C] rounded-xl font-mono text-[11px] text-slate-300 space-y-1 h-36 overflow-y-auto">
-              <p className="text-[#34C759]">[WS HUB: 192.168.1.104:8890] Server listening on all interfaces</p>
-              <p className="text-[#007AFF]">[EVENT] Node POCO-PAD (192.168.1.118) handshake completed (KeepAlive 5s)</p>
-              <p className="text-[#BF5AF2]">[EVENT] Node MAIN PC (192.168.1.150:9120) Windows bridge service active</p>
-              <p className="text-slate-400">[RPC] Sent HEARTBEAT to 4 active peers (0 packet loss)</p>
-              <p className="text-slate-400">[MDNS] Broadcast beacon sent to 224.0.0.251:5353</p>
+              <p className="text-[#34C759]">[WS HUB: {typeof window !== 'undefined' ? window.location.hostname : 'localhost'}:8890] Server listening on active interface</p>
+              {devices.map((dev) => (
+                <p key={dev.id} className="text-[#007AFF]">
+                  [EVENT] Node {dev.name} ({dev.ipAddress}) handshake verified ({dev.status.toUpperCase()})
+                </p>
+              ))}
+              <p className="text-slate-400">[RPC] Polling heartbeat to {devices.length} active peers (0 packet loss)</p>
             </div>
           </div>
         </div>

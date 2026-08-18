@@ -68,10 +68,9 @@ export const TerminalApp: React.FC = () => {
         if (sub === 'status') {
           newHistory.push(
             'DUAL-PLATFORM BRIDGE DAEMON STATUS:',
-            '  Android Accessibility: ACTIVE (com.novalauncher.cluster/.service.NovaAccessibilityService)',
-            '  Android WebSocket Link: CONNECTED (ws://192.168.1.104:8890/device-rpc)',
-            '  Windows C#/.NET Bridge: LISTENING (http://192.168.1.150:9120)',
-            '  Security Auth Token: win-bridge-sec-token-894 (Active)'
+            `  Android Bridge Link: ACTIVE (ws://${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}:8890/ws)`,
+            `  Active Hardware Target: ${activeDevice.name} (${activeDevice.ipAddress})`,
+            '  Security HMAC Protocol: ACTIVE (2.0 Signature Verified)'
           );
         } else if (sub === 'snippets') {
           newHistory.push(
