@@ -209,7 +209,7 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const [activeDeviceId, setActiveDeviceId] = useState<string>(() => {
     const saved = localStorage.getItem('nova_launcher_active_device');
-    return saved || 'sm-t230nu';
+    return saved || 'poco-pad';
   });
 
   const [isSidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {

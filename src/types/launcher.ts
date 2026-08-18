@@ -64,6 +64,7 @@ export interface AppItem {
   folderId?: string | null; // if in a folder
   pageIndex: number; // 0, 1, etc.
   order: number;
+  packageName?: string;
 }
 
 export interface FolderItem {

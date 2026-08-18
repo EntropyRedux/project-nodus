@@ -79,11 +79,24 @@ export const INITIAL_CLIPBOARD_ITEMS: ClipboardItem[] = [
 
 export const INITIAL_DEVICES: DeviceInfo[] = [
   {
-    id: 'sm-t230nu',
-    name: 'SM-T230NU',
+    id: 'poco-pad',
+    name: 'POCO Pad 2405CPCFBG',
     type: 'tablet',
-    os: 'Android 4.4 / LineageOS',
+    os: 'Xiaomi HyperOS 1.0 (Android 14)',
     status: 'connected',
+    ipAddress: '192.168.1.103',
+    resolution: '2560 × 1600 (12.1" 120Hz)',
+    battery: 94,
+    cpuLoad: 14,
+    ramUsage: '3.8 / 8.0 GB',
+    storage: '68 / 256 GB',
+  },
+  {
+    id: 'sm-t230nu',
+    name: 'SM-T230NU (Galaxy Tab 4)',
+    type: 'tablet',
+    os: 'Android 4.4 KitKat (Chroot)',
+    status: 'online',
     ipAddress: '192.168.1.104',
     resolution: '1280 × 800 (7.0")',
     battery: 78,
@@ -92,21 +105,8 @@ export const INITIAL_DEVICES: DeviceInfo[] = [
     storage: '6.2 / 8.0 GB',
   },
   {
-    id: 'poco-pad',
-    name: 'POCO-PAD',
-    type: 'tablet',
-    os: 'Xiaomi HyperOS 1.0 (Android 14)',
-    status: 'online',
-    ipAddress: '192.168.1.118',
-    resolution: '2560 × 1600 (12.1" 120Hz)',
-    battery: 91,
-    cpuLoad: 24,
-    ramUsage: '5.2 / 8.0 GB',
-    storage: '94 / 256 GB',
-  },
-  {
     id: 'main-pc',
-    name: 'MAIN PC',
+    name: 'MAIN PC Workstation',
     type: 'desktop',
     os: 'Windows 11 Pro 64-bit',
     status: 'online',
@@ -190,6 +190,18 @@ export const INITIAL_APPS: AppItem[] = [
   { id: 'files', name: 'Cluster Explorer', iconName: 'HardDrive', color: '#007AFF', category: 'tools', pageIndex: 0, order: 4 },
   { id: 'network', name: 'Mesh Network', iconName: 'Radio', color: '#64D2FF', category: 'tools', pageIndex: 0, order: 5 },
   { id: 'clipboard', name: 'Fleet Clipboard', iconName: 'Clipboard', color: '#FF9500', category: 'tools', pageIndex: 0, order: 6 },
+
+  // Page 1 Grid - Real Queryable 3rd Party Packages on POCO Pad
+  { id: 'app-discord', name: 'Discord', iconName: 'MessageSquare', color: '#5865F2', category: 'media', pageIndex: 1, order: 0, packageName: 'com.discord' },
+  { id: 'app-chatgpt', name: 'ChatGPT', iconName: 'Bot', color: '#10A37F', category: 'tools', pageIndex: 1, order: 1, packageName: 'com.openai.chatgpt' },
+  { id: 'app-termux', name: 'Termux', iconName: 'SquareTerminal', color: '#34C759', category: 'tools', pageIndex: 1, order: 2, packageName: 'com.termux' },
+  { id: 'app-vnc', name: 'VNC Viewer', iconName: 'Monitor', color: '#0088CC', category: 'tools', pageIndex: 1, order: 3, packageName: 'com.realvnc.viewer.android' },
+  { id: 'app-notion', name: 'Notion', iconName: 'FileText', color: '#8E8E93', category: 'productivity', pageIndex: 1, order: 4, packageName: 'notion.id' },
+  { id: 'app-replit', name: 'Replit', iconName: 'Code2', color: '#F26207', category: 'tools', pageIndex: 1, order: 5, packageName: 'com.replit.app' },
+  { id: 'app-brave', name: 'Brave Browser', iconName: 'Globe', color: '#FF1B2D', category: 'media', pageIndex: 1, order: 6, packageName: 'com.brave.browser' },
+  { id: 'app-minecraft', name: 'Minecraft', iconName: 'Gamepad2', color: '#62B446', category: 'games', pageIndex: 1, order: 7, packageName: 'com.mojang.minecraftpe' },
+  { id: 'app-calculator', name: 'Calculator', iconName: 'Calculator', color: '#FF9500', category: 'system', pageIndex: 1, order: 8, packageName: 'com.miui.calculator' },
+  { id: 'app-notes', name: 'Notes', iconName: 'PenTool', color: '#FFCC00', category: 'productivity', pageIndex: 1, order: 9, packageName: 'com.miui.notes' },
 ];
 
 export const DOCK_APP_IDS = ['settings', 'studio', 'terminal', 'monitor', 'files', 'network', 'clipboard'];
