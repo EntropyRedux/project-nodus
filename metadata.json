@@ -1,0 +1,8 @@
+{
+  "name": "Project Nodus",
+  "description": "Project Nodus — A cross-platform multi-device Android (Nodus Home) & Windows controller launcher scaffold featuring mesh cluster hosting, process management, remote executable dispatch, and unified clipboard sync.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

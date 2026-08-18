@@ -1,0 +1,40 @@
+{
+  "commands": [
+    {
+      "id": "open-vscode",
+      "binary": "code",
+      "argsTemplate": ["{path}"],
+      "allowedWorkingDirs": ["C:\\Projects", "C:\\Tools", "/home", "/root"]
+    },
+    {
+      "id": "lock-workstation",
+      "binary": "rundll32.exe",
+      "argsTemplate": ["user32.dll,LockWorkStation"],
+      "allowedWorkingDirs": []
+    },
+    {
+      "id": "launch-terminal",
+      "binary": "wt.exe",
+      "argsTemplate": ["-p", "PowerShell"],
+      "allowedWorkingDirs": ["C:\\Projects", "C:\\Users"]
+    },
+    {
+      "id": "android-home",
+      "binary": "su",
+      "argsTemplate": ["-c", "input keyevent 3"],
+      "allowedWorkingDirs": []
+    },
+    {
+      "id": "android-back",
+      "binary": "su",
+      "argsTemplate": ["-c", "input keyevent 4"],
+      "allowedWorkingDirs": []
+    },
+    {
+      "id": "android-launch-app",
+      "binary": "su",
+      "argsTemplate": ["-c", "am start -n {package}/{activity}"],
+      "allowedWorkingDirs": []
+    }
+  ]
+}
