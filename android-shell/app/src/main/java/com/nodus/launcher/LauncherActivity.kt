@@ -50,7 +50,35 @@ class LauncherActivity : AppCompatActivity() {
         // Load Nodus Home frontend bundle through secure asset domain
         webView.loadUrl("https://appassets.androidplatform.net/assets/frontend/index.html")
 
+        handlePairingIntent(intent)
         requestBatteryOptimizationExemption()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handlePairingIntent(intent)
+    }
+
+    private fun handlePairingIntent(intent: Intent?) {
+        val data: Uri? = intent?.data
+        if (data != null && data.scheme == "nodus" && data.host == "pair") {
+            val host = data.getQueryParameter("host") ?: ""
+            val port = data.getQueryParameter("port") ?: "8890"
+            val key = data.getQueryParameter("key") ?: ""
+
+            if (key.isNotEmpty()) {
+                val js = """
+                    (function() {
+                        localStorage.setItem('nodus_shared_key', '$key');
+                        localStorage.setItem('nodus_host_server', '$host');
+                        localStorage.setItem('nodus_host_port', '$port');
+                        console.log('Nodus URI Pairing successful');
+                    })();
+                """.trimIndent()
+                webView.evaluateJavascript(js, null)
+            }
+        }
     }
 
     private fun requestBatteryOptimizationExemption() {

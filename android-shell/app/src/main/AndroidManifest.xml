@@ -33,6 +33,13 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- HMAC QR Code Deep Link Provisioning Filter -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="nodus" android:host="pair" />
+            </intent-filter>
         </activity>
 
         <!-- Accessibility Service for hardware-level navigation and system actions -->
