@@ -46,7 +46,7 @@ done
 echo -e "\n${BLUE}[2/3] Building Web Production Assets...${NC}"
 npm run build --silent || true
 
-echo -e "\n${BLUE}[3/3] Synchronizing Assets & Launching Companion Activity...${NC}"
+echo -e "\n${BLUE}[3/3] Synchronizing Assets, Linux Deploy Chroot Agent & Launching Services...${NC}"
 for dev in $DEVICES; do
     echo -e " -> Deploying frontend assets to /sdcard/nodus/ on: ${GREEN}$dev${NC}"
     $ADB_CMD -s "$dev" shell "mkdir -p /sdcard/nodus" || true
@@ -54,8 +54,18 @@ for dev in $DEVICES; do
     
     echo -e " -> Triggering Nodus Home Launcher Activity..."
     $ADB_CMD -s "$dev" shell "am start -a android.intent.action.MAIN -n com.nodus.launcher/.LauncherActivity" || true
+
+    echo -e " -> Provisioning Linux Deploy Chroot ARMv7 Go Agent & Tailscale Subnet Router..."
+    if [ -f "agent-go/nodus-agent-armv7" ]; then
+        $ADB_CMD -s "$dev" push agent-go/nodus-agent-armv7 /data/local/linux/usr/local/bin/nodus-agent-armv7 || true
+        $ADB_CMD -s "$dev" shell "su -c 'chmod +x /data/local/linux/usr/local/bin/nodus-agent-armv7'" || true
+    fi
+
+    echo -e " -> Initializing Tailscale Userspace Subnet Router on KitKat Node..."
+    $ADB_CMD -s "$dev" shell "su -c 'tailscaled --tun=userspace-networking &' || true" || true
+    $ADB_CMD -s "$dev" shell "su -c 'tailscale up --hostname=nodus-kitkat-legacy --advertise-routes=192.168.1.0/24' || true" || true
 done
 
 echo -e "\n${GREEN}========================================================================${NC}"
-echo -e "${GREEN}  ✓ Phase 3 ADB Provisioning Complete for POCO Pad & SM-T230NU!        ${NC}"
+echo -e "${GREEN}  ✓ Phase 4 Chroot & Hardware Provisioning Complete for SM-T230NU!    ${NC}"
 echo -e "${GREEN}========================================================================${NC}"

@@ -152,3 +152,13 @@ func lockWorkstation() (string, error) {
 
 	return "Lock command executed", nil
 }
+
+// ExecuteSuCommand executes shell commands on the host Android OS from inside the Linux chroot
+func executeSuCommand(shellCmd string) (string, error) {
+	if _, lookErr := exec.LookPath("su"); lookErr == nil {
+		out, err := exec.Command("su", "-c", shellCmd).CombinedOutput()
+		return strings.TrimSpace(string(out)), err
+	}
+	out, err := exec.Command("sh", "-c", shellCmd).CombinedOutput()
+	return strings.TrimSpace(string(out)), err
+}

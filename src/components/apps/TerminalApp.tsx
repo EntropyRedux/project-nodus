@@ -57,6 +57,7 @@ export const TerminalApp: React.FC = () => {
           '  clip get                - Show recent clipboard sync history items',
           '  clip copy <text>        - Broadcast text to fleet universal clipboard',
           '  ping <node>             - Check ping latency to remote bridge node',
+          '  ssh <node>              - Open direct SSH session (e.g. ssh nodus-kitkat-legacy)',
           '  uname -a                - Show system kernel information',
           '  clear                   - Clear console screen'
         );
@@ -194,6 +195,16 @@ export const TerminalApp: React.FC = () => {
           `64 bytes from ${targetHost}: icmp_seq=3 ttl=64 time=1.35 ms`,
           `--- ${targetHost} ping statistics ---`,
           `3 packets transmitted, 3 received, 0% packet loss, min/avg/max = 1.28/1.35/1.42 ms`
+        );
+        break;
+
+      case 'ssh':
+        const sshTarget = args[1] || 'nodus-kitkat-legacy';
+        newHistory.push(
+          `Connecting to SSH server on ${sshTarget}:22 (Linux Deploy Chroot)...`,
+          `Welcome to Debian GNU/Linux 12 (bookworm) on ${sshTarget} (ARMv7)`,
+          `Last login: Tue Aug 18 18:45:00 2026 from 100.64.0.1 (Tailnet)`,
+          `root@${sshTarget}:~# `
         );
         break;
 
