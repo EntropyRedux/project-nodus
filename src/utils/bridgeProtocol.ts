@@ -175,134 +175,101 @@ export class NodusBridgeClient {
 // Backward-compatibility alias
 export const NovaBridgeClient = NodusBridgeClient;
 
+let globalBridgeClient: NodusBridgeClient | null = null;
+
+export function setGlobalBridgeClient(client: NodusBridgeClient | null) {
+  globalBridgeClient = client;
+}
+
+export function getGlobalBridgeClient(): NodusBridgeClient | null {
+  return globalBridgeClient;
+}
+
 /**
- * Simulates or dispatches an RPC transaction for UI visualizer and code studio
+ * Dispatches an authentic RPC transaction over WSS / Tailnet or falls back to live local agent HTTP endpoint
  */
-export async function simulateBridgeRpc(
+export async function sendBridgeRpc(
   action: BridgeRpcMessage['action'],
   targetDevice: string,
   params: RpcParams = {}
 ): Promise<{ request: BridgeRpcMessage; response: BridgeRpcResponse; packet: WirePacketLog }> {
   const reqId = `rpc-${Math.random().toString(36).substring(2, 9)}`;
   const now = Date.now();
-  const latency = Math.floor(Math.random() * 6 + 2); // 2ms - 8ms local mesh latency
+  const startTime = performance.now();
 
   const request: BridgeRpcMessage = {
     id: reqId,
     version: '2.0',
     targetDevice,
-    sourceDevice: 'nodus-host (Nodus Home)',
+    sourceDevice: 'nodus-controller',
     action,
     params,
     timestamp: Math.floor(now / 1000),
     nonce: Math.random().toString(36).substring(2, 10),
-    sig: 'hmac-sha256-verified',
+    sig: 'hmac-sha256-active',
   };
 
-  await new Promise((resolve) => setTimeout(resolve, latency));
+  let response: BridgeRpcResponse;
 
-  let resultData: unknown = { status: 'acknowledged' };
-  let errorMsg: string | undefined = undefined;
-
-  switch (action) {
-    case 'PING':
-      resultData = { pong: true, serverTime: Date.now(), bridge: 'Nodus Go tsnet Agent v1.0' };
-      break;
-    case 'GET_PROCESSES':
-      resultData = [
-        { pid: 1420, name: 'dwm.exe', memoryMb: 420, cpu: 3.2 },
-        { pid: 4892, name: 'explorer.exe', memoryMb: 340, cpu: 1.8 },
-        { pid: 11240, name: 'Code.exe', memoryMb: 1420, cpu: 5.4 },
-        { pid: 8312, name: 'msedge.exe', memoryMb: 1850, cpu: 8.9 },
-      ];
-      break;
-    case 'KILL_PROCESS':
-      resultData = { killedPid: params.pid, success: true, signal: 'SIGKILL' };
-      break;
-    case 'RUN_COMMAND':
-    case 'EXECUTE_COMMAND':
-      resultData = { output: `[ExitCode 0] Executed allowlisted command: ${params.commandId || params.command || 'open-vscode'}` };
-      break;
-    case 'LAUNCH_INTENT':
-      resultData = { launched: params.packageName, flags: ['FLAG_ACTIVITY_NEW_TASK'] };
-      break;
-    case 'SET_CLIPBOARD':
-      resultData = { synced: true, length: String(params.text || '').length };
-      break;
-    case 'LOCK_DEVICE':
-    case 'LOCK_WORKSTATION':
-      resultData = { lockState: 'LOCKED', securityLevel: 'Secured' };
-      break;
-    case 'REBOOT_DEVICE':
-      resultData = { initiated: true, delaySeconds: 0 };
-      break;
-    case 'SET_VOLUME':
-      resultData = { masterVolume: params.volume ?? 80 };
-      break;
-    case 'BATTERY_STATUS':
-      resultData = { level: 91, isCharging: true, temperatureC: 32.4 };
-      break;
-    case 'GET_TELEMETRY':
-      resultData = {
-        cpuLoadPercent: Number((12 + Math.random() * 25).toFixed(1)),
-        memoryUsedMb: Math.floor(4200 + Math.random() * 600),
-        memoryTotalMb: 16384,
-        uptimeSeconds: 86420,
-        activeTasks: 42,
-        netRxKbps: Number((45 + Math.random() * 120).toFixed(1)),
-        netTxKbps: Number((12 + Math.random() * 80).toFixed(1))
+  if (globalBridgeClient) {
+    try {
+      response = await globalBridgeClient.call(action, params);
+    } catch (e: any) {
+      response = {
+        id: reqId,
+        version: '2.0',
+        status: 'ERROR',
+        error: e?.message || 'WebSocket RPC connection error',
+        timestamp: Date.now(),
       };
-      break;
-    case 'LIST_DIRECTORY':
-      const reqPath = (params?.path as string) || '/home/nodus';
-      resultData = {
-        currentPath: reqPath,
-        files: [
-          { name: 'Documents', isDir: true, sizeBytes: 0, modTime: '2026-08-18 10:15' },
-          { name: 'Downloads', isDir: true, sizeBytes: 0, modTime: '2026-08-18 14:30' },
-          { name: 'Projects', isDir: true, sizeBytes: 0, modTime: '2026-08-18 16:45' },
-          { name: 'nodus_config.json', isDir: false, sizeBytes: 4096, modTime: '2026-08-18 12:00', extension: 'json' },
-          { name: 'shared.key', isDir: false, sizeBytes: 64, modTime: '2026-08-18 09:00', extension: 'key' },
-          { name: 'cluster_backup.tar.gz', isDir: false, sizeBytes: 15420000, modTime: '2026-08-17 22:10', extension: 'tar.gz' },
-          { name: 'system_log.txt', isDir: false, sizeBytes: 12450, modTime: '2026-08-18 17:00', extension: 'txt' },
-        ]
+    }
+  } else {
+    // Attempt HTTP fallback to local agent on port 8890
+    try {
+      const res = await fetch(`http://${window.location.hostname}:8890/api/rpc`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request),
+      });
+      if (res.ok) {
+        response = await res.json();
+      } else {
+        response = {
+          id: reqId,
+          version: '2.0',
+          status: 'ERROR',
+          error: `HTTP Agent responded with status ${res.status}`,
+          timestamp: Date.now(),
+        };
+      }
+    } catch (err: any) {
+      response = {
+        id: reqId,
+        version: '2.0',
+        status: 'ERROR',
+        error: `Agent connection offline (${err?.message || 'Failed to fetch'})`,
+        timestamp: Date.now(),
       };
-      break;
-    case 'TRANSFER_FILE':
-      resultData = {
-        transferId: `tr-${Math.random().toString(36).substring(2, 9)}`,
-        fileName: params?.fileName || 'file.dat',
-        sizeBytes: params?.sizeBytes || 1048576,
-        status: 'TRANSFERRING',
-        bytesTransferred: 524288,
-        speedMbps: 45.2
-      };
-      break;
-    default:
-      errorMsg = `Unhandled action: ${action}`;
+    }
   }
 
-  const response: BridgeRpcResponse = {
-    id: reqId,
-    version: '2.0',
-    status: errorMsg ? 'ERROR' : 'OK',
-    latencyMs: latency,
-    result: resultData,
-    error: errorMsg,
-    timestamp: Date.now(),
-  };
+  const latency = Math.round(performance.now() - startTime);
+  response.latencyMs = latency;
 
   const packet: WirePacketLog = {
     id: reqId,
     direction: 'OUTBOUND',
     protocol: 'WSS',
-    source: 'nodus-controller.tailXXXX.ts.net',
+    source: 'nodus-controller',
     destination: targetDevice,
     payload: JSON.stringify(request, null, 2),
     timestamp: new Date().toLocaleTimeString(),
-    status: 'SUCCESS',
+    status: response.status === 'OK' ? 'SUCCESS' : 'FAILED',
     latencyMs: latency,
   };
 
   return { request, response, packet };
 }
+
+// Backward compatibility alias
+export const simulateBridgeRpc = sendBridgeRpc;

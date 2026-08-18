@@ -65,11 +65,13 @@ export const ProcessMonitorApp: React.FC = () => {
   const [ramHistory, setRamHistory] = useState<number[]>([3800, 3850, 3820, 3910, 3890, 3950, 4020, 3980, 4050, 4120]);
   const [uptimeSeconds, setUptimeSeconds] = useState<number>(86420);
 
+  const [liveProcesses, setLiveProcesses] = useState<DeviceProcess[]>([]);
+
   useEffect(() => {
-    const fetchTelemetry = async () => {
-      const res = await simulateBridgeRpc('GET_TELEMETRY', selectedNodeId);
-      if (res.response.status === 'OK' && res.response.result) {
-        const tel = res.response.result as any;
+    const fetchTelemetryAndProcesses = async () => {
+      const telRes = await simulateBridgeRpc('GET_TELEMETRY', selectedNodeId);
+      if (telRes.response.status === 'OK' && telRes.response.result) {
+        const tel = telRes.response.result as any;
         if (typeof tel.cpuLoadPercent === 'number') {
           setCpuHistory((prev) => [...prev.slice(-14), tel.cpuLoadPercent]);
         }
@@ -80,15 +82,30 @@ export const ProcessMonitorApp: React.FC = () => {
           setUptimeSeconds(tel.uptimeSeconds);
         }
       }
+
+      const procRes = await simulateBridgeRpc('GET_PROCESSES', selectedNodeId);
+      if (procRes.response.status === 'OK' && Array.isArray(procRes.response.result)) {
+        const parsed = procRes.response.result.map((p: any) => ({
+          pid: p.pid || 0,
+          name: p.name || 'process',
+          user: p.user || 'root',
+          cpu: typeof p.cpu === 'number' ? p.cpu : 0.5,
+          memoryMb: typeof p.memoryMb === 'number' ? p.memoryMb : 15,
+          status: p.status || 'running',
+          category: p.category || (p.pid < 1000 ? 'system' : 'user'),
+          description: p.description || p.name,
+        }));
+        setLiveProcesses(parsed);
+      }
     };
 
-    fetchTelemetry();
-    const interval = setInterval(fetchTelemetry, 2500);
+    fetchTelemetryAndProcesses();
+    const interval = setInterval(fetchTelemetryAndProcesses, 3000);
     return () => clearInterval(interval);
   }, [selectedNodeId]);
 
   const targetDevice = devices.find((d) => d.id === selectedNodeId) || devices[0];
-  const procs = deviceProcesses[selectedNodeId] || [];
+  const procs = liveProcesses.length > 0 ? liveProcesses : (deviceProcesses[selectedNodeId] || []);
 
   const filteredProcs = procs.filter((p) => {
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
