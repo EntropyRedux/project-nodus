@@ -232,6 +232,70 @@ func dispatch(key []byte, msg RpcMessage) RpcResponse {
 		}
 		return RpcResponse{ID: msg.ID, Status: "OK", Result: telemetry}
 
+	case "LIST_DIRECTORY":
+		reqPath, _ := msg.Params["path"].(string)
+		if reqPath == "" {
+			reqPath, _ = os.UserHomeDir()
+		}
+		if reqPath == "" {
+			reqPath = "/"
+		}
+		entries, err := os.ReadDir(reqPath)
+		if err != nil {
+			return RpcResponse{ID: msg.ID, Status: "ERROR", Error: err.Error()}
+		}
+		type FileItem struct {
+			Name      string `json:"name"`
+			Path      string `json:"path"`
+			IsDirectory bool `json:"isDirectory"`
+			Size      int64  `json:"size"`
+			ModTime   int64  `json:"modTime"`
+		}
+		var files []FileItem
+		for _, e := range entries {
+			info, _ := e.Info()
+			size := int64(0)
+			modTime := time.Now().Unix()
+			if info != nil {
+				size = info.Size()
+				modTime = info.ModTime().Unix()
+			}
+			files = append(files, FileItem{
+				Name:        e.Name(),
+				Path:        filepath.Join(reqPath, e.Name()),
+				IsDirectory: e.IsDir(),
+				Size:        size,
+				ModTime:     modTime,
+			})
+		}
+		return RpcResponse{
+			ID:     msg.ID,
+			Status: "OK",
+			Result: map[string]any{
+				"currentPath": reqPath,
+				"files":       files,
+			},
+		}
+
+	case "TRANSFER_FILE":
+		filePath, _ := msg.Params["filePath"].(string)
+		if filePath == "" {
+			return RpcResponse{ID: msg.ID, Status: "ERROR", Error: "missing filePath parameter"}
+		}
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return RpcResponse{ID: msg.ID, Status: "ERROR", Error: err.Error()}
+		}
+		return RpcResponse{
+			ID:     msg.ID,
+			Status: "OK",
+			Result: map[string]any{
+				"filePath": filePath,
+				"size":     len(data),
+				"content":  string(data),
+			},
+		}
+
 	default:
 		return RpcResponse{ID: msg.ID, Status: "ERROR", Error: fmt.Sprintf("unrecognized action: %s", msg.Action)}
 	}

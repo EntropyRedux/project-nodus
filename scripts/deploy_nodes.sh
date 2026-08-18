@@ -15,10 +15,10 @@ echo -e "${BLUE}[Nodus Fleet] Searching for connected USB Android nodes...${NC}"
 
 # Find ADB binary
 ADB_CMD=""
-if command -v adb &> /dev/null; then
+if [ -f "/home/en/.local/platform-tools/adb" ]; then
+    ADB_CMD="/home/en/.local/platform-tools/adb"
+elif command -v adb &> /dev/null; then
     ADB_CMD="adb"
-elif [ -f "/home/en/.local/usr/bin/adb" ]; then
-    ADB_CMD="/home/en/.local/usr/bin/adb"
 else
     echo -e "${YELLOW}[!] Warning: ADB binary not found in standard PATH.${NC}"
     echo -e "${BLUE}[+] Simulated ADB provisioning run for POCO Pad & SM-T230NU.${NC}"
