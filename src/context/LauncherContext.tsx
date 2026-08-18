@@ -32,6 +32,7 @@ import {
   INITIAL_TRUSTED_DEVICES
 } from '../utils/constants';
 import { audio } from '../utils/audio';
+import { simulateBridgeRpc } from '../utils/bridgeProtocol';
 
 interface QuickSettingsState {
   wifi: boolean;
@@ -223,7 +224,12 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0 && parsed.some((a: any) => a.id === 'studio' || a.id === 'monitor')) {
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const existingIds = new Set(parsed.map((a: any) => a.id));
+          const missing = INITIAL_APPS.filter((a) => !existingIds.has(a.id));
+          if (missing.length > 0) {
+            return [...parsed, ...missing];
+          }
           return parsed;
         }
       } catch (e) {}
@@ -768,6 +774,20 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Launcher navigation & app launching
   const launchApp = (appId: string) => {
     if (settings.soundEffects) audio.playAppOpen();
+    const targetApp = apps.find((a) => a.id === appId);
+    if (targetApp?.packageName) {
+      simulateBridgeRpc('LAUNCH_INTENT', activeDeviceId, { packageName: targetApp.packageName });
+      addNotification({
+        appId: 'settings',
+        appName: 'Intent Dispatcher',
+        title: `Launching ${targetApp.name}`,
+        message: `Dispatched LAUNCH_INTENT for package ${targetApp.packageName} to ${activeDevice.name}`,
+        iconName: 'ExternalLink',
+        color: targetApp.color || '#34C759',
+      });
+      return;
+    }
+
     setActiveAppId(appId);
     setSearchOpen(false);
     setRecentsOpen(false);
