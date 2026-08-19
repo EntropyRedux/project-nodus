@@ -22,6 +22,8 @@ import { useLauncher } from '../../context/LauncherContext';
 import { DynamicIcon } from '../common/DynamicIcon';
 import { audio } from '../../utils/audio';
 
+import { simulateBridgeRpc } from '../../utils/bridgeProtocol';
+
 export const QuickSettingsShade: React.FC = () => {
   const { 
     isQuickSettingsOpen, 
@@ -36,10 +38,16 @@ export const QuickSettingsShade: React.FC = () => {
     currentTrack,
     isPlayingMusic,
     toggleMusic,
-    nextTrack
+    nextTrack,
+    activeDeviceId
   } = useLauncher();
 
   if (!isQuickSettingsOpen) return null;
+
+  const handleVolumeChange = (vol: number) => {
+    setQuickSettings((p) => ({ ...p, volume: vol }));
+    simulateBridgeRpc('SET_VOLUME', activeDeviceId, { level: vol }).catch(() => {});
+  };
 
   const tiles = [
     { id: 'wifi', name: 'Internet', active: quickSettings.wifi, icon: quickSettings.wifi ? Wifi : WifiOff, sub: quickSettings.wifi ? 'LTE' : 'Off' },
@@ -137,7 +145,7 @@ export const QuickSettingsShade: React.FC = () => {
             min="0"
             max="100"
             value={quickSettings.volume}
-            onChange={(e) => setQuickSettings((p) => ({ ...p, volume: Number(e.target.value) }))}
+            onChange={(e) => handleVolumeChange(Number(e.target.value))}
             className="w-full h-2 bg-[#2C2C2E] rounded-lg appearance-none cursor-pointer accent-[#007AFF]"
           />
         </div>

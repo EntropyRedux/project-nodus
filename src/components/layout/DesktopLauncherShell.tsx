@@ -21,6 +21,7 @@ import { ProcessMonitorApp } from '../apps/ProcessMonitorApp';
 import { NetworkMeshApp } from '../apps/NetworkMeshApp';
 import { UniversalClipboardApp } from '../apps/UniversalClipboardApp';
 import { FileExplorerApp } from '../apps/FileExplorerApp';
+import { RemoteStreamApp } from '../apps/RemoteStreamApp';
 import { audio } from '../../utils/audio';
 import { 
   FolderPlus, 
@@ -92,6 +93,8 @@ export const DesktopLauncherShell: React.FC = () => {
         return <UniversalClipboardApp />;
       case 'files':
         return <FileExplorerApp />;
+      case 'stream':
+        return <RemoteStreamApp />;
       default:
         return <SettingsApp />;
     }

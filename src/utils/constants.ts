@@ -77,6 +77,7 @@ export const INITIAL_APPS: AppItem[] = [
   { id: 'files', name: 'Cluster Explorer', iconName: 'HardDrive', color: '#007AFF', category: 'tools', pageIndex: 0, order: 4 },
   { id: 'network', name: 'Mesh Network', iconName: 'Radio', color: '#64D2FF', category: 'tools', pageIndex: 0, order: 5 },
   { id: 'clipboard', name: 'Fleet Clipboard', iconName: 'Clipboard', color: '#FF9500', category: 'tools', pageIndex: 0, order: 6 },
+  { id: 'stream', name: 'Remote Viewport', iconName: 'Monitor', color: '#34C759', category: 'tools', pageIndex: 0, order: 7 },
 
   // Page 1 Grid - Real Queryable 3rd Party Packages on POCO Pad
   { id: 'app-discord', name: 'Discord', iconName: 'MessageSquare', color: '#5865F2', category: 'media', pageIndex: 1, order: 0, packageName: 'com.discord' },
