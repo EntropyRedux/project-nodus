@@ -3,6 +3,8 @@ import { Calendar, Search, Mic, Activity, ShieldCheck } from 'lucide-react';
 import { useLauncher } from '../../context/LauncherContext';
 import { audio } from '../../utils/audio';
 
+import { RemoteCanvasWidget } from './RemoteCanvasWidget';
+
 export const WidgetArea: React.FC = () => {
   const { settings, launchApp, setSearchOpen, activeDevice } = useLauncher();
   const [time, setTime] = useState(new Date());
@@ -20,7 +22,7 @@ export const WidgetArea: React.FC = () => {
   const widgetStyle = settings.clockWidgetStyle;
 
   return (
-    <div className="w-full space-y-3 px-4 pt-1 select-none">
+    <div className="w-full space-y-3 px-4 pt-1 select-none max-w-lg mx-auto">
       {/* At A Glance / Clock Widget */}
       {settings.atAGlanceWidget && (
         <div className="w-full">
@@ -69,22 +71,25 @@ export const WidgetArea: React.FC = () => {
           )}
 
           {widgetStyle === 'material-stack' && (
-            <div className="flex items-center justify-between px-2 py-1">
-              <div>
-                <h2 className="text-5xl font-light text-[#F0F0F2] tracking-tighter leading-none">
-                  {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
-                </h2>
-                <p className="text-xs text-[#8E8E93] font-medium uppercase tracking-widest mt-1.5">
-                  {time.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
-                </p>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between px-2 py-1">
+                <div>
+                  <h2 className="text-5xl font-light text-[#F0F0F2] tracking-tighter leading-none">
+                    {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+                  </h2>
+                  <p className="text-xs text-[#8E8E93] font-medium uppercase tracking-widest mt-1.5">
+                    {time.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+                  </p>
+                </div>
+                <button
+                  onClick={() => launchApp('settings')}
+                  className="p-3 bg-[#1C1C1E] backdrop-blur-md rounded-2xl border border-white/5 flex flex-col items-center shadow-lg hover:bg-[#2C2C2E] transition"
+                >
+                  <Activity size={20} className="text-[#34C759]" />
+                  <span className="text-[10px] font-semibold text-[#8E8E93] mt-1 font-mono">{activeDevice.cpuLoad ?? 18}% CPU</span>
+                </button>
               </div>
-              <button
-                onClick={() => launchApp('settings')}
-                className="p-3 bg-[#1C1C1E] backdrop-blur-md rounded-2xl border border-white/5 flex flex-col items-center shadow-lg hover:bg-[#2C2C2E] transition"
-              >
-                <Activity size={20} className="text-[#34C759]" />
-                <span className="text-[10px] font-semibold text-[#8E8E93] mt-1 font-mono">{activeDevice.cpuLoad ?? 18}% CPU</span>
-              </button>
+              <RemoteCanvasWidget />
             </div>
           )}
 
