@@ -18,25 +18,30 @@ jobs:
         with:
           go-version: '1.22'
 
+      - name: Download Go Dependencies
+        run: |
+          cd agent-go
+          go mod tidy
+
       - name: Build Executables for All Platforms
         run: |
           mkdir -p dist-binaries
           
           # Windows x64 Executable (.exe)
           echo "Building nodus-agent-windows-amd64.exe..."
-          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o dist-binaries/nodus-agent-windows-amd64.exe ./agent-go
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o ../dist-binaries/nodus-agent-windows-amd64.exe ./agent-go
 
           # Linux x64 Executable
           echo "Building nodus-agent-linux-amd64..."
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o dist-binaries/nodus-agent-linux-amd64 ./agent-go
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o ../dist-binaries/nodus-agent-linux-amd64 ./agent-go
 
           # ARMv7 Executable (Legacy KitKat/Chroot nodes)
           echo "Building nodus-agent-armv7..."
-          GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 go build -ldflags="-s -w" -o dist-binaries/nodus-agent-armv7 ./agent-go
+          GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 go build -ldflags="-s -w" -o ../dist-binaries/nodus-agent-armv7 ./agent-go
 
           # ARM64 Executable (Modern ARM/Android nodes)
           echo "Building nodus-agent-arm64..."
-          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w" -o dist-binaries/nodus-agent-arm64 ./agent-go
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w" -o ../dist-binaries/nodus-agent-arm64 ./agent-go
 
       - name: Upload Agent Executables Artifact
         uses: actions/upload-artifact@v4
