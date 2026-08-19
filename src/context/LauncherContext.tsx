@@ -361,6 +361,32 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               return d;
             })
           );
+
+          // If active hardware node is reachable, dynamically scan installed apps
+          if (dev.id === activeDeviceId && isConnected) {
+            try {
+              const appRes = await simulateBridgeRpc('GET_INSTALLED_APPS', dev.id);
+              if (appRes.response.status === 'OK' && Array.isArray(appRes.response.result)) {
+                const scanned: any[] = appRes.response.result;
+                setApps((prevApps) => {
+                  const existingIds = new Set(prevApps.map((a) => a.id));
+                  const newApps: AppItem[] = scanned
+                    .filter((item) => !existingIds.has(item.id || item.packageName))
+                    .map((item, idx) => ({
+                      id: item.id || item.packageName,
+                      name: item.name,
+                      iconName: item.icon || 'Smartphone',
+                      color: item.color || '#007AFF',
+                      category: 'tools',
+                      pageIndex: 1,
+                      order: prevApps.length + idx,
+                      packageName: item.packageName || item.id,
+                    }));
+                  return newApps.length > 0 ? [...prevApps, ...newApps] : prevApps;
+                });
+              }
+            } catch (_) {}
+          }
         } catch (e) {
           // Keep active hardware reachable status intact
         }

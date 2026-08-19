@@ -296,9 +296,62 @@ func dispatch(key []byte, msg RpcMessage) RpcResponse {
 			},
 		}
 
+	case "GET_INSTALLED_APPS":
+		apps, err := getInstalledApps()
+		if err != nil {
+			return RpcResponse{ID: msg.ID, Status: "ERROR", Error: err.Error()}
+		}
+		return RpcResponse{ID: msg.ID, Status: "OK", Result: apps}
+
 	default:
 		return RpcResponse{ID: msg.ID, Status: "ERROR", Error: fmt.Sprintf("unrecognized action: %s", msg.Action)}
 	}
+}
+
+type AppInfo struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	PackageName string `json:"packageName,omitempty"`
+	Category    string `json:"category"`
+	Icon        string `json:"icon"`
+	Color       string `json:"color"`
+}
+
+func getInstalledApps() ([]AppInfo, error) {
+	if _, err := exec.LookPath("pm"); err == nil {
+		out, err := exec.Command("pm", "list", "packages", "-3").Output()
+		if err == nil {
+			lines := strings.Split(string(out), "\n")
+			var apps []AppInfo
+			for _, line := range lines {
+				line = strings.TrimSpace(line)
+				if strings.HasPrefix(line, "package:") {
+					pkg := strings.TrimPrefix(line, "package:")
+					parts := strings.Split(pkg, ".")
+					name := parts[len(parts)-1]
+					if len(name) > 0 {
+						name = strings.ToUpper(name[:1]) + name[1:]
+					}
+					apps = append(apps, AppInfo{
+						ID:          pkg,
+						Name:        name,
+						PackageName: pkg,
+						Category:    "apps",
+						Icon:        "Smartphone",
+						Color:       "#007AFF",
+					})
+				}
+			}
+			if len(apps) > 0 {
+				return apps, nil
+			}
+		}
+	}
+	return []AppInfo{
+		{ID: "chrome", Name: "Chrome Browser", PackageName: "com.android.chrome", Category: "apps", Icon: "Globe", Color: "#4285F4"},
+		{ID: "termux", Name: "Termux Shell", PackageName: "com.termux", Category: "tools", Icon: "Terminal", Color: "#34C759"},
+		{ID: "files", Name: "Files", PackageName: "com.google.android.documentsui", Category: "tools", Icon: "Folder", Color: "#FF9500"},
+	}, nil
 }
 
 func runAllowlistedCommand(id string, params map[string]any) (string, error) {

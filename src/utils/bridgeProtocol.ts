@@ -28,7 +28,8 @@ export interface BridgeRpcMessage {
     | 'BATTERY_STATUS'
     | 'GET_TELEMETRY'
     | 'LIST_DIRECTORY'
-    | 'TRANSFER_FILE';
+    | 'TRANSFER_FILE'
+    | 'GET_INSTALLED_APPS';
   params?: RpcParams;
   timestamp: number;
   nonce?: string;
