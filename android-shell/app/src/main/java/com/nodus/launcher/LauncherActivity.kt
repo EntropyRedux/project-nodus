@@ -35,11 +35,26 @@ class LauncherActivity : AppCompatActivity() {
             javaScriptEnabled = true
             domStorageEnabled = true
             databaseEnabled = true
-            allowFileAccess = false
-            allowContentAccess = false
+            allowFileAccess = true
+            allowContentAccess = true
             cacheMode = WebSettings.LOAD_DEFAULT
-            mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+            mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
         }
+
+        webView.addJavascriptInterface(object {
+            @android.webkit.JavascriptInterface
+            fun launchApp(packageName: String): Boolean {
+                return try {
+                    val intent = packageManager.getLaunchIntentForPackage(packageName)
+                    if (intent != null) {
+                        startActivity(intent)
+                        true
+                    } else false
+                } catch (_: Exception) {
+                    false
+                }
+            }
+        }, "NodusNativeBridge")
 
         webView.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {

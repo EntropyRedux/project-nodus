@@ -1,20 +1,20 @@
 import React from 'react';
-import { 
-  Wifi, 
-  WifiOff, 
-  Bluetooth, 
-  Flashlight, 
-  Moon, 
-  Plane, 
-  RotateCw, 
-  Sun, 
-  Volume2, 
-  Settings, 
-  ChevronUp, 
-  Trash2, 
-  Play, 
-  Pause, 
-  SkipForward, 
+import {
+  Wifi,
+  WifiOff,
+  Bluetooth,
+  Flashlight,
+  Moon,
+  Plane,
+  RotateCw,
+  Sun,
+  Volume2,
+  Settings,
+  ChevronUp,
+  Trash2,
+  Play,
+  Pause,
+  SkipForward,
   Disc,
   X
 } from 'lucide-react';
@@ -22,13 +22,11 @@ import { useLauncher } from '../../context/LauncherContext';
 import { DynamicIcon } from '../common/DynamicIcon';
 import { audio } from '../../utils/audio';
 
-import { simulateBridgeRpc } from '../../utils/bridgeProtocol';
-
 export const QuickSettingsShade: React.FC = () => {
-  const { 
-    isQuickSettingsOpen, 
-    setQuickSettingsOpen, 
-    quickSettings, 
+  const {
+    isQuickSettingsOpen,
+    setQuickSettingsOpen,
+    quickSettings,
     toggleQuickSetting,
     setQuickSettings,
     launchApp,
@@ -38,16 +36,10 @@ export const QuickSettingsShade: React.FC = () => {
     currentTrack,
     isPlayingMusic,
     toggleMusic,
-    nextTrack,
-    activeDeviceId
+    nextTrack
   } = useLauncher();
 
   if (!isQuickSettingsOpen) return null;
-
-  const handleVolumeChange = (vol: number) => {
-    setQuickSettings((p) => ({ ...p, volume: vol }));
-    simulateBridgeRpc('SET_VOLUME', activeDeviceId, { level: vol }).catch(() => {});
-  };
 
   const tiles = [
     { id: 'wifi', name: 'Internet', active: quickSettings.wifi, icon: quickSettings.wifi ? Wifi : WifiOff, sub: quickSettings.wifi ? 'LTE' : 'Off' },
@@ -98,16 +90,14 @@ export const QuickSettingsShade: React.FC = () => {
             <button
               key={tile.id}
               onClick={() => toggleQuickSetting(tile.id as any)}
-              className={`p-3 rounded-2xl flex items-center gap-3 transition text-left ${
-                tile.active
+              className={`p-3 rounded-2xl flex items-center gap-3 transition text-left ${tile.active
                   ? 'bg-[#34C759] text-[#0A0A0C] font-semibold shadow-lg shadow-[#34C759]/20'
                   : 'bg-[#1C1C1E] border border-white/5 text-[#F0F0F2] hover:bg-[#2C2C2E]'
-              }`}
+                }`}
             >
               <div
-                className={`p-2 rounded-xl ${
-                  tile.active ? 'bg-black/15 text-[#0A0A0C]' : 'bg-white/5 text-[#8E8E93]'
-                }`}
+                className={`p-2 rounded-xl ${tile.active ? 'bg-black/15 text-[#0A0A0C]' : 'bg-white/5 text-[#8E8E93]'
+                  }`}
               >
                 <Icon size={18} />
               </div>
@@ -145,7 +135,7 @@ export const QuickSettingsShade: React.FC = () => {
             min="0"
             max="100"
             value={quickSettings.volume}
-            onChange={(e) => handleVolumeChange(Number(e.target.value))}
+            onChange={(e) => setQuickSettings((p) => ({ ...p, volume: Number(e.target.value) }))}
             className="w-full h-2 bg-[#2C2C2E] rounded-lg appearance-none cursor-pointer accent-[#007AFF]"
           />
         </div>

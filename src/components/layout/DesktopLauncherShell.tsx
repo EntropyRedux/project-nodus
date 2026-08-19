@@ -21,18 +21,17 @@ import { ProcessMonitorApp } from '../apps/ProcessMonitorApp';
 import { NetworkMeshApp } from '../apps/NetworkMeshApp';
 import { UniversalClipboardApp } from '../apps/UniversalClipboardApp';
 import { FileExplorerApp } from '../apps/FileExplorerApp';
-import { RemoteStreamApp } from '../apps/RemoteStreamApp';
 import { audio } from '../../utils/audio';
-import { 
-  FolderPlus, 
-  Sparkles, 
-  Check, 
-  ChevronLeft, 
-  ChevronRight, 
-  Search, 
-  Sliders, 
-  Maximize2, 
-  Layers, 
+import {
+  FolderPlus,
+  Sparkles,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  Sliders,
+  Maximize2,
+  Layers,
   Lock,
   Wifi,
   Battery,
@@ -40,16 +39,16 @@ import {
 } from 'lucide-react';
 
 export const DesktopLauncherShell: React.FC = () => {
-  const { 
-    apps, 
-    folders, 
-    currentPageIndex, 
-    totalPages, 
+  const {
+    apps,
+    folders,
+    currentPageIndex,
+    totalPages,
     setCurrentPageIndex,
-    activeAppId, 
-    launchApp, 
-    settings, 
-    isEditing, 
+    activeAppId,
+    launchApp,
+    settings,
+    isEditing,
     setIsEditing,
     setActiveFolderId,
     createFolder,
@@ -70,10 +69,10 @@ export const DesktopLauncherShell: React.FC = () => {
   const wallpaperStyle = useMemo(() => {
     return settings.wallpaper === 'custom' && settings.customWallpaperUrl
       ? {
-          backgroundImage: `url(${settings.customWallpaperUrl})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        }
+        backgroundImage: `url(${settings.customWallpaperUrl})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }
       : currentWp.style;
   }, [settings.wallpaper, settings.customWallpaperUrl, currentWp.style]);
 
@@ -93,8 +92,6 @@ export const DesktopLauncherShell: React.FC = () => {
         return <UniversalClipboardApp />;
       case 'files':
         return <FileExplorerApp />;
-      case 'stream':
-        return <RemoteStreamApp />;
       default:
         return <SettingsApp />;
     }
@@ -124,7 +121,7 @@ export const DesktopLauncherShell: React.FC = () => {
   return (
     <div className="h-screen w-screen overflow-hidden flex flex-row bg-[#0A0A0C] text-[#F0F0F2] font-sans select-none relative">
       {/* Fixed Full-Window Background Wallpaper (Unaffected by sidebar/panel slide states) */}
-      <div 
+      <div
         className="fixed inset-0 bg-cover bg-center transition-all duration-500 ease-in-out pointer-events-none z-0"
         style={wallpaperStyle}
       >
@@ -170,11 +167,10 @@ export const DesktopLauncherShell: React.FC = () => {
                     audio.playTap();
                     setCurrentPageIndex(idx);
                   }}
-                  className={`transition-all duration-300 rounded-full ${
-                    currentPageIndex === idx
+                  className={`transition-all duration-300 rounded-full ${currentPageIndex === idx
                       ? 'w-4 h-1.5 bg-[#34C759]'
                       : 'w-1.5 h-1.5 bg-[#4A4A4F] hover:bg-[#8E8E93]'
-                  }`}
+                    }`}
                 />
               ))}
 
@@ -221,11 +217,10 @@ export const DesktopLauncherShell: React.FC = () => {
                 audio.playTap();
                 setIsEditing(!isEditing);
               }}
-              className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 border transition ${
-                isEditing
+              className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 border transition ${isEditing
                   ? 'bg-[#34C759] text-[#0A0A0C] border-[#34C759] shadow-md shadow-[#34C759]/20'
                   : 'bg-[#1C1C1E]/80 text-[#8E8E93] hover:text-[#F0F0F2] border-white/10 hover:bg-[#1C1C1E]'
-              }`}
+                }`}
               title="Arrange apps and folders"
             >
               {isEditing ? <Check size={13} /> : <Sparkles size={13} />}
@@ -237,11 +232,10 @@ export const DesktopLauncherShell: React.FC = () => {
               onClick={() => {
                 toggleClipboardPanel();
               }}
-              className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 border transition ${
-                isClipboardOpen
+              className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 border transition ${isClipboardOpen
                   ? 'bg-[#34C759] text-[#0A0A0C] border-[#34C759] shadow-md shadow-[#34C759]/20'
                   : 'bg-[#1C1C1E]/80 text-[#8E8E93] hover:text-[#F0F0F2] border-white/10 hover:bg-[#1C1C1E]'
-              }`}
+                }`}
               title={isClipboardOpen ? 'Hide Clipboard History' : 'Show Clipboard History'}
             >
               <Clipboard size={13} />
@@ -309,9 +303,8 @@ export const DesktopLauncherShell: React.FC = () => {
                         audio.playTap();
                         setActiveFolderId(folder.id);
                       }}
-                      className={`flex flex-col items-center justify-start w-full min-w-[72px] max-w-[88px] cursor-pointer group active:scale-95 transition select-none ${
-                        isEditing ? 'animate-wiggle' : ''
-                      }`}
+                      className={`flex flex-col items-center justify-start w-full min-w-[72px] max-w-[88px] cursor-pointer group active:scale-95 transition select-none ${isEditing ? 'animate-wiggle' : ''
+                        }`}
                     >
                       <div className="w-14 h-14 shrink-0 rounded-[1.5rem] bg-[#1C1C1E]/80 backdrop-blur-xl border border-white/10 p-2 grid grid-cols-2 gap-1 items-center justify-items-center shadow-xl group-hover:bg-[#2C2C2E] transition-colors">
                         {folder.appIds.slice(0, 4).map((appId) => {
@@ -339,12 +332,11 @@ export const DesktopLauncherShell: React.FC = () => {
               </div>
 
               {/* Right Desktop Column: Cross-Device Clipboard History Panel (Fluid Collapse/Expand) */}
-              <div 
-                className={`transition-all duration-300 ease-in-out shrink-0 min-h-0 flex flex-col ${
-                  isClipboardOpen 
-                    ? 'w-80 lg:w-84 xl:w-88 opacity-100 translate-x-0' 
+              <div
+                className={`transition-all duration-300 ease-in-out shrink-0 min-h-0 flex flex-col ${isClipboardOpen
+                    ? 'w-80 lg:w-84 xl:w-88 opacity-100 translate-x-0'
                     : 'w-0 opacity-0 translate-x-6 pointer-events-none overflow-hidden'
-                }`}
+                  }`}
               >
                 <ClipboardHistoryPanel onClose={() => setClipboardOpen(false)} />
               </div>
