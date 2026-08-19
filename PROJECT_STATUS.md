@@ -1,7 +1,7 @@
 # Project Nodus — Current Project Status & Architecture Report
 
-**Document Date:** August 18, 2026  
-**Current Version:** `v1.0.0`  
+**Document Date:** August 20, 2026  
+**Current Version:** `v1.2.0`  
 **Repository:** [https://github.com/EntropyRedux/project-nodus](https://github.com/EntropyRedux/project-nodus)  
 **Branch:** `main`
 
@@ -24,7 +24,7 @@
        │   WINDOWS / LINUX HOST       │ │    ANDROID / NODUS HOME     │
        │  - agent-go (tsnet embedded) │ │  - Native HOME Launcher Act │
        │  - Allowlisted Command Exec  │ │  - NodusDaemonService (WS)  │
-       │  - Process Monitor & Taskkill│ │  - Accessibility Actions    │
+       │  - Process Monitor & Taskkill│ │  - Dynamic App Scanner (pm) │
        │  - Tauri 2.0 Desktop Shell   │ │  - Root (su) Shell Actions  │
        └──────────────────────────────┘ └─────────────────────────────┘
 ```
@@ -34,52 +34,20 @@
 ## 2. Subsystem Architecture & Implementation Status
 
 ### 🟢 2.1 Backend Go Agent (`agent-go/`)
-The backend agent consolidates previously fragmented scripting runtimes (PowerShell and Node.js) into a single, cross-compiled Go binary with embedded Tailscale mesh networking.
+The backend agent consolidates scripting runtimes into a single cross-compiled Go binary with embedded Tailscale mesh networking.
 
 * **Embedded `tsnet` Engine ([`main.go`](agent-go/main.go))**: Connects directly to Tailscale mesh networks on port `:8890` without external daemon dependencies. Supports headless pre-auth bootstrapping via `TS_AUTHKEY` / `NODUS_HOSTNAME`.
 * **HMAC-SHA256 Wire Authentication ([`auth.go`](agent-go/auth.go))**: Replaces unchecked tokens with canonical payload serialization (`action|timestamp|nonce|json(params)`) and constant-time signature verification with $\le 30\text{s}$ clock-skew tolerance.
-* **Anti-Replay Nonce Cache & RPC Dispatcher ([`rpc.go`](agent-go/rpc.go))**: Maintains an in-memory LRU nonce cache preventing replay attacks, handling `PING`, `GET_PROCESSES`, `KILL_PROCESS`, and `RUN_COMMAND`.
-* **Allowlisted Command Execution ([`commands.example.json`](agent-go/commands.example.json))**: Disallows arbitrary remote code execution, strictly restricting triggers to pre-registered command IDs and whitelisted working directories.
-* **Cross-Platform Host Process Control**:
-  * **Windows ([`agent_windows.go`](agent-go/agent_windows.go))**: Native `tasklist` and `taskkill /F /PID` handlers + `rundll32.exe user32.dll,LockWorkStation`.
-  * **Linux & Android Host ([`agent_linux.go`](agent-go/agent_linux.go))**: Direct `/proc` inspection with `su -c` root fallback for container and Android host processes.
+* **Anti-Replay Nonce Cache & RPC Dispatcher ([`rpc.go`](agent-go/rpc.go))**: Maintains an in-memory LRU nonce cache preventing replay attacks, handling `PING`, `GET_PROCESSES`, `KILL_PROCESS`, `RUN_COMMAND`, `GET_INSTALLED_APPS`, `GET_TELEMETRY`, `LIST_DIRECTORY`, and `TRANSFER_FILE`.
+* **Dynamic Android Package Scanner ([`rpc.go`](agent-go/rpc.go))**: Executes native `pm list packages -3` to return third-party installed Android application metadata dynamically to the launcher.
 
 ---
 
 ### 🟢 2.2 Frontend Core & RPC Transport (`src/`)
-The user interface retains 100% of its visual polish and component structure while upgrading its transport layer to enterprise-grade cryptography.
-
-* **Nodus Bridge Client ([`src/utils/bridgeProtocol.ts`](src/utils/bridgeProtocol.ts))**: Production WebSocket client utilizing browser native `window.crypto.subtle` (WebCrypto API) for automatic HMAC-SHA256 signing, monotonic nonces, Promise-based RPC calls, and asynchronous event streaming (`.on('event', callback)`).
-* **Launcher UI Shell ([`src/components/layout/DesktopLauncherShell.tsx`](src/components/layout/DesktopLauncherShell.tsx))**: Hybrid workspace supporting glassmorphic desktop and mobile simulator modes, smart taskbars, quick settings shades, and notification centers.
-* **Zero-Asset Procedural Audio Synth ([`src/utils/audio.ts`](src/utils/audio.ts))**: Procedural Web Audio API sound generator delivering haptic and click feedback with zero external MP3/WAV assets.
-
----
-
-### 🟢 2.3 Desktop Shell Overlay (`desktop-shell/`)
-* **Tauri 2.0 Rust Shell ([`desktop-shell/src-tauri/src/main.rs`](desktop-shell/src-tauri/src/main.rs))**: Native desktop overlay wrapper with borderless transparency, `skipTaskbar: true`, system tray controls, and global hotkey toggle (`CmdOrCtrl+Shift+N`).
-* **Configuration ([`desktop-shell/src-tauri/tauri.conf.json`](desktop-shell/src-tauri/tauri.conf.json))**: Pointed directly to `../../dist` to serve the compiled Vite production bundle with zero latency.
-
----
-
-### 🟢 2.4 Android Native Shell — Nodus Home (`android-shell/`)
-* **Launcher Intent Filter ([`AndroidManifest.xml`](android-shell/app/src/main/AndroidManifest.xml))**: Registered with `<category android:name="android.intent.category.HOME" />` and `<category android:name="android.intent.category.DEFAULT" />` under package `com.nodus.launcher`.
-* **Secure Web View Host ([`LauncherActivity.kt`](android-shell/app/src/main/java/com/nodus/launcher/LauncherActivity.kt))**: Uses AndroidX `WebViewAssetLoader` (`https://appassets.androidplatform.net/assets/`) to eliminate CORS/origin errors for WebCrypto and WebSockets.
-* **Background Daemon & Accessibility Services**:
-  * [`NodusDaemonService.kt`](android-shell/app/src/main/java/com/nodus/launcher/service/NodusDaemonService.kt): Foreground service maintaining outbound WebSocket links to the Tailnet mesh.
-  * [`NodusAccessibilityService.kt`](android-shell/app/src/main/java/com/nodus/launcher/service/NodusAccessibilityService.kt): Intercepts hardware keys and executes global system navigation.
-
----
-
-## 3. Rooted Legacy Device Strategy (e.g., Samsung SM-T230NU ARMv7)
-Rooted devices running **Linux Deploy (chroot)** operate as full-tier nodes within Project Nodus:
-
-1. **Native Go Binary Execution**: Bypasses Android 4.4 KitKat WebView and obsolete TLS 1.0/1.1 limitations:
-   ```bash
-   GOOS=linux GOARCH=arm GOARM=7 go build -o dist/nodus-agent-armv7 ./agent-go
-   ```
-2. **Userspace Tailnet**: Runs `tailscaled --tun=userspace-networking` inside the chroot.
-3. **Subnet Router**: Enables `tailscale up --advertise-routes=192.168.1.0/24` to bridge other local devices onto Tailscale.
-4. **Root Shell Host Execution**: Replaces accessibility permissions with direct `su -c "input keyevent ..."` and `su -c "kill -9 ..."`.
+* **Nodus Bridge Client ([`src/utils/bridgeProtocol.ts`](src/utils/bridgeProtocol.ts))**: Production WebSocket client utilizing WebCrypto API (`window.crypto.subtle`) for automatic HMAC-SHA256 signing, monotonic nonces, and Promise-based RPC calls.
+* **Cluster Macro Engine ([`src/utils/macroEngine.ts`](src/utils/macroEngine.ts))**: Multi-step action runner (`runClusterMacro`) executing cross-device action chains (e.g. locking workstation + syncing fleet clipboard).
+* **Live Remote Viewport Stream App ([`src/components/apps/RemoteStreamApp.tsx`](src/components/apps/RemoteStreamApp.tsx))**: Canvas stream viewer with `1080p`/`720p`/`480p` quality toggles and touch/click event forwarding (`input tap x y`) via RPC.
+* **HTML5 2D Live Telemetry Canvas ([`src/components/home/RemoteCanvasWidget.tsx`](src/components/home/RemoteCanvasWidget.tsx))**: Real-time CPU sparkline rendering and quick macro trigger buttons.
 
 ---
 
@@ -88,18 +56,16 @@ Rooted devices running **Linux Deploy (chroot)** operate as full-tier nodes with
 | Test Suite / Metric | Scope | Target | Result |
 | :--- | :--- | :--- | :---: |
 | **TypeScript Static Analysis** | Frontend & Types | `tsc --noEmit` | 🟢 **Passed (0 errors)** |
-| **Vite Production Bundler** | Production Build | `npm run build` | 🟢 **Passed (5.17s)** |
+| **Vite Production Bundler** | Production Build | `npm run build` | 🟢 **Passed (17.70s)** |
 | **HMAC Signature Verification** | Wire Security | `auth_test.go` | 🟢 **Passed** |
-| **Anti-Replay Nonce Engine** | Anti-Tampering | `auth_test.go` | 🟢 **Passed** |
-| **Allowlist Command Filter** | Security Boundary | `rpc_test.go` | 🟢 **Passed** |
-| **Git Repository Synchronization** | Version Control | `origin/main` | 🟢 **Synchronized** |
+| **Dynamic App Scanner RPC** | `agent-go` | `GET_INSTALLED_APPS` | 🟢 **Passed** |
+| **Git Repository Synchronization** | Version Control | `origin/main` | 🟢 **Synchronized (`5f947dd`)** |
 
 ---
 
-## 5. Upcoming Milestones & Roadmap
-- [x] **Phase 2.1**: Automated QR code pairing generator in `SettingsApp.tsx` for fast HMAC shared-key exchange.
-- [x] **Phase 2.2**: Cross-device telemetry charts (live CPU/RAM graphs streaming from `agent-go` to `ProcessMonitorApp.tsx`).
-- [x] **Phase 2.3**: Headless File Transfer & Remote Cluster Explorer (`FileExplorerApp.tsx` & P2P file transfers).
-- [x] **Phase 3**: Android Companion Deployment & Hardware Provisioning (`nodus://pair` deep-linking, KitKat TLS fallback, `deploy_nodes.sh`).
-- [x] **Phase 4**: KitKat Linux Deploy Chroot Architecture (`GOOS=linux GOARCH=arm GOARM=7`, Tailscale subnet router `--advertise-routes=192.168.1.0/24`, `executeSuCommand` root shell).
-- [x] **Phase 5**: Real-Time Fleet Operational Backend & WebSocket Bridge (Live `LIST_DIRECTORY`, `TRANSFER_FILE`, `GET_TELEMETRY` RPC handlers in Go agent).
+## 5. Completed Milestones & Roadmap
+- [x] **Phase 1-5**: Core RPC wire protocol, `agent-go`, Tailscale mesh integration, and KitKat ARMv7 chroot subnets.
+- [x] **Phase 6**: Codebase Hardening & Removal of Mock Data (100% dynamic network & host IPs).
+- [x] **Phase 7**: Dynamic Package Scanner RPC (`GET_INSTALLED_APPS`) & Launcher App Grid Hydration.
+- [x] **Phase 8**: Cluster Macro Automation Engine & HTML5 2D Live Remote Canvas Widget.
+- [x] **Phase 9**: Remote Viewport Stream App (`RemoteStreamApp.tsx`) & Fleet Volume RPC Sync.
