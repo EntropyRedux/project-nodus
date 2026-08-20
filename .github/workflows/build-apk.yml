@@ -8,6 +8,7 @@ on:
 jobs:
   build-apk:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repository
@@ -18,9 +19,6 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -37,9 +35,9 @@ jobs:
         uses: gradle/actions/setup-gradle@v3
 
       - name: Build Android APK
-        working-directory: ./android-shell
         run: |
-          gradle assembleDebug --stacktrace
+          cd android-shell
+          gradle assembleDebug --no-daemon --stacktrace
 
       - name: Upload Nodus Home APK Artifact
         uses: actions/upload-artifact@v4

@@ -8,6 +8,7 @@ on:
 jobs:
   build-binaries:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout repository
@@ -19,9 +20,9 @@ jobs:
           go-version: '1.22'
 
       - name: Build Executables for All Platforms
-        working-directory: ./agent-go
         run: |
-          mkdir -p ../dist-binaries
+          mkdir -p dist-binaries
+          cd agent-go
           go mod tidy
           
           # Windows x64 Executable (.exe)
