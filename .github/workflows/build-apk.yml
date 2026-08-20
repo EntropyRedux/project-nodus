@@ -19,6 +19,9 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -34,8 +37,8 @@ jobs:
         uses: gradle/actions/setup-gradle@v3
 
       - name: Build Android APK
+        working-directory: ./android-shell
         run: |
-          cd android-shell
           gradle assembleDebug --stacktrace
 
       - name: Upload Nodus Home APK Artifact
