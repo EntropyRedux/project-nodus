@@ -50,27 +50,30 @@ export const DesktopAppWindow: React.FC<DesktopAppWindowProps> = ({ appId, child
         </div>
 
         {/* Window Controls */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
           <button
             onClick={handleMinimize}
-            className="p-1.5 rounded-lg hover:bg-[#2C2C2E] text-[#8E8E93] hover:text-[#F0F0F2] transition"
+            onPointerDown={(e) => e.stopPropagation()}
+            className="w-8 h-8 rounded-lg hover:bg-[#2C2C2E] active:scale-90 text-[#8E8E93] hover:text-[#F0F0F2] transition flex items-center justify-center"
             title="Minimize to Taskbar"
           >
-            <Minus size={14} />
+            <Minus size={16} />
           </button>
           <button
             onClick={() => setIsMaximized(!isMaximized)}
-            className="p-1.5 rounded-lg hover:bg-[#2C2C2E] text-[#8E8E93] hover:text-[#F0F0F2] transition hidden sm:inline-flex"
+            onPointerDown={(e) => e.stopPropagation()}
+            className="w-8 h-8 rounded-lg hover:bg-[#2C2C2E] active:scale-90 text-[#8E8E93] hover:text-[#F0F0F2] transition hidden sm:flex items-center justify-center"
             title={isMaximized ? 'Restore Window' : 'Maximize Window'}
           >
-            {isMaximized ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+            {isMaximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
           </button>
           <button
             onClick={handleClose}
-            className="p-1.5 rounded-lg hover:bg-[#FF3B30] text-[#8E8E93] hover:text-white transition"
+            onPointerDown={(e) => e.stopPropagation()}
+            className="w-8 h-8 rounded-lg bg-[#FF3B30]/20 hover:bg-[#FF3B30] active:scale-90 text-[#FF3B30] hover:text-white transition flex items-center justify-center"
             title="Close Application"
           >
-            <X size={14} />
+            <X size={16} strokeWidth={2.5} />
           </button>
         </div>
       </div>

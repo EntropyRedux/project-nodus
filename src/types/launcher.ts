@@ -38,6 +38,7 @@ export interface DeviceInfo {
   storage?: string;
   isCustom?: boolean;
   isRebooting?: boolean;
+  customAvatar?: string;
 }
 
 export interface ClipboardItem {
@@ -173,11 +174,20 @@ export interface TrustedDevice {
   };
 }
 
+export interface IconPackInfo {
+  packageName: string;
+  name: string;
+  icon?: string;
+}
+
 export interface LauncherSettings {
   deviceFrame: boolean; // Show simulated phone shell or full viewport
   themeMode: 'dark' | 'light' | 'auto';
   accentColor: string; // Hex or theme key
   iconStyle: IconStyle;
+  selectedIconPackPackage?: string;
+  iconSize: 'small' | 'medium' | 'large' | 'xlarge';
+  drawerLayout: 'continuous' | 'paginated';
   showLabels: boolean;
   gridColumns: 4 | 5;
   wallpaper: WallpaperId;
@@ -191,6 +201,9 @@ export interface LauncherSettings {
   leftPanelOpacity?: number;
   taskbarOpacity?: number;
   clipboardPanelOpacity?: number;
+  folderOpacity?: number;
+  taskbarIconScale?: 'small' | 'medium' | 'large' | 'xlarge';
+  appLaunchMode?: 'fullscreen' | 'floating';
 
   // Multi-Device Network Controller & Server Settings
   networkServer: NetworkServerConfig;

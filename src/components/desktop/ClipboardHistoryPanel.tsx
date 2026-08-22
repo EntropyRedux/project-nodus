@@ -109,12 +109,17 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
   }, [clipboardItems, searchQuery, filterDevice, onlyPinned]);
 
   return (
-    <div className="w-80 lg:w-84 xl:w-88 flex-shrink-0 flex flex-col gap-2.5 p-3 select-none min-h-0 overflow-y-auto scrollbar-thin">
+    <div 
+      className="w-full h-full backdrop-blur-3xl border border-white/15 rounded-3xl p-3.5 shadow-2xl flex flex-col gap-3 select-none overflow-y-auto scrollbar-thin"
+      style={{
+        backgroundColor: `rgba(18, 18, 21, ${clipboardPanelAlpha})`,
+      }}
+    >
       {/* 1. Compact Header Card */}
       <div 
-        className="p-3 sm:p-3.5 rounded-2xl backdrop-blur-xl border border-white/10 shadow-xl space-y-2.5"
+        className="p-3 sm:p-3.5 rounded-2xl border border-white/10 shadow-lg space-y-2.5"
         style={{
-          backgroundColor: `rgba(28, 28, 30, ${clipboardPanelAlpha})`,
+          backgroundColor: `rgba(28, 28, 34, ${Math.min(1, clipboardPanelAlpha * 1.05)})`,
         }}
       >
         <div className="flex items-center justify-between border-b border-white/5 pb-2">
@@ -233,9 +238,9 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
       {/* 2. Quick Broadcast Input */}
       <form
         onSubmit={handleBroadcast}
-        className="p-2 rounded-xl backdrop-blur-xl border border-white/10 shadow-md flex items-center gap-1.5"
+        className="p-2.5 rounded-xl border border-white/10 shadow-md flex items-center gap-1.5"
         style={{
-          backgroundColor: `rgba(28, 28, 30, ${clipboardPanelAlpha})`,
+          backgroundColor: `rgba(28, 28, 34, ${Math.min(1, clipboardPanelAlpha * 1.05)})`,
         }}
       >
         <div 
@@ -281,9 +286,14 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
       </form>
 
       {/* 3. Compact Clipboard Cards List */}
-      <div className="flex-1 flex flex-col gap-1.5 min-h-0">
+      <div className="flex-1 flex flex-col gap-2 min-h-0">
         {filteredItems.length === 0 ? (
-          <div className="p-6 text-center bg-[#1C1C1E]/50 rounded-2xl border border-white/5 text-[#8E8E93] space-y-1.5">
+          <div 
+            className="p-6 text-center rounded-2xl border border-white/10 text-[#8E8E93] space-y-1.5 shadow-md"
+            style={{
+              backgroundColor: `rgba(28, 28, 34, ${Math.min(1, clipboardPanelAlpha * 1.05)})`,
+            }}
+          >
             <Clipboard size={22} className="mx-auto opacity-30 text-[#34C759]" />
             <p className="text-xs font-semibold text-[#F0F0F2]">No clips found</p>
             <p className="text-[10px]">Copy text on any device to see it here.</p>
@@ -300,8 +310,9 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
               <div
                 key={item.id}
                 onClick={() => handleCopy(item)}
-                className="group relative p-2 rounded-xl bg-[#17171C]/90 hover:bg-[#1C1C22] border border-white/10 hover:border-white/20 transition-all duration-150 shadow-sm flex flex-col gap-1.5 cursor-pointer"
+                className="group relative p-2.5 rounded-xl border border-white/10 hover:border-white/20 transition-all duration-150 shadow-sm flex flex-col gap-1.5 cursor-pointer"
                 style={{
+                  backgroundColor: `rgba(28, 28, 34, ${Math.min(1, clipboardPanelAlpha * 1.05)})`,
                   borderLeftWidth: '3.5px',
                   borderLeftColor: devColor,
                 }}

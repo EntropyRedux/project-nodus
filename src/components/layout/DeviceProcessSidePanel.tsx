@@ -123,12 +123,19 @@ export const DeviceProcessSidePanel: React.FC = () => {
   }
 
   return (
-    <aside
-      className="w-[380px] sm:w-[420px] md:w-[460px] h-full backdrop-blur-2xl border-r border-white/10 shadow-[10px_0_30px_rgba(0,0,0,0.6)] flex flex-col z-30 shrink-0 select-none animate-in slide-in-from-left duration-300 ease-out"
-      style={{
-        backgroundColor: `rgba(13, 13, 16, ${leftPanelAlpha})`,
-      }}
-    >
+    <>
+      {/* Dimmed Interactive Backdrop Overlay */}
+      <div 
+        onClick={closeProcessManager}
+        className="fixed inset-0 bg-black/40 backdrop-blur-xs z-40 animate-in fade-in duration-200"
+      />
+
+      <aside
+        className="fixed top-0 bottom-0 left-16 sm:left-20 w-[380px] sm:w-[420px] md:w-[460px] h-full backdrop-blur-3xl border-r border-white/15 shadow-[15px_0_40px_rgba(0,0,0,0.8)] flex flex-col z-50 shrink-0 select-none animate-in slide-in-from-left duration-250 ease-out"
+        style={{
+          backgroundColor: `rgba(13, 13, 16, ${leftPanelAlpha})`,
+        }}
+      >
       {/* Side Panel Header */}
       <div className="p-3.5 sm:p-4 border-b border-white/10 bg-[#16161A]/95 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2.5 min-w-0">
@@ -420,5 +427,6 @@ export const DeviceProcessSidePanel: React.FC = () => {
         </button>
       </form>
     </aside>
+    </>
   );
 };

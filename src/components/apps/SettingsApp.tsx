@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   Settings as SettingsIcon, 
   Smartphone, 
@@ -37,7 +37,12 @@ import {
   Radio,
   FileCode,
   HardDrive,
-  Cpu
+  Cpu,
+  AppWindow,
+  Maximize2,
+  UploadCloud,
+  Folder,
+  LayoutGrid
 } from 'lucide-react';
 import { useLauncher } from '../../context/LauncherContext';
 import { WALLPAPER_PRESETS } from '../../utils/constants';
@@ -68,7 +73,10 @@ export const SettingsApp: React.FC = () => {
     removeTrustedDevice,
     updateDevicePermissions,
     clearFleetClipboard,
-    launchApp
+    launchApp,
+    installedIconPacks,
+    applyIconPack,
+    showToast
   } = useLauncher();
 
   const [activeTab, setActiveTab] = useState<SettingsTab>('appearance');
@@ -76,6 +84,26 @@ export const SettingsApp: React.FC = () => {
   const [resetSuccess, setResetSuccess] = useState(false);
   const [execStatusMessage, setExecStatusMessage] = useState<string | null>(null);
   const [filterDevice, setFilterDevice] = useState<string>('all');
+
+  const wallpaperFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleCustomWallpaperUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      if (dataUrl) {
+        updateSettings({
+          wallpaper: 'custom' as WallpaperId,
+          customWallpaperUrl: dataUrl,
+        });
+        showToast('Custom wallpaper applied!');
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   // HMAC Pairing State
   const [sharedKey, setSharedKey] = useState('c0a3c99f8d7b6e5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a');
@@ -243,46 +271,6 @@ export const SettingsApp: React.FC = () => {
         {/* ========================================================================= */}
         {activeTab === 'appearance' && (
           <div className="space-y-6">
-            {/* Viewport & Device Frame */}
-            <div className="space-y-3">
-              <h3 className="text-xs font-semibold text-[#8E8E93] uppercase tracking-widest flex items-center gap-2">
-                <Smartphone size={14} /> Display Presentation
-              </h3>
-              <div className="grid grid-cols-2 gap-2.5">
-                <button
-                  onClick={() => {
-                    audio.playTap();
-                    updateSettings({ deviceFrame: false });
-                  }}
-                  className={`p-3 rounded-2xl border text-left transition ${
-                    !settings.deviceFrame
-                      ? 'bg-[#1C1C1E] border-[#34C759] text-white shadow-lg'
-                      : 'bg-[#1C1C1E]/60 border-white/5 text-[#8E8E93] hover:bg-[#1C1C1E]'
-                  }`}
-                >
-                  <Monitor size={18} className={!settings.deviceFrame ? 'text-[#34C759]' : 'text-[#8E8E93]'} />
-                  <h4 className="text-xs font-semibold mt-2">Full Desktop Viewport</h4>
-                  <p className="text-[10px] text-[#8E8E93] mt-0.5">Edge-to-edge controller canvas</p>
-                </button>
-
-                <button
-                  onClick={() => {
-                    audio.playTap();
-                    updateSettings({ deviceFrame: true });
-                  }}
-                  className={`p-3 rounded-2xl border text-left transition ${
-                    settings.deviceFrame
-                      ? 'bg-[#1C1C1E] border-[#34C759] text-white shadow-lg'
-                      : 'bg-[#1C1C1E]/60 border-white/5 text-[#8E8E93] hover:bg-[#1C1C1E]'
-                  }`}
-                >
-                  <Smartphone size={18} className={settings.deviceFrame ? 'text-[#34C759]' : 'text-[#8E8E93]'} />
-                  <h4 className="text-xs font-semibold mt-2">Phone Bezel Frame</h4>
-                  <p className="text-[10px] text-[#8E8E93] mt-0.5">Pixel 9 Pro simulation</p>
-                </button>
-              </div>
-            </div>
-
             {/* Panel & Interface Glass Opacity Controls */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -358,50 +346,340 @@ export const SettingsApp: React.FC = () => {
                     className="w-full h-1.5 bg-[#2C2C2E] rounded-lg appearance-none cursor-pointer accent-[#FF9500]"
                   />
                 </div>
+
+                {/* 4. Folder & Modals Opacity */}
+                <div className="space-y-1.5 pt-2 border-t border-white/5">
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <Folder size={14} className="text-[#AF52DE]" />
+                      <span className="font-medium text-[#F0F0F2]">Folders & Dialogs</span>
+                    </div>
+                    <span className="font-mono text-[11px] text-[#AF52DE] bg-[#AF52DE]/15 px-2 py-0.5 rounded-md font-bold">
+                      {settings.folderOpacity ?? 95}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="10"
+                    max="100"
+                    step="1"
+                    value={settings.folderOpacity ?? 95}
+                    onChange={(e) => updateSettings({ folderOpacity: Number(e.target.value) })}
+                    className="w-full h-1.5 bg-[#2C2C2E] rounded-lg appearance-none cursor-pointer accent-[#AF52DE]"
+                  />
+                </div>
               </div>
             </div>
 
-            {/* Icon Styles */}
+            {/* Taskbar Icon Size & Scaling */}
             <div className="space-y-3">
               <h3 className="text-xs font-semibold text-[#8E8E93] uppercase tracking-widest flex items-center gap-2">
-                <Palette size={14} /> Icon Pack Theme
+                <LayoutGrid size={14} /> Taskbar Icon Scale
               </h3>
-              <div className="grid grid-cols-2 gap-2">
-                {iconStyles.map((style) => (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                {[
+                  { id: 'small', label: 'Small', desc: 'Compact (36px)', dotColor: '#8E8E93' },
+                  { id: 'medium', label: 'Medium', desc: 'Balanced (44px)', dotColor: '#34C759' },
+                  { id: 'large', label: 'Large', desc: 'Comfort (52px)', dotColor: '#007AFF' },
+                  { id: 'xlarge', label: 'Extra Large', desc: 'Spacious (60px)', dotColor: '#AF52DE' },
+                ].map((tier) => {
+                  const isSelected = (settings.taskbarIconScale || 'medium') === tier.id;
+                  return (
+                    <button
+                      key={tier.id}
+                      onClick={() => {
+                        audio.playTap();
+                        updateSettings({ taskbarIconScale: tier.id as any });
+                        showToast(`Taskbar scale set to ${tier.label}`);
+                      }}
+                      className={`p-3 rounded-2xl border text-left transition flex flex-col justify-between gap-1.5 ${
+                        isSelected
+                          ? 'border-[#34C759] bg-[#34C759]/15 text-white shadow-sm'
+                          : 'border-white/10 bg-[#1C1C1E] text-[#8E8E93] hover:border-white/20'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full">
+                        <span className="text-xs font-bold text-white">{tier.label}</span>
+                        {isSelected ? (
+                          <Check size={12} className="text-[#34C759]" />
+                        ) : (
+                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: tier.dotColor }} />
+                        )}
+                      </div>
+                      <p className="text-[10px] text-[#8E8E93]">{tier.desc}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Multitasking & Freeform Window Mode */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-semibold text-[#8E8E93] uppercase tracking-widest flex items-center gap-2">
+                <AppWindow size={14} /> Multi-Window & Launch Mode
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* 1. Fullscreen */}
+                <button
+                  onClick={() => {
+                    audio.playTap();
+                    updateSettings({ appLaunchMode: 'fullscreen' });
+                    showToast('Default launch mode: Standard Fullscreen');
+                  }}
+                  className={`p-3.5 rounded-2xl border text-left transition flex items-start gap-3 ${
+                    (settings.appLaunchMode ?? 'fullscreen') === 'fullscreen'
+                      ? 'border-[#34C759] bg-[#34C759]/10 text-white'
+                      : 'border-white/10 bg-[#1C1C1E] text-[#8E8E93] hover:border-white/20'
+                  }`}
+                >
+                  <Maximize2 size={18} className={(settings.appLaunchMode ?? 'fullscreen') === 'fullscreen' ? 'text-[#34C759]' : 'text-[#8E8E93]'} />
+                  <div>
+                    <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                      Standard Fullscreen
+                      {(settings.appLaunchMode ?? 'fullscreen') === 'fullscreen' && <Check size={12} className="text-[#34C759]" />}
+                    </div>
+                    <p className="text-[10px] text-[#8E8E93] mt-0.5 leading-relaxed">
+                      Apps launch in normal immersive full-screen display.
+                    </p>
+                  </div>
+                </button>
+
+                {/* 2. Floating Window */}
+                <button
+                  onClick={() => {
+                    audio.playTap();
+                    updateSettings({ appLaunchMode: 'floating' });
+                    showToast('Default launch mode: Freeform Floating Window');
+                  }}
+                  className={`p-3.5 rounded-2xl border text-left transition flex items-start gap-3 ${
+                    settings.appLaunchMode === 'floating'
+                      ? 'border-[#34C759] bg-[#34C759]/10 text-white'
+                      : 'border-white/10 bg-[#1C1C1E] text-[#8E8E93] hover:border-white/20'
+                  }`}
+                >
+                  <AppWindow size={18} className={settings.appLaunchMode === 'floating' ? 'text-[#34C759]' : 'text-[#8E8E93]'} />
+                  <div>
+                    <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                      Freeform Floating Window
+                      {settings.appLaunchMode === 'floating' && <Check size={12} className="text-[#34C759]" />}
+                    </div>
+                    <p className="text-[10px] text-[#8E8E93] mt-0.5 leading-relaxed">
+                      Apps open directly in resizable, movable floating windows.
+                    </p>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Icon Styles & Installed Icon Packs */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-semibold text-[#8E8E93] uppercase tracking-widest flex items-center gap-2">
+                  <Palette size={14} /> Icon Pack Theme
+                </h3>
+                {settings.selectedIconPackPackage && (
                   <button
-                    key={style.id}
                     onClick={() => {
                       audio.playTap();
-                      updateSettings({ iconStyle: style.id });
+                      applyIconPack(null);
                     }}
-                    className={`p-3 rounded-2xl border text-left transition flex items-center justify-between ${
-                      settings.iconStyle === style.id
+                    className="text-[11px] text-[#FF3B30] hover:underline"
+                  >
+                    Reset to Default Icons
+                  </button>
+                )}
+              </div>
+
+              {/* Installed Android Icon Packs from Device */}
+              {installedIconPacks.length > 0 && (
+                <div className="space-y-2">
+                  <span className="text-[11px] font-medium text-[#8E8E93]">Installed on Device</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    {installedIconPacks.map((pack) => (
+                      <button
+                        key={pack.packageName}
+                        onClick={() => {
+                          audio.playTap();
+                          applyIconPack(pack.packageName);
+                        }}
+                        className={`p-3 rounded-2xl border text-left transition flex items-center gap-3 ${
+                          settings.selectedIconPackPackage === pack.packageName
+                            ? 'bg-[#1C1C1E] border-[#34C759] text-white shadow-md'
+                            : 'bg-[#1C1C1E]/50 border-white/5 text-[#8E8E93] hover:bg-[#1C1C1E]'
+                        }`}
+                      >
+                        {pack.icon ? (
+                          <img src={pack.icon} alt={pack.name} className="w-8 h-8 rounded-xl object-cover shrink-0 shadow-sm" />
+                        ) : (
+                          <Palette size={24} className="text-[#34C759] shrink-0" />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <h4 className="text-xs font-medium text-white truncate">{pack.name}</h4>
+                          <p className="text-[10px] text-[#8E8E93] truncate">{pack.packageName}</p>
+                        </div>
+                        {settings.selectedIconPackPackage === pack.packageName && (
+                          <Check size={16} className="text-[#34C759] shrink-0" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Built-in Theme Styles */}
+              <div className="space-y-2">
+                <span className="text-[11px] font-medium text-[#8E8E93]">Theme Styles</span>
+                <div className="grid grid-cols-2 gap-2">
+                  {iconStyles.map((style) => (
+                    <button
+                      key={style.id}
+                      onClick={() => {
+                        audio.playTap();
+                        updateSettings({ iconStyle: style.id });
+                        showToast(`Switched icon style to ${style.name}`);
+                      }}
+                      className={`p-3 rounded-2xl border text-left transition flex items-center justify-between ${
+                        settings.iconStyle === style.id && !settings.selectedIconPackPackage
+                          ? 'bg-[#1C1C1E] border-[#34C759] text-white shadow-md'
+                          : 'bg-[#1C1C1E]/50 border-white/5 text-[#8E8E93] hover:bg-[#1C1C1E]'
+                      }`}
+                    >
+                      <div>
+                        <h4 className="text-xs font-medium text-white">{style.name}</h4>
+                        <p className="text-[10px] text-[#8E8E93] mt-0.5">{style.desc}</p>
+                      </div>
+                      {settings.iconStyle === style.id && !settings.selectedIconPackPackage && (
+                        <Check size={16} className="text-[#34C759] shrink-0" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* App Icon Sizing */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-semibold text-[#8E8E93] uppercase tracking-widest flex items-center gap-2">
+                <Sliders size={14} /> App Icon Scale
+              </h3>
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { id: 'small', name: 'Small', desc: '48px compact' },
+                  { id: 'medium', name: 'Medium', desc: '56px standard' },
+                  { id: 'large', name: 'Large', desc: '64px spacious' },
+                  { id: 'xlarge', name: 'Extra Large', desc: '80px expanded' },
+                ].map((sizeOpt) => (
+                  <button
+                    key={sizeOpt.id}
+                    onClick={() => {
+                      audio.playTap();
+                      updateSettings({ iconSize: sizeOpt.id as any });
+                      showToast(`Icon size set to ${sizeOpt.name}`);
+                    }}
+                    className={`p-3 rounded-2xl border text-center transition ${
+                      (settings.iconSize || 'medium') === sizeOpt.id
                         ? 'bg-[#1C1C1E] border-[#34C759] text-white shadow-md'
                         : 'bg-[#1C1C1E]/50 border-white/5 text-[#8E8E93] hover:bg-[#1C1C1E]'
                     }`}
                   >
-                    <div>
-                      <h4 className="text-xs font-medium text-white">{style.name}</h4>
-                      <p className="text-[10px] text-[#8E8E93] mt-0.5">{style.desc}</p>
-                    </div>
-                    {settings.iconStyle === style.id && <Check size={16} className="text-[#34C759] shrink-0" />}
+                    <h4 className="text-xs font-medium text-white">{sizeOpt.name}</h4>
+                    <p className="text-[10px] text-[#8E8E93] mt-0.5">{sizeOpt.desc}</p>
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Wallpaper Selection */}
+            {/* Desktop Grid Layout Mode */}
             <div className="space-y-3">
               <h3 className="text-xs font-semibold text-[#8E8E93] uppercase tracking-widest flex items-center gap-2">
-                <Image size={14} /> Wallpaper Backdrop
+                <Layers size={14} /> Desktop Grid Layout
               </h3>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { id: 'continuous', name: 'Continuous App Drawer', desc: 'All apps occupy 100% vertical canvas seamlessly' },
+                  { id: 'paginated', name: 'Paginated Workspaces', desc: 'Multi-page swipeable desktop screens' },
+                ].map((modeOpt) => (
+                  <button
+                    key={modeOpt.id}
+                    onClick={() => {
+                      audio.playTap();
+                      updateSettings({ drawerLayout: modeOpt.id as any });
+                      showToast(`Switched layout to ${modeOpt.name}`);
+                    }}
+                    className={`p-3 rounded-2xl border text-left transition flex items-center justify-between ${
+                      (settings.drawerLayout ?? 'continuous') === modeOpt.id
+                        ? 'bg-[#1C1C1E] border-[#34C759] text-white shadow-md'
+                        : 'bg-[#1C1C1E]/50 border-white/5 text-[#8E8E93] hover:bg-[#1C1C1E]'
+                    }`}
+                  >
+                    <div>
+                      <h4 className="text-xs font-medium text-white">{modeOpt.name}</h4>
+                      <p className="text-[10px] text-[#8E8E93] mt-0.5">{modeOpt.desc}</p>
+                    </div>
+                    {(settings.drawerLayout ?? 'continuous') === modeOpt.id && (
+                      <Check size={16} className="text-[#34C759] shrink-0" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Wallpaper Selection & Custom Wallpaper Upload */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-semibold text-[#8E8E93] uppercase tracking-widest flex items-center gap-2">
+                  <Image size={14} /> Wallpaper Backdrop
+                </h3>
+              </div>
+
+              {/* Custom Image Pick Button & File Input */}
+              <input
+                type="file"
+                ref={wallpaperFileInputRef}
+                accept="image/*"
+                className="hidden"
+                onChange={handleCustomWallpaperUpload}
+              />
+
               <div className="grid grid-cols-3 gap-2.5">
+                {/* Custom Image from Gallery / File Tile */}
+                <button
+                  onClick={() => {
+                    audio.playTap();
+                    wallpaperFileInputRef.current?.click();
+                  }}
+                  className={`h-24 rounded-2xl border relative overflow-hidden transition flex flex-col items-center justify-center gap-1.5 p-2 ${
+                    settings.wallpaper === 'custom'
+                      ? 'border-[#34C759] ring-2 ring-[#34C759]/40 bg-[#1C1C1E]'
+                      : 'border-dashed border-white/20 bg-[#1C1C1E]/40 hover:bg-[#1C1C1E] hover:border-white/40'
+                  }`}
+                  style={
+                    settings.wallpaper === 'custom' && settings.customWallpaperUrl
+                      ? {
+                          backgroundImage: `url(${settings.customWallpaperUrl})`,
+                          backgroundSize: 'cover',
+                          backgroundPosition: 'center',
+                        }
+                      : undefined
+                  }
+                >
+                  <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center p-2">
+                    <UploadCloud size={20} className="text-[#34C759]" />
+                    <span className="text-[11px] font-semibold text-white truncate mt-1">
+                      {settings.wallpaper === 'custom' ? 'Custom Photo' : 'Pick from Gallery'}
+                    </span>
+                    <span className="text-[9px] text-[#8E8E93]">Device Storage</span>
+                  </div>
+                </button>
+
+                {/* Preset Wallpapers */}
                 {WALLPAPER_PRESETS.map((wp) => (
                   <button
                     key={wp.id}
                     onClick={() => {
                       audio.playTap();
-                      updateSettings({ wallpaper: wp.id as WallpaperId });
+                      updateSettings({ wallpaper: wp.id as WallpaperId, customWallpaperUrl: undefined });
+                      showToast(`Applied ${wp.name} wallpaper`);
                     }}
                     className={`h-24 rounded-2xl border relative overflow-hidden transition ${
                       settings.wallpaper === wp.id

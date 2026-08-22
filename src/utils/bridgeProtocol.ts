@@ -227,7 +227,11 @@ export async function sendBridgeRpc(
   } else {
     // Attempt HTTP fallback to local agent on port 8890
     try {
-      const res = await fetch(`http://${window.location.hostname}:8890/api/rpc`, {
+      const configuredHost = localStorage.getItem('nodus_host_server');
+      const host = configuredHost && configuredHost.trim()
+        ? configuredHost.trim()
+        : (window.location.hostname === 'appassets.androidplatform.net' ? '127.0.0.1' : window.location.hostname);
+      const res = await fetch(`http://${host}:8890/api/rpc`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(request),

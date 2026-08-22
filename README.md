@@ -101,8 +101,11 @@ npm run dev
 
 ---
 
-## 📜 Versioning & Changelog
-Project Nodus adheres to [Semantic Versioning (SemVer 2.0.0)](https://semver.org/).
+* **v1.3.0** (2026-08-23):
+  * **Real-Time OS Notification Subsystem**: Native `NodusNotificationListenerService` (`BIND_NOTIFICATION_LISTENER_SERVICE`) with live real-time notification badge counts per app package and top bar aggregate indicator.
+  * **Decoupled Global Drag & Drop Engine**: Zero-lag touch drag-to-reorder on Android tablets via floating GPU drag ghost, preventing DOM thrashing and touch-scroll cancellations.
+  * **Desktop App Drawer & Multi-Device Workspace**: Customizable panel opacity controls, responsive taskbar icon scaling, spring-animated folder modals, and paginated/continuous drawer views.
+  * **Streamlined Touch Gestures**: 350ms long-press to enter arrange mode, direct touch manipulation, and native Android window controls.
 
 * **v1.0.0** (2026-08-18):
   * Initial migration to Go agent backend (`agent-go`) with embedded `tsnet`.

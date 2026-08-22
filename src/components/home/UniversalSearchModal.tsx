@@ -111,10 +111,14 @@ export const UniversalSearchModal: React.FC = () => {
                   className="p-2.5 rounded-2xl bg-[#1C1C1E] hover:bg-[#2C2C2E] border border-white/5 flex items-center gap-2.5 cursor-pointer transition shadow-md"
                 >
                   <div
-                    className="w-8 h-8 rounded-xl flex items-center justify-center text-white shrink-0"
-                    style={{ backgroundColor: app.color }}
+                    className="w-8 h-8 rounded-xl flex items-center justify-center text-white shrink-0 overflow-hidden"
+                    style={{ backgroundColor: app.customIcon ? 'transparent' : app.color }}
                   >
-                    <DynamicIcon name={app.iconName} size={16} />
+                    {app.customIcon ? (
+                      <img src={app.customIcon} alt={app.name} className="w-8 h-8 object-contain rounded-lg" />
+                    ) : (
+                      <DynamicIcon name={app.iconName} size={16} />
+                    )}
                   </div>
                   <span className="text-xs font-medium text-[#F0F0F2] truncate">{app.name}</span>
                 </div>

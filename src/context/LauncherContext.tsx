@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   AppItem, 
   FolderItem, 
@@ -56,6 +56,8 @@ interface LauncherContextType {
   moveDeviceDown: (id: string) => void;
   addDevice: (device: Omit<DeviceInfo, 'id'>) => void;
   removeDevice: (id: string) => void;
+  updateDevice: (id: string, partial: Partial<DeviceInfo>) => void;
+  updateDeviceAvatar: (id: string, avatarUrl: string) => void;
   isSidebarCollapsed: boolean;
   setSidebarCollapsed: (val: boolean) => void;
   toggleSidebar: () => void;
@@ -67,7 +69,14 @@ interface LauncherContextType {
   currentPageIndex: number;
   totalPages: number;
   setCurrentPageIndex: (page: number) => void;
-  launchApp: (appId: string) => void;
+  launchApp: (appId: string, forceMode?: 'fullscreen' | 'floating') => void;
+  launchAppFloating: (appId: string) => void;
+  isFloatingModeArmed: boolean;
+  setIsFloatingModeArmed: (val: boolean) => void;
+  toggleFloatingMode: () => void;
+  appContextMenu: { isOpen: boolean; appId: string; x: number; y: number } | null;
+  openAppContextMenu: (appId: string, x: number, y: number) => void;
+  closeAppContextMenu: () => void;
   closeActiveApp: () => void;
   activeAppId: string | null;
   runningApps: string[];
@@ -80,12 +89,22 @@ interface LauncherContextType {
   setIsEditing: (val: boolean) => void;
   uninstallApp: (appId: string) => void;
   createFolder: (name: string, appIds: string[], pageIndex: number) => void;
+  createFolderFromApps: (sourceAppId: string, targetAppId: string, customName?: string) => void;
+  addAppToFolder: (folderId: string, appId: string) => void;
   removeAppFromFolder: (folderId: string, appId: string) => void;
   renameFolder: (folderId: string, newName: string) => void;
   deleteFolder: (folderId: string) => void;
   activeFolderId: string | null;
   setActiveFolderId: (folderId: string | null) => void;
   moveAppToPage: (appId: string, targetPageIndex: number) => void;
+  moveApp: (sourceAppId: string, targetAppId: string) => void;
+  reorderApps: (newApps: AppItem[]) => void;
+  draggedAppId: string | null;
+  setDraggedAppId: (id: string | null) => void;
+  dragPosition: { x: number; y: number } | null;
+  setDragPosition: (pos: { x: number; y: number } | null) => void;
+  hoverTargetAppId: string | null;
+  setHoverTargetAppId: (id: string | null) => void;
   
   // System Shades & UI
   isQuickSettingsOpen: boolean;
@@ -94,6 +113,24 @@ interface LauncherContextType {
   quickSettings: QuickSettingsState;
   setQuickSettings: React.Dispatch<React.SetStateAction<QuickSettingsState>>;
   toggleQuickSetting: (key: keyof QuickSettingsState) => void;
+
+  // Toast Notifications & Action Confirmations
+  toastMessage: string | null;
+  showToast: (message: string, duration?: number) => void;
+  confirmDialog: {
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    confirmText?: string;
+    isDestructive?: boolean;
+  } | null;
+  showConfirm: (title: string, message: string, onConfirm: () => void, confirmText?: string, isDestructive?: boolean) => void;
+  closeConfirm: () => void;
+
+  // Icon Packs
+  installedIconPacks: IconPackInfo[];
+  applyIconPack: (packageName: string | null) => void;
   
   // Search & Navigation
   isSearchOpen: boolean;
@@ -105,8 +142,12 @@ interface LauncherContextType {
   unlockDevice: () => void;
   lockDevice: () => void;
   
-  // Notifications
+  // Notifications & Badges
   notifications: NotificationItem[];
+  appBadges: Record<string, number>;
+  totalUnreadNotifications: number;
+  isNotificationListenerEnabled: boolean;
+  requestNotificationListenerPermission: () => void;
   dismissNotification: (id: string) => void;
   clearAllNotifications: () => void;
   markNotificationRead: (id: string) => void;
@@ -164,6 +205,8 @@ const DEFAULT_SETTINGS: LauncherSettings = {
   themeMode: 'dark',
   accentColor: '#34C759',
   iconStyle: 'material-you',
+  iconSize: 'medium',
+  drawerLayout: 'continuous',
   showLabels: true,
   gridColumns: 5,
   wallpaper: 'alpine-horizon',
@@ -176,6 +219,8 @@ const DEFAULT_SETTINGS: LauncherSettings = {
   leftPanelOpacity: 85,
   taskbarOpacity: 92,
   clipboardPanelOpacity: 85,
+  folderOpacity: 95,
+  taskbarIconScale: 'medium',
 
   // Multi-Device Server & Controller Configs
   networkServer: INITIAL_SERVER_CONFIG,
@@ -229,6 +274,39 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Load saved state or default
   const [apps, setApps] = useState<AppItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const bridge = (window as any).NodusNativeBridge;
+        if (bridge?.getInstalledApps) {
+          const raw = bridge.getInstalledApps();
+          if (raw && typeof raw === 'string' && raw.startsWith('[')) {
+            const list = JSON.parse(raw);
+            if (Array.isArray(list) && list.length > 0) {
+              const builtInApps = INITIAL_APPS.filter((a) => !a.packageName);
+              const palette = ['#007AFF', '#34C759', '#FF9500', '#AF52DE', '#FF2D55', '#5856D6', '#64D2FF', '#FFCC00'];
+              const APPS_PER_PAGE = 24;
+              const nativeApps: AppItem[] = list.map((item: any, idx: number) => {
+                const totalSlot = builtInApps.length + idx;
+                return {
+                  id: `pkg_${item.packageName}`,
+                  name: item.label,
+                  packageName: item.packageName,
+                  customIcon: item.icon || undefined,
+                  iconName: 'Smartphone',
+                  color: palette[idx % palette.length],
+                  category: item.isSystemApp ? 'system' : 'productivity',
+                  isRemovable: !item.isSystemApp,
+                  pageIndex: Math.floor(totalSlot / APPS_PER_PAGE),
+                  order: totalSlot % APPS_PER_PAGE,
+                };
+              });
+              return [...builtInApps, ...nativeApps];
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
     const saved = localStorage.getItem('nova_launcher_v4_apps');
     if (saved) {
       try {
@@ -255,6 +333,9 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [currentPageIndex, setCurrentPageIndex] = useState<number>(0);
   
   const [activeAppId, setActiveAppId] = useState<string | null>(null);
+  const [isFloatingModeArmed, setIsFloatingModeArmed] = useState<boolean>(false);
+  const [appContextMenu, setAppContextMenu] = useState<{ isOpen: boolean; appId: string; x: number; y: number } | null>(null);
+
   const [runningApps, setRunningApps] = useState<string[]>(['settings', 'studio', 'terminal', 'monitor']);
   const [recentApps, setRecentApps] = useState<string[]>(() => {
     const saved = localStorage.getItem('nova_launcher_recents');
@@ -268,6 +349,9 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   });
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
+  const [draggedAppId, setDraggedAppId] = useState<string | null>(null);
+  const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
+  const [hoverTargetAppId, setHoverTargetAppId] = useState<string | null>(null);
 
   const [isQuickSettingsOpen, setQuickSettingsOpen] = useState<boolean>(false);
   const [quickSettings, setQuickSettings] = useState<QuickSettingsState>(DEFAULT_QUICK_SETTINGS);
@@ -320,22 +404,284 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setClipboardOpen((prev) => !prev);
   };
 
-  // Sync to local storage
+  const [installedIconPacks, setInstalledIconPacks] = useState<IconPackInfo[]>([]);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    confirmText?: string;
+    isDestructive?: boolean;
+  } | null>(null);
+
+  const showToast = (message: string, duration = 3000) => {
+    setToastMessage(message);
+    const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
+    if (bridge?.showToast) {
+      try {
+        bridge.showToast(message, false);
+      } catch (e) {}
+    }
+    setTimeout(() => {
+      setToastMessage((prev) => (prev === message ? null : prev));
+    }, duration);
+  };
+
+  const showConfirm = (
+    title: string,
+    message: string,
+    onConfirm: () => void,
+    confirmText = 'Confirm',
+    isDestructive = false
+  ) => {
+    setConfirmDialog({
+      isOpen: true,
+      title,
+      message,
+      onConfirm: () => {
+        onConfirm();
+        setConfirmDialog(null);
+      },
+      confirmText,
+      isDestructive,
+    });
+  };
+
+  const closeConfirm = () => {
+    setConfirmDialog(null);
+  };
+
+  // Sync to local storage safely
   useEffect(() => {
-    localStorage.setItem('nova_launcher_clipboard_open', JSON.stringify(isClipboardOpen));
+    try {
+      localStorage.setItem('nova_launcher_clipboard_open', JSON.stringify(isClipboardOpen));
+    } catch (_) {}
   }, [isClipboardOpen]);
 
   useEffect(() => {
-    localStorage.setItem('nova_launcher_recents', JSON.stringify(recentApps));
+    try {
+      localStorage.setItem('nova_launcher_recents', JSON.stringify(recentApps));
+    } catch (_) {}
   }, [recentApps]);
 
   useEffect(() => {
-    localStorage.setItem('nova_launcher_clipboard', JSON.stringify(clipboardItems));
+    try {
+      localStorage.setItem('nova_launcher_clipboard', JSON.stringify(clipboardItems));
+    } catch (_) {}
   }, [clipboardItems]);
 
   useEffect(() => {
-    localStorage.setItem('nova_launcher_devices', JSON.stringify(devices));
+    try {
+      localStorage.setItem('nova_launcher_devices', JSON.stringify(devices));
+    } catch (_) {}
   }, [devices]);
+
+  // Query installed icon packs on boot
+  useEffect(() => {
+    try {
+      const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
+      if (bridge?.getInstalledIconPacks) {
+        const raw = bridge.getInstalledIconPacks();
+        if (raw && raw.startsWith('[')) {
+          const list: IconPackInfo[] = JSON.parse(raw);
+          setInstalledIconPacks(list);
+        }
+      }
+    } catch (err) {
+      console.error('[Nodus] Failed to query installed icon packs:', err);
+    }
+  }, []);
+
+  const syncNativeInstalledApps = () => {
+    try {
+      const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
+      if (bridge?.getInstalledApps) {
+        const raw = bridge.getInstalledApps();
+        if (raw && typeof raw === 'string' && raw.startsWith('[')) {
+          const list: Array<{ packageName: string; label: string; icon?: string; isSystemApp?: boolean }> = JSON.parse(raw);
+          if (Array.isArray(list) && list.length > 0) {
+            const builtInApps = INITIAL_APPS.filter((a) => !a.packageName);
+            const palette = ['#007AFF', '#34C759', '#FF9500', '#AF52DE', '#FF2D55', '#5856D6', '#64D2FF', '#FFCC00'];
+            const APPS_PER_PAGE = 24;
+
+            setApps((prevApps) => {
+              const existingMap = new Map(prevApps.map((a) => [a.id, a]));
+              const nativeApps: AppItem[] = list.map((item, idx) => {
+                const appId = `pkg_${item.packageName}`;
+                const existing = existingMap.get(appId);
+                const totalSlot = builtInApps.length + idx;
+                return {
+                  id: appId,
+                  name: item.label,
+                  packageName: item.packageName,
+                  customIcon: item.icon || undefined,
+                  iconName: 'Smartphone',
+                  color: palette[idx % palette.length],
+                  category: item.isSystemApp ? 'system' : 'productivity',
+                  isRemovable: !item.isSystemApp,
+                  pageIndex: existing?.pageIndex ?? Math.floor(totalSlot / APPS_PER_PAGE),
+                  order: existing?.order ?? totalSlot % APPS_PER_PAGE,
+                  folderId: existing?.folderId ?? null,
+                };
+              });
+
+              const mergedBuiltIns = builtInApps.map((b) => {
+                const ex = existingMap.get(b.id);
+                return ex ? { ...b, folderId: ex.folderId ?? null } : b;
+              });
+
+              const merged = [...mergedBuiltIns, ...nativeApps];
+              localStorage.setItem('nova_launcher_v4_apps', JSON.stringify(merged));
+              return merged;
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[Nodus] Failed to sync installed apps from native bridge:', err);
+    }
+  };
+
+  // Dynamic local installed apps sync when running in Nodus Android Shell
+  useEffect(() => {
+    syncNativeInstalledApps();
+    const timer = setTimeout(syncNativeInstalledApps, 800);
+
+    const handlePackageChanged = () => {
+      syncNativeInstalledApps();
+      showToast('Device application list updated');
+    };
+    window.addEventListener('nodus-package-changed', handlePackageChanged);
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('nodus-package-changed', handlePackageChanged);
+    };
+  }, []);
+
+  // Real OS Notification Badges & Event Listener
+  const [appBadges, setAppBadges] = useState<Record<string, number>>({});
+  const [isNotificationListenerEnabled, setIsNotificationListenerEnabled] = useState<boolean>(false);
+
+  const syncNotificationBadges = useCallback((detailObj?: Record<string, number>) => {
+    try {
+      const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
+      if (bridge?.isNotificationListenerEnabled) {
+        setIsNotificationListenerEnabled(bridge.isNotificationListenerEnabled());
+      }
+
+      if (detailObj && typeof detailObj === 'object') {
+        setAppBadges(detailObj);
+        return;
+      }
+
+      if (bridge?.getActiveNotificationBadges) {
+        const raw = bridge.getActiveNotificationBadges();
+        if (raw && typeof raw === 'string' && raw.startsWith('{')) {
+          const map: Record<string, number> = JSON.parse(raw);
+          setAppBadges(map);
+        }
+      }
+    } catch (err) {
+      console.error('[Nodus] Failed to sync notification badges:', err);
+    }
+  }, []);
+
+  const requestNotificationListenerPermission = useCallback(() => {
+    const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
+    if (bridge?.requestNotificationListenerPermission) {
+      bridge.requestNotificationListenerPermission();
+    }
+  }, []);
+
+  useEffect(() => {
+    syncNotificationBadges();
+    const timer = setTimeout(syncNotificationBadges, 1000);
+
+    const handleNotifChanged = (e: any) => {
+      const detail = e?.detail;
+      syncNotificationBadges(detail);
+    };
+
+    window.addEventListener('nodus-notifications-changed', handleNotifChanged);
+
+    const interval = setInterval(() => {
+      syncNotificationBadges();
+    }, 2500);
+
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+      window.removeEventListener('nodus-notifications-changed', handleNotifChanged);
+    };
+  }, [syncNotificationBadges]);
+
+  const totalUnreadNotifications = useMemo(() => {
+    return Object.values(appBadges).reduce((sum, n) => sum + (typeof n === 'number' ? n : 0), 0);
+  }, [appBadges]);
+
+  const applyIconPack = (packageName: string | null) => {
+    updateSettings({ selectedIconPackPackage: packageName || undefined });
+    const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
+
+    if (!packageName || !bridge?.getIconPackIcons) {
+      syncNativeInstalledApps();
+      showToast('Restored default system icons');
+      return;
+    }
+
+    try {
+      const raw = bridge.getIconPackIcons(packageName);
+      const iconMap: Record<string, string> = JSON.parse(raw || '{}');
+      const pack = installedIconPacks.find((p) => p.packageName === packageName);
+
+      setApps((prevApps) => {
+        const updated = prevApps.map((app) => {
+          if (app.packageName && iconMap[app.packageName]) {
+            return { ...app, customIcon: iconMap[app.packageName] };
+          }
+          return app;
+        });
+        localStorage.setItem('nova_launcher_v4_apps', JSON.stringify(updated));
+        return updated;
+      });
+
+      showToast(`Applied ${pack?.name || 'Icon Pack'}`);
+    } catch (e) {
+      console.error('[Nodus] Failed to apply icon pack:', e);
+      showToast('Failed to apply icon pack');
+    }
+  };
+
+  // Listen for hardware back button from native Android shell
+  useEffect(() => {
+    const handleNativeBack = () => {
+      if (activeAppId) {
+        setActiveAppId(null);
+        return;
+      }
+      if (isSearchOpen) {
+        setSearchOpen(false);
+        return;
+      }
+      if (isRecentsOpen) {
+        setRecentsOpen(false);
+        return;
+      }
+      if (isQuickSettingsOpen) {
+        setQuickSettingsOpen(false);
+        return;
+      }
+      if (activeFolderId) {
+        setActiveFolderId(null);
+        return;
+      }
+    };
+
+    window.addEventListener('nodus-back-press', handleNativeBack);
+    return () => window.removeEventListener('nodus-back-press', handleNativeBack);
+  }, [activeAppId, isSearchOpen, isRecentsOpen, isQuickSettingsOpen, activeFolderId]);
 
   // Dynamic Hardware Node Health & Connection Polling
   useEffect(() => {
@@ -649,6 +995,18 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     });
   };
 
+  const updateDevice = (id: string, partial: Partial<DeviceInfo>) => {
+    setDevices((prev) =>
+      prev.map((d) => (d.id === id ? { ...d, ...partial } : d))
+    );
+  };
+
+  const updateDeviceAvatar = (id: string, avatarUrl: string) => {
+    audio.playTap();
+    updateDevice(id, { customAvatar: avatarUrl });
+    showToast('Device portrait updated');
+  };
+
   const openProcessManager = (deviceId: string) => {
     audio.playTap();
     setProcessModalDeviceId((prev) => (prev === deviceId ? null : deviceId));
@@ -684,6 +1042,8 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         })
       );
 
+      showToast(`Terminated PID ${pid} (${procToKill.name})`);
+
       addNotification({
         appId: 'settings',
         appName: 'Process Guard',
@@ -709,6 +1069,8 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         prev.map((d) => (d.id === deviceId ? { ...d, cpuLoad: 9 } : d))
       );
 
+      showToast(`Cleared background tasks on ${targetDev.name}`);
+
       addNotification({
         appId: 'settings',
         appName: 'Process Guard',
@@ -724,6 +1086,8 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     audio.playTap();
     const targetDev = devices.find((d) => d.id === deviceId);
     if (!targetDev) return;
+
+    showToast(`Dispatched reboot command to ${targetDev.name}...`);
 
     setDevices((prev) =>
       prev.map((d) =>
@@ -842,10 +1206,78 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   // Launcher navigation & app launching
-  const launchApp = (appId: string) => {
+  const toggleFloatingMode = () => {
+    if (settings.soundEffects) audio.playTap();
+    setIsFloatingModeArmed((prev) => {
+      const next = !prev;
+      showToast(next ? 'Floating Window Mode: ON' : 'Floating Window Mode: OFF');
+      return next;
+    });
+  };
+
+  const openAppContextMenu = (appId: string, x: number, y: number) => {
+    if (settings.soundEffects) audio.playTap();
+    setAppContextMenu({ isOpen: true, appId, x, y });
+  };
+
+  const closeAppContextMenu = () => {
+    setAppContextMenu(null);
+  };
+
+  const launchAppFloating = (appId: string) => {
     if (settings.soundEffects) audio.playAppOpen();
     const targetApp = apps.find((a) => a.id === appId);
     if (targetApp?.packageName) {
+      const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
+      if (bridge?.launchAppFloating) {
+        const launched = bridge.launchAppFloating(targetApp.packageName);
+        if (launched) {
+          showToast(`Opened ${targetApp.name} in floating window`);
+          return;
+        }
+      }
+    }
+    launchApp(appId, 'floating');
+  };
+
+  const launchApp = (appId: string, forceMode?: 'fullscreen' | 'floating') => {
+    if (settings.soundEffects) audio.playAppOpen();
+    const targetApp = apps.find((a) => a.id === appId);
+
+    // Track in running and recent apps
+    setRunningApps((prev) => {
+      if (!prev.includes(appId)) return [appId, ...prev.slice(0, 11)];
+      return [appId, ...prev.filter((id) => id !== appId)];
+    });
+
+    setRecentApps((prev) => {
+      const next = [appId, ...prev.filter((id) => id !== appId)].slice(0, 16);
+      try {
+        localStorage.setItem('nova_launcher_recents', JSON.stringify(next));
+      } catch (_) {}
+      return next;
+    });
+
+    const shouldFloat = forceMode === 'floating' || (!forceMode && (isFloatingModeArmed || settings.appLaunchMode === 'floating'));
+
+    if (targetApp?.packageName) {
+      const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
+      
+      if (shouldFloat && bridge?.launchAppFloating) {
+        const launched = bridge.launchAppFloating(targetApp.packageName);
+        if (launched) {
+          showToast(`Opened ${targetApp.name} in floating window`);
+          return;
+        }
+      }
+
+      // Standard native launch via Android bridge if available
+      if (bridge?.launchApp) {
+        const launched = bridge.launchApp(targetApp.packageName);
+        if (launched) return;
+      }
+
+      // Fallback to cluster RPC intent dispatch for remote nodes
       simulateBridgeRpc('LAUNCH_INTENT', activeDeviceId, { packageName: targetApp.packageName });
       addNotification({
         appId: 'settings',
@@ -861,16 +1293,6 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setActiveAppId(appId);
     setSearchOpen(false);
     setRecentsOpen(false);
-
-    setRunningApps((prev) => {
-      if (!prev.includes(appId)) return [appId, ...prev];
-      return [appId, ...prev.filter((id) => id !== appId)];
-    });
-
-    setRecentApps((prev) => {
-      const next = [appId, ...prev.filter((id) => id !== appId)];
-      return next.slice(0, 8);
-    });
   };
 
   const closeActiveApp = () => {
@@ -921,9 +1343,27 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const uninstallApp = (appId: string) => {
     if (settings.soundEffects) audio.playTap();
-    setApps((prev) => prev.filter((app) => app.id !== appId));
-    setRunningApps((prev) => prev.filter((id) => id !== appId));
-    if (activeAppId === appId) setActiveAppId(null);
+    const targetApp = apps.find((a) => a.id === appId);
+    if (!targetApp) return;
+
+    if (targetApp.packageName) {
+      const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
+      if (bridge?.uninstallApp) {
+        bridge.uninstallApp(targetApp.packageName);
+      }
+      showToast(`Initiating uninstallation for ${targetApp.name}...`);
+      setTimeout(syncNativeInstalledApps, 1200);
+      setTimeout(syncNativeInstalledApps, 2500);
+      setTimeout(syncNativeInstalledApps, 4500);
+    } else {
+      setApps((prev) => prev.filter((app) => app.id !== appId));
+      setRunningApps((prev) => prev.filter((id) => id !== appId));
+      setFolders((prev) =>
+        prev.map((f) => ({ ...f, appIds: f.appIds.filter((id) => id !== appId) }))
+      );
+      if (activeAppId === appId) setActiveAppId(null);
+      showToast(`Removed ${targetApp.name}`);
+    }
   };
 
   const createFolder = (name: string, appIds: string[], pageIndex: number) => {
@@ -941,6 +1381,55 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         appIds.includes(app.id) ? { ...app, folderId: newFolder.id } : app
       )
     );
+  };
+
+  const createFolderFromApps = (sourceAppId: string, targetAppId: string, customName?: string) => {
+    if (sourceAppId === targetAppId) return;
+    const source = apps.find((a) => a.id === sourceAppId);
+    const target = apps.find((a) => a.id === targetAppId);
+    if (!source || !target) return;
+
+    let folderName = customName;
+    if (!folderName) {
+      if (source.category === target.category && source.category !== 'productivity') {
+        folderName = source.category.charAt(0).toUpperCase() + source.category.slice(1);
+      } else {
+        folderName = `${target.name} & More`;
+      }
+    }
+
+    const folderPageIndex = target.pageIndex ?? 0;
+    const newFolder: FolderItem = {
+      id: `folder-${Date.now()}`,
+      name: folderName,
+      color: target.color || '#34C759',
+      pageIndex: folderPageIndex,
+      order: target.order ?? 0,
+      appIds: [targetAppId, sourceAppId],
+    };
+
+    setFolders((prev) => [...prev, newFolder]);
+    setApps((prev) =>
+      prev.map((app) =>
+        app.id === sourceAppId || app.id === targetAppId
+          ? { ...app, folderId: newFolder.id }
+          : app
+      )
+    );
+    if (settings.soundEffects) audio.playTap();
+  };
+
+  const addAppToFolder = (folderId: string, appId: string) => {
+    const folder = folders.find((f) => f.id === folderId);
+    if (!folder || folder.appIds.includes(appId)) return;
+
+    setFolders((prev) =>
+      prev.map((f) => (f.id === folderId ? { ...f, appIds: [...f.appIds, appId] } : f))
+    );
+    setApps((prev) =>
+      prev.map((app) => (app.id === appId ? { ...app, folderId: folderId } : app))
+    );
+    if (settings.soundEffects) audio.playTap();
   };
 
   const removeAppFromFolder = (folderId: string, appId: string) => {
@@ -980,6 +1469,33 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         app.id === appId ? { ...app, pageIndex: targetPageIndex } : app
       )
     );
+  };
+
+  const moveApp = (sourceAppId: string, targetAppId: string) => {
+    if (sourceAppId === targetAppId) return;
+    setApps((prev) => {
+      const sourceIndex = prev.findIndex((a) => a.id === sourceAppId);
+      const targetIndex = prev.findIndex((a) => a.id === targetAppId);
+      if (sourceIndex === -1 || targetIndex === -1) return prev;
+
+      const next = [...prev];
+      const [moved] = next.splice(sourceIndex, 1);
+      next.splice(targetIndex, 0, moved);
+
+      try {
+        localStorage.setItem('nova_launcher_apps_order', JSON.stringify(next.map((a) => a.id)));
+      } catch (_) {}
+
+      return next;
+    });
+    if (settings.soundEffects) audio.playTap();
+  };
+
+  const reorderApps = (newApps: AppItem[]) => {
+    setApps(newApps);
+    try {
+      localStorage.setItem('nova_launcher_apps_order', JSON.stringify(newApps.map((a) => a.id)));
+    } catch (_) {}
   };
 
   const dismissNotification = (id: string) => {
@@ -1039,6 +1555,8 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         moveDeviceDown,
         addDevice,
         removeDevice,
+        updateDevice,
+        updateDeviceAvatar,
         isSidebarCollapsed,
         setSidebarCollapsed,
         toggleSidebar,
@@ -1059,12 +1577,22 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setIsEditing,
         uninstallApp,
         createFolder,
+        createFolderFromApps,
+        addAppToFolder,
         removeAppFromFolder,
         renameFolder,
         deleteFolder,
         activeFolderId,
         setActiveFolderId,
         moveAppToPage,
+        moveApp,
+        reorderApps,
+        draggedAppId,
+        setDraggedAppId,
+        dragPosition,
+        setDragPosition,
+        hoverTargetAppId,
+        setHoverTargetAppId,
         isQuickSettingsOpen,
         setQuickSettingsOpen,
         toggleQuickSettings,
@@ -1118,6 +1646,24 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         toggleClipboardPanel,
         openQuickSettings,
         openRecents,
+        toastMessage,
+        showToast,
+        confirmDialog,
+        showConfirm,
+        closeConfirm,
+        installedIconPacks,
+        applyIconPack,
+        launchAppFloating,
+        isFloatingModeArmed,
+        setIsFloatingModeArmed,
+        toggleFloatingMode,
+        appContextMenu,
+        openAppContextMenu,
+        closeAppContextMenu,
+        appBadges,
+        totalUnreadNotifications,
+        isNotificationListenerEnabled,
+        requestNotificationListenerPermission,
       }}
     >
       {children}
