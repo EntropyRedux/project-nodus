@@ -78,6 +78,8 @@ interface LauncherContextType {
   openAppContextMenu: (appId: string, x: number, y: number) => void;
   closeAppContextMenu: () => void;
   closeActiveApp: () => void;
+  minimizeActiveApp: () => void;
+  toggleAppTask: (appId: string) => void;
   activeAppId: string | null;
   runningApps: string[];
   recentApps: string[];
@@ -1300,6 +1302,51 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setActiveAppId(null);
   };
 
+  const minimizeActiveApp = () => {
+    if (settings.soundEffects) audio.playTap();
+    if (activeAppId) {
+      setActiveAppId(null);
+    } else {
+      const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
+      if (bridge?.bringLauncherToFront) {
+        bridge.bringLauncherToFront();
+      }
+    }
+  };
+
+  const toggleAppTask = (appId: string) => {
+    if (settings.soundEffects) audio.playTap();
+    const targetApp = apps.find((a) => a.id === appId);
+
+    // 1. Internal Window App (Settings, Terminal, Studio, etc.)
+    if (!targetApp?.packageName) {
+      if (activeAppId === appId) {
+        // Frontmost -> minimize to taskbar
+        setActiveAppId(null);
+      } else {
+        // Bring to front
+        setActiveAppId(appId);
+        setRunningApps((prev) => {
+          if (!prev.includes(appId)) return [appId, ...prev.slice(0, 11)];
+          return [appId, ...prev.filter((id) => id !== appId)];
+        });
+      }
+      return;
+    }
+
+    // 2. Native Android App
+    const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
+    if (bridge?.bringAppToFront) {
+      bridge.bringAppToFront(targetApp.packageName);
+      setRunningApps((prev) => {
+        if (!prev.includes(appId)) return [appId, ...prev.slice(0, 11)];
+        return [appId, ...prev.filter((id) => id !== appId)];
+      });
+    } else {
+      launchApp(appId);
+    }
+  };
+
   const killApp = (appId: string) => {
     if (settings.soundEffects) audio.playTap();
     setRunningApps((prev) => prev.filter((id) => id !== appId));
@@ -1664,6 +1711,8 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         totalUnreadNotifications,
         isNotificationListenerEnabled,
         requestNotificationListenerPermission,
+        toggleAppTask,
+        minimizeActiveApp,
       }}
     >
       {children}

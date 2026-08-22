@@ -158,6 +158,46 @@ class LauncherActivity : AppCompatActivity() {
                 }
 
                 @JavascriptInterface
+                fun bringLauncherToFront(): Boolean {
+                    return try {
+                        val intent = Intent(this@LauncherActivity, LauncherActivity::class.java).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        }
+                        startActivity(intent)
+                        true
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to bring launcher to front", e)
+                        false
+                    }
+                }
+
+                @JavascriptInterface
+                fun bringAppToFront(packageName: String): Boolean {
+                    return try {
+                        val intent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+                            addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        }
+                        if (intent != null) {
+                            startActivity(intent)
+                            true
+                        } else {
+                            launchApp(packageName)
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to bring app $packageName to front", e)
+                        false
+                    }
+                }
+
+                @JavascriptInterface
+                fun minimizeApp(packageName: String): Boolean {
+                    return bringLauncherToFront()
+                }
+
+                @JavascriptInterface
                 fun launchAppFloating(packageName: String): Boolean {
                     return try {
                         val intent = packageManager.getLaunchIntentForPackage(packageName)?.apply {

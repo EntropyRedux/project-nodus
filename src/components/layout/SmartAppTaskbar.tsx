@@ -38,6 +38,7 @@ export const SmartAppTaskbar: React.FC = () => {
     isSidebarCollapsed,
     toggleSidebar,
     appBadges,
+    toggleAppTask,
     settings
   } = useLauncher();
 
@@ -253,7 +254,7 @@ export const SmartAppTaskbar: React.FC = () => {
   );
 
   // Filter apps for Large Start Menu
-  const categories = useMemo(() => ['all', 'productivity', 'media', 'tools', 'system'], []);
+  const categories = useMemo(() => ['all', 'recents', 'running', 'productivity', 'media', 'tools', 'system'], []);
   const filteredStartApps = useMemo(() => {
     const q = menuSearch.toLowerCase().trim();
     return apps.filter((app) => {
@@ -261,10 +262,21 @@ export const SmartAppTaskbar: React.FC = () => {
         !q ||
         app.name.toLowerCase().includes(q) ||
         app.category.toLowerCase().includes(q);
-      const matchesCategory = selectedCategory === 'all' || app.category === selectedCategory;
+
+      let matchesCategory = true;
+      if (selectedCategory === 'all') {
+        matchesCategory = true;
+      } else if (selectedCategory === 'recents') {
+        matchesCategory = recentApps.includes(app.id);
+      } else if (selectedCategory === 'running') {
+        matchesCategory = runningApps.includes(app.id);
+      } else {
+        matchesCategory = app.category === selectedCategory;
+      }
+
       return matchesSearch && matchesCategory;
     });
-  }, [apps, menuSearch, selectedCategory]);
+  }, [apps, menuSearch, selectedCategory, recentApps, runningApps]);
 
   const devColor = DEVICE_COLORS[activeDevice?.id] || '#34C759';
 
@@ -339,7 +351,7 @@ export const SmartAppTaskbar: React.FC = () => {
                 </button>
               </div>
 
-              {/* Search Bar */}
+              {/* Search Bar - No autoFocus to prevent involuntary Android keyboard popup */}
               <div className="relative">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8E8E93]" />
                 <input
@@ -347,7 +359,6 @@ export const SmartAppTaskbar: React.FC = () => {
                   placeholder="Type to search apps..."
                   value={menuSearch}
                   onChange={(e) => setMenuSearch(e.target.value)}
-                  autoFocus
                   className="w-full bg-[#1C1C22]/90 border border-white/10 rounded-2xl py-2 pl-9 pr-3 text-xs text-[#F0F0F2] placeholder-[#636366] focus:outline-none focus:border-[#34C759] focus:ring-1 focus:ring-[#34C759]/40 transition"
                 />
               </div>
@@ -511,15 +522,14 @@ export const SmartAppTaskbar: React.FC = () => {
                 <div
                   key={`open-${app.id}`}
                   onClick={() => {
-                    audio.playTap();
-                    launchApp(app.id);
+                    toggleAppTask(app.id);
                   }}
                   className={`group relative ${sizeConfig.btnSize} rounded-xl flex items-center justify-center cursor-pointer transition-all duration-150 ${
                     isActive
                       ? 'bg-[#2C2C36] border border-[#34C759] shadow-md shadow-[#34C759]/25 scale-105'
                       : 'bg-[#171720] hover:bg-[#242430] border border-white/5 hover:border-white/20 hover:scale-105'
                   }`}
-                  title={`${app.name} (Running)`}
+                  title={`${app.name} (Running - Click to Toggle / Minimize)`}
                 >
                   {/* App Icon */}
                   <div style={{ color: app.color }} className="flex items-center justify-center">
