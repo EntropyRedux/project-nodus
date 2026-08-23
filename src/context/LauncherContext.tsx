@@ -1320,14 +1320,21 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     minimizeActiveApp();
   };
 
-  const minimizeActiveApp = () => {
+  const minimizeActiveApp = (appId?: string) => {
     if (settings.soundEffects) audio.playTap();
+    const idToMinimize = appId || activeAppId;
+    const targetApp = idToMinimize ? apps.find((a) => a.id === idToMinimize) : null;
     setActiveAppId(null);
+
     const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
-    if (bridge?.minimizeActiveWindow) {
-      bridge.minimizeActiveWindow();
-    } else if (bridge?.bringLauncherToFront) {
-      bridge.bringLauncherToFront();
+    if (bridge) {
+      if (targetApp?.packageName && bridge.minimizeApp) {
+        bridge.minimizeApp(targetApp.packageName);
+      } else if (bridge.minimizeActiveWindow) {
+        bridge.minimizeActiveWindow();
+      } else if (bridge.bringLauncherToFront) {
+        bridge.bringLauncherToFront();
+      }
     }
   };
 
@@ -1336,7 +1343,7 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     // 1. If this app is ALREADY the active foreground app -> MINIMIZE IT TO BACKGROUND!
     if (activeAppId === appId) {
-      minimizeActiveApp();
+      minimizeActiveApp(appId);
       return;
     }
 

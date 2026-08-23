@@ -1,6 +1,7 @@
 package com.nodus.launcher
 
 import android.annotation.SuppressLint
+import android.app.ActivityManager
 import android.app.ActivityOptions
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -198,12 +199,50 @@ class LauncherActivity : AppCompatActivity() {
 
                 @JavascriptInterface
                 fun minimizeApp(packageName: String): Boolean {
-                    return bringLauncherToFront()
+                    return try {
+                        // Send MIUI/HyperOS Freeform minimize broadcast
+                        try {
+                            val miuiIntent = Intent("miui.intent.action.FREEFORM_MINIMIZE").apply {
+                                putExtra("package_name", packageName)
+                                putExtra("miui.intent.extra.freeform_window_mode", 0)
+                            }
+                            sendBroadcast(miuiIntent)
+                        } catch (_: Exception) {}
+
+                        // A11y global action home if service active
+                        val a11y = com.nodus.launcher.service.NodusAccessibilityService.instance
+                        a11y?.performHome()
+
+                        // Native Home Intent dispatch
+                        val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+                            addCategory(Intent.CATEGORY_HOME)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        }
+                        startActivity(homeIntent)
+                        bringLauncherToFront()
+                        true
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to minimize app $packageName", e)
+                        bringLauncherToFront()
+                    }
                 }
 
                 @JavascriptInterface
                 fun minimizeActiveWindow(): Boolean {
-                    return bringLauncherToFront()
+                    return try {
+                        val a11y = com.nodus.launcher.service.NodusAccessibilityService.instance
+                        a11y?.performHome()
+                        val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+                            addCategory(Intent.CATEGORY_HOME)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        }
+                        startActivity(homeIntent)
+                        bringLauncherToFront()
+                        true
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to minimize active window", e)
+                        bringLauncherToFront()
+                    }
                 }
 
                 @JavascriptInterface
