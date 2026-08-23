@@ -8,8 +8,11 @@ import { TaskbarOverlayStandalone } from './components/overlay/TaskbarOverlaySta
 export default function App() {
   const overlayMode = useMemo(() => {
     if (typeof window === 'undefined') return null;
-    const params = new URLSearchParams(window.location.search);
-    return params.get('overlay');
+    const searchParam = new URLSearchParams(window.location.search).get('overlay');
+    if (searchParam) return searchParam;
+    const hash = window.location.hash.replace('#', '').replace('overlay=', '');
+    if (['clipboard', 'devices', 'taskbar'].includes(hash)) return hash;
+    return null;
   }, []);
 
   return (

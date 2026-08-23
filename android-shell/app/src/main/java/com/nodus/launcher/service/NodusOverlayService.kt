@@ -18,7 +18,6 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.webkit.JavascriptInterface
-import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
@@ -97,10 +96,10 @@ class NodusOverlayService : Service() {
         val dm = resources.displayMetrics
         val initialY = (dm.heightPixels * 0.28).toInt()
 
-        // 1. LEFT HANDLE (Device Switcher)
+        // 1. LEFT HANDLE (Device Switcher) - 24dp touch width
         leftParams = WindowManager.LayoutParams(
-            dpToPx(14),
-            dpToPx(56),
+            dpToPx(24),
+            dpToPx(64),
             overlayType,
             flags,
             PixelFormat.TRANSLUCENT
@@ -116,10 +115,10 @@ class NodusOverlayService : Service() {
         )
         setupDragListener(leftHandleView!!, leftParams!!, isLeft = true)
 
-        // 2. RIGHT HANDLE (Clipboard History)
+        // 2. RIGHT HANDLE (Clipboard History) - 24dp touch width
         rightParams = WindowManager.LayoutParams(
-            dpToPx(14),
-            dpToPx(56),
+            dpToPx(24),
+            dpToPx(64),
             overlayType,
             flags,
             PixelFormat.TRANSLUCENT
@@ -135,10 +134,10 @@ class NodusOverlayService : Service() {
         )
         setupDragListener(rightHandleView!!, rightParams!!, isLeft = false)
 
-        // 3. BOTTOM HANDLE (Taskbar & Home)
+        // 3. BOTTOM HANDLE (Taskbar & Home) - 96dp x 24dp touch area
         bottomParams = WindowManager.LayoutParams(
-            dpToPx(80),
-            dpToPx(10),
+            dpToPx(96),
+            dpToPx(24),
             overlayType,
             flags,
             PixelFormat.TRANSLUCENT
@@ -163,15 +162,21 @@ class NodusOverlayService : Service() {
     }
 
     private fun createPillView(isLeft: Boolean, accentColor: Int): View {
+        // Outer touch container (24dp wide for effortless tapping/dragging)
         val root = FrameLayout(this).apply {
+            setPadding(if (isLeft) 0 else dpToPx(8), dpToPx(4), if (isLeft) dpToPx(8) else 0, dpToPx(4))
+        }
+
+        // Inner visual pill
+        val innerPill = FrameLayout(this).apply {
             val bg = GradientDrawable().apply {
-                setColor(Color.parseColor("#CC1C1C1E"))
+                setColor(Color.parseColor("#E61C1C1E"))
                 if (isLeft) {
-                    cornerRadii = floatArrayOf(0f, 0f, dpToPx(12).toFloat(), dpToPx(12).toFloat(), dpToPx(12).toFloat(), dpToPx(12).toFloat(), 0f, 0f)
+                    cornerRadii = floatArrayOf(0f, 0f, dpToPx(14).toFloat(), dpToPx(14).toFloat(), dpToPx(14).toFloat(), dpToPx(14).toFloat(), 0f, 0f)
                 } else {
-                    cornerRadii = floatArrayOf(dpToPx(12).toFloat(), dpToPx(12).toFloat(), 0f, 0f, 0f, 0f, dpToPx(12).toFloat(), dpToPx(12).toFloat())
+                    cornerRadii = floatArrayOf(dpToPx(14).toFloat(), dpToPx(14).toFloat(), 0f, 0f, 0f, 0f, dpToPx(14).toFloat(), dpToPx(14).toFloat())
                 }
-                setStroke(dpToPx(1), Color.parseColor("#33FFFFFF"))
+                setStroke(dpToPx(1), Color.parseColor("#44FFFFFF"))
             }
             background = bg
             elevation = dpToPx(8).toFloat()
@@ -185,21 +190,26 @@ class NodusOverlayService : Service() {
             background = barBg
         }
 
-        val lp = FrameLayout.LayoutParams(dpToPx(4), dpToPx(24)).apply {
+        val lp = FrameLayout.LayoutParams(dpToPx(5), dpToPx(28)).apply {
             gravity = if (isLeft) Gravity.START or Gravity.CENTER_VERTICAL else Gravity.END or Gravity.CENTER_VERTICAL
-            setMargins(if (isLeft) dpToPx(2) else 0, 0, if (!isLeft) dpToPx(2) else 0, 0)
+            setMargins(if (isLeft) dpToPx(3) else 0, 0, if (!isLeft) dpToPx(3) else 0, 0)
         }
 
-        root.addView(indicator, lp)
+        innerPill.addView(indicator, lp)
+        root.addView(innerPill, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         return root
     }
 
     private fun createBottomPillView(onTap: () -> Unit): View {
         val root = FrameLayout(this).apply {
+            setPadding(0, dpToPx(6), 0, dpToPx(6))
+        }
+
+        val innerPill = FrameLayout(this).apply {
             val bg = GradientDrawable().apply {
-                setColor(Color.parseColor("#991C1C1E"))
-                cornerRadius = dpToPx(5).toFloat()
-                setStroke(dpToPx(1), Color.parseColor("#22FFFFFF"))
+                setColor(Color.parseColor("#B31C1C1E"))
+                cornerRadius = dpToPx(6).toFloat()
+                setStroke(dpToPx(1), Color.parseColor("#33FFFFFF"))
             }
             background = bg
             elevation = dpToPx(4).toFloat()
@@ -207,16 +217,17 @@ class NodusOverlayService : Service() {
 
         val bar = View(this).apply {
             val barBg = GradientDrawable().apply {
-                setColor(Color.parseColor("#66FFFFFF"))
+                setColor(Color.parseColor("#88FFFFFF"))
                 cornerRadius = dpToPx(3).toFloat()
             }
             background = barBg
         }
 
-        val lp = FrameLayout.LayoutParams(dpToPx(48), dpToPx(3)).apply {
+        val lp = FrameLayout.LayoutParams(dpToPx(54), dpToPx(3)).apply {
             gravity = Gravity.CENTER
         }
-        root.addView(bar, lp)
+        innerPill.addView(bar, lp)
+        root.addView(innerPill, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
 
         root.setOnClickListener {
             onTap()
@@ -226,23 +237,23 @@ class NodusOverlayService : Service() {
     }
 
     private fun setupDragListener(view: View, params: WindowManager.LayoutParams, isLeft: Boolean) {
-        var startY = 0f
         var initialParamY = 0
-        var isClick = false
+        var initialTouchY = 0f
+        var isDrag = false
 
-        view.setOnTouchListener { v, event ->
+        view.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    startY = event.rawY
                     initialParamY = params.y
-                    isClick = true
+                    initialTouchY = event.rawY
+                    isDrag = false
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    val deltaY = event.rawY - startY
-                    if (abs(deltaY) > dpToPx(6)) {
-                        isClick = false
-                        params.y = (initialParamY + deltaY).toInt().coerceIn(dpToPx(40), resources.displayMetrics.heightPixels - dpToPx(80))
+                    val delta = (event.rawY - initialTouchY).toInt()
+                    if (abs(delta) > dpToPx(6)) {
+                        isDrag = true
+                        params.y = (initialParamY + delta).coerceIn(dpToPx(40), resources.displayMetrics.heightPixels - dpToPx(100))
                         try {
                             windowManager?.updateViewLayout(view, params)
                         } catch (_: Exception) {}
@@ -250,13 +261,9 @@ class NodusOverlayService : Service() {
                     true
                 }
                 MotionEvent.ACTION_UP -> {
-                    if (isClick) {
-                        v.performClick()
-                        if (isLeft) {
-                            openModularOverlay("devices")
-                        } else {
-                            openModularOverlay("clipboard")
-                        }
+                    if (!isDrag) {
+                        Log.i(TAG, "Handle tapped: ${if (isLeft) "devices" else "clipboard"}")
+                        openModularOverlay(if (isLeft) "devices" else "clipboard")
                     }
                     true
                 }
@@ -367,12 +374,14 @@ class NodusOverlayService : Service() {
                     }
                 }
 
-                loadUrl("https://appassets.androidplatform.net/assets/frontend/index.html?overlay=$overlayType")
+                // Load with hash routing for 100% reliable local asset resolution
+                loadUrl("https://appassets.androidplatform.net/assets/frontend/index.html#overlay=$overlayType")
             }
 
             activeOverlayWebView = webView
             try {
                 windowManager?.addView(webView, params)
+                Log.i(TAG, "Opened modular overlay: $overlayType")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to add floating overlay window", e)
             }
@@ -384,6 +393,7 @@ class NodusOverlayService : Service() {
             activeOverlayWebView?.let {
                 try {
                     windowManager?.removeView(it)
+                    Log.i(TAG, "Closed modular overlay")
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed to remove overlay view: ${e.message}")
                 }
