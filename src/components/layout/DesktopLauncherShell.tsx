@@ -64,8 +64,6 @@ export const DesktopLauncherShell: React.FC = () => {
     hoverTargetAppId,
     setHoverTargetAppId,
     openQuickSettings,
-    openRecents,
-    lockDevice,
     devices,
     activeDeviceId,
     setSearchOpen,

@@ -145,20 +145,6 @@ export const DesktopTaskbar: React.FC = () => {
             </button>
           );
         })}
-
-        {/* Task View / Recents Button */}
-        <button
-          onClick={() => {
-            audio.playTap();
-            setRecentsOpen(!isRecentsOpen);
-          }}
-          title="Task View / Multitasking Recents"
-          className={`p-2 rounded-2xl hover:bg-[#1C1C1E] text-[#8E8E93] hover:text-[#F0F0F2] transition ${
-            isRecentsOpen ? 'bg-[#1C1C1E] text-[#34C759]' : ''
-          }`}
-        >
-          <Layers size={18} />
-        </button>
       </div>
 
       {/* Right: Connected Node & System Tray */}
@@ -205,18 +191,6 @@ export const DesktopTaskbar: React.FC = () => {
           title="Toggle Fullscreen"
         >
           {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
-        </button>
-
-        {/* Power / Lock */}
-        <button
-          onClick={() => {
-            audio.playTap();
-            lockDevice();
-          }}
-          className="p-2 rounded-2xl hover:bg-[#FF3B30]/20 text-[#8E8E93] hover:text-[#FF3B30] transition"
-          title="Lock Screen"
-        >
-          <Power size={16} />
         </button>
       </div>
     </footer>

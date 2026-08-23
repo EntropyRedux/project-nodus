@@ -202,7 +202,6 @@ interface LauncherContextType {
 
   // Quick Open Aliases
   openQuickSettings: () => void;
-  openRecents: () => void;
 }
 
 const DEFAULT_SETTINGS: LauncherSettings = {
@@ -690,10 +689,6 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setSearchOpen(false);
         return;
       }
-      if (isRecentsOpen) {
-        setRecentsOpen(false);
-        return;
-      }
       if (isQuickSettingsOpen) {
         setQuickSettingsOpen(false);
         return;
@@ -706,7 +701,7 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     window.addEventListener('nodus-back-press', handleNativeBack);
     return () => window.removeEventListener('nodus-back-press', handleNativeBack);
-  }, [activeAppId, isSearchOpen, isRecentsOpen, isQuickSettingsOpen, activeFolderId]);
+  }, [activeAppId, isSearchOpen, isQuickSettingsOpen, activeFolderId]);
 
   // Dynamic Hardware Node Health & Connection Polling
   useEffect(() => {
@@ -1317,7 +1312,6 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     setActiveAppId(appId);
     setSearchOpen(false);
-    setRecentsOpen(false);
   };
 
   const closeActiveApp = () => {
@@ -1381,7 +1375,6 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const clearAllRunningApps = () => {
     setRunningApps([]);
     setActiveAppId(null);
-    setRecentsOpen(false);
   };
 
   const toggleQuickSetting = (key: keyof QuickSettingsState) => {
@@ -1681,11 +1674,6 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setQuickSettingsOpen(true);
   };
 
-  const openRecents = () => {
-    if (settings.soundEffects) audio.playTap();
-    setRecentsOpen(true);
-  };
-
   // Calculate total pages based on apps
   const maxPageIndex = Math.max(
     0,
@@ -1752,12 +1740,6 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         toggleQuickSetting,
         isSearchOpen,
         setSearchOpen,
-        isRecentsOpen,
-        setRecentsOpen,
-        isLocked,
-        setIsLocked,
-        unlockDevice,
-        lockDevice,
         notifications,
         dismissNotification,
         clearAllNotifications,
