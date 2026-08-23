@@ -137,12 +137,15 @@ interface LauncherContextType {
   // Search & Navigation
   isSearchOpen: boolean;
   setSearchOpen: (val: boolean) => void;
-  isRecentsOpen: boolean;
-  setRecentsOpen: (val: boolean) => void;
-  isLocked: boolean;
-  setIsLocked: (val: boolean) => void;
-  unlockDevice: () => void;
-  lockDevice: () => void;
+
+  // Drawer Tabs & App Categorization
+  drawerTabs: string[];
+  customTabAppMap: Record<string, string[]>;
+  addDrawerTab: (name: string, initialAppIds?: string[]) => void;
+  removeDrawerTab: (name: string) => void;
+  renameDrawerTab: (oldName: string, newName: string) => void;
+  assignAppsToTab: (tabName: string, appIds: string[]) => void;
+  setAppCategory: (appId: string, category: string) => void;
   
   // Notifications & Badges
   notifications: NotificationItem[];
@@ -359,8 +362,28 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [quickSettings, setQuickSettings] = useState<QuickSettingsState>(DEFAULT_QUICK_SETTINGS);
   
   const [isSearchOpen, setSearchOpen] = useState<boolean>(false);
-  const [isRecentsOpen, setRecentsOpen] = useState<boolean>(false);
-  const [isLocked, setIsLocked] = useState<boolean>(false);
+
+  // Persistent Drawer Category Tabs & Custom App Assignments
+  const [drawerTabs, setDrawerTabs] = useState<string[]>(() => {
+    const saved = localStorage.getItem('nodus_drawer_tabs');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (_) {}
+    }
+    return ['all', 'recents', 'running', 'productivity', 'media', 'tools', 'system'];
+  });
+
+  const [customTabAppMap, setCustomTabAppMap] = useState<Record<string, string[]>>(() => {
+    const saved = localStorage.getItem('nodus_custom_tab_apps');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (_) {}
+    }
+    return {};
+  });
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
 
@@ -1376,16 +1399,97 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setQuickSettingsOpen((prev) => !prev);
   };
 
-  const lockDevice = () => {
-    if (settings.soundEffects) audio.playLock();
-    setIsLocked(true);
-    setQuickSettingsOpen(false);
-    setActiveAppId(null);
+  const addDrawerTab = (name: string, initialAppIds: string[] = []) => {
+    if (settings.soundEffects) audio.playTap();
+    const clean = name.trim().toLowerCase();
+    if (!clean) return;
+    if (!drawerTabs.includes(clean)) {
+      const next = [...drawerTabs, clean];
+      setDrawerTabs(next);
+      try {
+        localStorage.setItem('nodus_drawer_tabs', JSON.stringify(next));
+      } catch (_) {}
+    }
+    if (initialAppIds.length > 0) {
+      setCustomTabAppMap((prev) => {
+        const next = { ...prev, [clean]: initialAppIds };
+        try {
+          localStorage.setItem('nodus_custom_tab_apps', JSON.stringify(next));
+        } catch (_) {}
+        return next;
+      });
+    }
+    showToast(`Created tab "${clean}"`);
   };
 
-  const unlockDevice = () => {
-    if (settings.soundEffects) audio.playUnlock();
-    setIsLocked(false);
+  const removeDrawerTab = (name: string) => {
+    if (settings.soundEffects) audio.playTap();
+    const clean = name.trim().toLowerCase();
+    const next = drawerTabs.filter((t) => t !== clean);
+    setDrawerTabs(next);
+    try {
+      localStorage.setItem('nodus_drawer_tabs', JSON.stringify(next));
+    } catch (_) {}
+    setCustomTabAppMap((prev) => {
+      const copy = { ...prev };
+      delete copy[clean];
+      try {
+        localStorage.setItem('nodus_custom_tab_apps', JSON.stringify(copy));
+      } catch (_) {}
+      return copy;
+    });
+    showToast(`Removed tab "${clean}"`);
+  };
+
+  const renameDrawerTab = (oldName: string, newName: string) => {
+    if (settings.soundEffects) audio.playTap();
+    const oldClean = oldName.trim().toLowerCase();
+    const newClean = newName.trim().toLowerCase();
+    if (!newClean || oldClean === newClean) return;
+
+    const next = drawerTabs.map((t) => (t === oldClean ? newClean : t));
+    setDrawerTabs(next);
+    try {
+      localStorage.setItem('nodus_drawer_tabs', JSON.stringify(next));
+    } catch (_) {}
+
+    setCustomTabAppMap((prev) => {
+      const copy = { ...prev };
+      if (copy[oldClean]) {
+        copy[newClean] = copy[oldClean];
+        delete copy[oldClean];
+      }
+      try {
+        localStorage.setItem('nodus_custom_tab_apps', JSON.stringify(copy));
+      } catch (_) {}
+      return copy;
+    });
+    showToast(`Renamed tab to "${newClean}"`);
+  };
+
+  const assignAppsToTab = (tabName: string, appIds: string[]) => {
+    if (settings.soundEffects) audio.playTap();
+    const clean = tabName.trim().toLowerCase();
+    setCustomTabAppMap((prev) => {
+      const next = { ...prev, [clean]: appIds };
+      try {
+        localStorage.setItem('nodus_custom_tab_apps', JSON.stringify(next));
+      } catch (_) {}
+      return next;
+    });
+    showToast(`Updated apps for "${clean}"`);
+  };
+
+  const setAppCategory = (appId: string, category: string) => {
+    if (settings.soundEffects) audio.playTap();
+    const clean = category.trim().toLowerCase();
+    setApps((prev) => {
+      const next = prev.map((a) => (a.id === appId ? { ...a, category: clean } : a));
+      try {
+        localStorage.setItem('nova_launcher_apps', JSON.stringify(next));
+      } catch (_) {}
+      return next;
+    });
   };
 
   const uninstallApp = (appId: string) => {
@@ -1688,11 +1792,14 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         togglePinClipboardItem,
         clearClipboardHistory,
         clearFleetClipboard,
-        isClipboardOpen,
-        setClipboardOpen,
-        toggleClipboardPanel,
+        drawerTabs,
+        customTabAppMap,
+        addDrawerTab,
+        removeDrawerTab,
+        renameDrawerTab,
+        assignAppsToTab,
+        setAppCategory,
         openQuickSettings,
-        openRecents,
         toastMessage,
         showToast,
         confirmDialog,

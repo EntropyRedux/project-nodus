@@ -9,8 +9,6 @@ export const NavigationBar: React.FC = () => {
     closeActiveApp, 
     isSearchOpen, 
     setSearchOpen, 
-    isRecentsOpen, 
-    setRecentsOpen, 
     settings,
     activeFolderId,
     setActiveFolderId,
@@ -32,10 +30,6 @@ export const NavigationBar: React.FC = () => {
       setSearchOpen(false);
       return;
     }
-    if (isRecentsOpen) {
-      setRecentsOpen(false);
-      return;
-    }
     if (activeAppId) {
       closeActiveApp();
     }
@@ -45,7 +39,6 @@ export const NavigationBar: React.FC = () => {
     if (settings.soundEffects) audio.playTap();
     setQuickSettingsOpen(false);
     setSearchOpen(false);
-    setRecentsOpen(false);
     setActiveFolderId(null);
     closeActiveApp();
   };
@@ -55,7 +48,6 @@ export const NavigationBar: React.FC = () => {
     setSearchOpen(false);
     setActiveFolderId(null);
     setQuickSettingsOpen(false);
-    setRecentsOpen(!isRecentsOpen);
   };
 
   return (

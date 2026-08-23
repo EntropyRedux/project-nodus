@@ -6,8 +6,6 @@ import { ClipboardHistoryPanel } from '../desktop/ClipboardHistoryPanel';
 import { SmartAppTaskbar } from './SmartAppTaskbar';
 import { DesktopAppWindow } from '../desktop/DesktopAppWindow';
 import { QuickSettingsShade } from './QuickSettingsShade';
-import { RecentsView } from './RecentsView';
-import { LockScreen } from './LockScreen';
 import { FolderModal } from '../home/FolderModal';
 import { UniversalSearchModal } from '../home/UniversalSearchModal';
 import { ToastNotification } from '../common/ToastNotification';
@@ -580,8 +578,6 @@ export const DesktopLauncherShell: React.FC = () => {
       {/* Global Overlays & Modals */}
       <SmartAppTaskbar />
       <QuickSettingsShade />
-      <RecentsView />
-      <LockScreen />
       <FolderModal />
       <UniversalSearchModal />
       <ConfirmModal />

@@ -5,8 +5,7 @@ import {
   Clock, 
   LayoutGrid, 
   Search, 
-  Sliders, 
-  Lock, 
+  Plus,
   Sparkles, 
   Layers, 
   Clipboard as ClipboardIcon, 
@@ -17,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useLauncher } from '../../context/LauncherContext';
 import { DynamicIcon } from '../common/DynamicIcon';
+import { TabOrganizerModal } from '../home/TabOrganizerModal';
 import { audio } from '../../utils/audio';
 import { AppItem } from '../../types/launcher';
 import { DEVICE_COLORS } from '../../utils/constants';
@@ -31,19 +31,20 @@ export const SmartAppTaskbar: React.FC = () => {
     killApp,
     activeDevice,
     toggleQuickSettings,
-    lockDevice,
-    setRecentsOpen,
     isClipboardOpen,
     toggleClipboardPanel,
     isSidebarCollapsed,
     toggleSidebar,
     appBadges,
     toggleAppTask,
+    drawerTabs,
+    customTabAppMap,
     settings
   } = useLauncher();
 
   const [isOpen, setIsOpen] = useState(false);
   const [isStartMenuOpen, setIsStartMenuOpen] = useState(false);
+  const [isTabOrganizerOpen, setTabOrganizerOpen] = useState(false);
   const [menuSearch, setMenuSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   
@@ -253,8 +254,7 @@ export const SmartAppTaskbar: React.FC = () => {
     [recentApps, runningApps, apps]
   );
 
-  // Filter apps for Large Start Menu
-  const categories = useMemo(() => ['all', 'recents', 'running', 'productivity', 'media', 'tools', 'system'], []);
+  // Filter apps for Large Start Menu using dynamic drawerTabs and customTabAppMap
   const filteredStartApps = useMemo(() => {
     const q = menuSearch.toLowerCase().trim();
     return apps.filter((app) => {
@@ -270,13 +270,15 @@ export const SmartAppTaskbar: React.FC = () => {
         matchesCategory = recentApps.includes(app.id);
       } else if (selectedCategory === 'running') {
         matchesCategory = runningApps.includes(app.id);
+      } else if (customTabAppMap[selectedCategory]) {
+        matchesCategory = customTabAppMap[selectedCategory].includes(app.id);
       } else {
-        matchesCategory = app.category === selectedCategory;
+        matchesCategory = app.category.toLowerCase() === selectedCategory.toLowerCase();
       }
 
       return matchesSearch && matchesCategory;
     });
-  }, [apps, menuSearch, selectedCategory, recentApps, runningApps]);
+  }, [apps, menuSearch, selectedCategory, recentApps, runningApps, customTabAppMap]);
 
   const devColor = DEVICE_COLORS[activeDevice?.id] || '#34C759';
 
@@ -363,9 +365,9 @@ export const SmartAppTaskbar: React.FC = () => {
                 />
               </div>
 
-              {/* Category Pills */}
+              {/* Category Pills (Dynamic from drawerTabs) */}
               <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-0.5">
-                {categories.map((cat) => (
+                {drawerTabs.map((cat) => (
                   <button
                     key={cat}
                     onClick={() => {
@@ -426,7 +428,7 @@ export const SmartAppTaskbar: React.FC = () => {
               })}
             </div>
 
-            {/* Bottom System Action Bar */}
+            {/* Bottom System Action Bar - Centralized Tab Organizer Button */}
             <div className="pt-3 border-t border-white/10 flex items-center justify-between text-xs text-[#8E8E93]">
               <div className="flex items-center gap-2">
                 <span 
@@ -439,39 +441,18 @@ export const SmartAppTaskbar: React.FC = () => {
                 <span className="text-[10px] text-[#636366]">({activeDevice?.os})</span>
               </div>
 
+              {/* Centralized Tab & App Organizer Action */}
               <div className="flex items-center gap-1.5">
                 <button
                   onClick={() => {
                     audio.playTap();
-                    setIsStartMenuOpen(false);
-                    toggleQuickSettings();
+                    setTabOrganizerOpen(true);
                   }}
-                  className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-[#8E8E93] hover:text-[#F0F0F2] transition"
-                  title="Quick Settings"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#34C759]/15 hover:bg-[#34C759]/25 text-[#34C759] hover:text-[#30D158] border border-[#34C759]/30 transition text-xs font-semibold shadow-sm hover:scale-105 active:scale-95"
+                  title="Add & Organize Tabs"
                 >
-                  <Sliders size={14} />
-                </button>
-                <button
-                  onClick={() => {
-                    audio.playTap();
-                    setIsStartMenuOpen(false);
-                    setRecentsOpen(true);
-                  }}
-                  className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-[#8E8E93] hover:text-[#F0F0F2] transition"
-                  title="Task Manager / Recents"
-                >
-                  <Layers size={14} />
-                </button>
-                <button
-                  onClick={() => {
-                    audio.playTap();
-                    setIsStartMenuOpen(false);
-                    lockDevice();
-                  }}
-                  className="p-2 rounded-xl bg-white/5 hover:bg-[#FF3B30]/20 text-[#8E8E93] hover:text-[#FF3B30] transition"
-                  title="Lock Device"
-                >
-                  <Lock size={14} />
+                  <Plus size={13} strokeWidth={2.5} />
+                  <span>Organize Tabs</span>
                 </button>
               </div>
             </div>
@@ -667,6 +648,12 @@ export const SmartAppTaskbar: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Tab & Category Organizer Dialog */}
+      <TabOrganizerModal
+        isOpen={isTabOrganizerOpen}
+        onClose={() => setTabOrganizerOpen(false)}
+      />
     </>
   );
 };

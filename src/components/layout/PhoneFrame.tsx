@@ -3,8 +3,6 @@ import { useLauncher } from '../../context/LauncherContext';
 import { StatusBar } from './StatusBar';
 import { NavigationBar } from './NavigationBar';
 import { QuickSettingsShade } from './QuickSettingsShade';
-import { RecentsView } from './RecentsView';
-import { LockScreen } from './LockScreen';
 import { HomeScreen } from '../home/HomeScreen';
 import { SettingsApp } from '../apps/SettingsApp';
 import { TerminalApp } from '../apps/TerminalApp';
@@ -22,9 +20,6 @@ export const PhoneFrame: React.FC = () => {
     launchApp, 
     settings, 
     updateSettings, 
-    lockDevice, 
-    unlockDevice, 
-    isLocked, 
     toggleQuickSetting 
   } = useLauncher();
 
@@ -59,11 +54,7 @@ export const PhoneFrame: React.FC = () => {
   };
 
   const handlePowerButton = () => {
-    if (isLocked) {
-      unlockDevice();
-    } else {
-      lockDevice();
-    }
+    if (settings.soundEffects) audio.playTap();
   };
 
   const content = (
@@ -93,8 +84,6 @@ export const PhoneFrame: React.FC = () => {
 
       {/* Overlay Layers */}
       <QuickSettingsShade />
-      <RecentsView />
-      <LockScreen />
     </div>
   );
 
