@@ -34,7 +34,11 @@ export const PhoneFrame: React.FC = () => {
         }
       : currentWp.style;
 
+  const activeApp = apps.find((a) => a.id === activeAppId);
+  const isInternalApp = Boolean(activeAppId && !activeApp?.packageName);
+
   const renderActiveApp = () => {
+    if (!isInternalApp) return null;
     switch (activeAppId) {
       case 'settings':
         return <SettingsApp />;
@@ -49,7 +53,7 @@ export const PhoneFrame: React.FC = () => {
       case 'clipboard':
         return <UniversalClipboardApp />;
       default:
-        return <SettingsApp />;
+        return null;
     }
   };
 
@@ -70,7 +74,7 @@ export const PhoneFrame: React.FC = () => {
 
       {/* Main Viewport (Home Screen or Active App) */}
       <div className="relative flex-1 flex flex-col overflow-hidden z-10">
-        {activeAppId ? (
+        {isInternalApp ? (
           <div className="w-full h-full bg-[#0A0A0C] overflow-hidden animate-in zoom-in-95 duration-200">
             {renderActiveApp()}
           </div>

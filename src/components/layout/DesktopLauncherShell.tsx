@@ -179,7 +179,11 @@ export const DesktopLauncherShell: React.FC = () => {
       : currentWp.style;
   }, [settings.wallpaper, settings.customWallpaperUrl, currentWp.style]);
 
+  const activeApp = apps.find((a) => a.id === activeAppId);
+  const isInternalApp = Boolean(activeAppId && !activeApp?.packageName);
+
   const renderActiveApp = () => {
+    if (!isInternalApp) return null;
     switch (activeAppId) {
       case 'settings':
         return <SettingsApp />;
@@ -196,7 +200,7 @@ export const DesktopLauncherShell: React.FC = () => {
       case 'files':
         return <FileExplorerApp />;
       default:
-        return <SettingsApp />;
+        return null;
     }
   };
 
@@ -549,12 +553,12 @@ export const DesktopLauncherShell: React.FC = () => {
           </div>
 
           {/* Active Internal App Window (GPU-composited overlay) */}
-          {activeAppId && (
+          {isInternalApp && (
             <div 
               className="absolute inset-3 sm:inset-4 z-30 flex flex-col rounded-3xl overflow-hidden shadow-2xl shadow-black/80 animate-in fade-in zoom-in-95 duration-200"
               style={{ contain: 'layout paint' }}
             >
-              <DesktopAppWindow appId={activeAppId}>
+              <DesktopAppWindow appId={activeAppId!}>
                 {renderActiveApp()}
               </DesktopAppWindow>
             </div>
