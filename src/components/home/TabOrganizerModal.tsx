@@ -45,8 +45,6 @@ export const TabOrganizerModal: React.FC<TabOrganizerModalProps> = ({ isOpen, on
   const builtInTabs = useMemo(() => ['all', 'recents', 'running'], []);
   const defaultCategories = useMemo(() => ['productivity', 'media', 'tools', 'system'], []);
 
-  if (!isOpen) return null;
-
   // Selected tab assigned app IDs
   const assignedAppIds = useMemo(() => {
     if (customTabAppMap[selectedTab]) {
@@ -62,6 +60,8 @@ export const TabOrganizerModal: React.FC<TabOrganizerModalProps> = ({ isOpen, on
     if (!q) return apps;
     return apps.filter((a) => a.name.toLowerCase().includes(q) || a.category.toLowerCase().includes(q));
   }, [apps, appSearch]);
+
+  if (!isOpen) return null;
 
   const handleToggleApp = (appId: string) => {
     audio.playTap();
