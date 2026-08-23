@@ -37,7 +37,10 @@ import {
   Calendar,
   Bell,
   Clipboard as ClipboardIcon,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  Battery,
+  BatteryCharging,
+  Zap
 } from 'lucide-react';
 
 export const DesktopLauncherShell: React.FC = () => {
@@ -94,6 +97,30 @@ export const DesktopLauncherShell: React.FC = () => {
   const unreadNotificationCount = totalUnreadNotifications;
 
   const [hoveredFolderId, setHoveredFolderId] = useState<string | null>(null);
+  const [batteryLevel, setBatteryLevel] = useState<number>(currentDevice?.battery ?? 85);
+  const [isCharging, setIsCharging] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (typeof navigator !== 'undefined' && 'getBattery' in navigator) {
+      (navigator as any).getBattery().then((battery: any) => {
+        setBatteryLevel(Math.round(battery.level * 100));
+        setIsCharging(battery.charging);
+
+        const onLevelChange = () => setBatteryLevel(Math.round(battery.level * 100));
+        const onChargingChange = () => setIsCharging(battery.charging);
+
+        battery.addEventListener('levelchange', onLevelChange);
+        battery.addEventListener('chargingchange', onChargingChange);
+
+        return () => {
+          battery.removeEventListener('levelchange', onLevelChange);
+          battery.removeEventListener('chargingchange', onChargingChange);
+        };
+      }).catch(() => {});
+    } else if (currentDevice?.battery) {
+      setBatteryLevel(currentDevice.battery);
+    }
+  }, [currentDevice?.battery]);
 
   const draggedApp = useMemo(() => {
     return apps.find((a) => a.id === draggedAppId);
@@ -270,6 +297,18 @@ export const DesktopLauncherShell: React.FC = () => {
               <span className="w-1.5 h-1.5 rounded-full bg-[#34C759] animate-pulse" />
               {currentDevice?.name || 'Android Node'}
             </span>
+
+            {/* Battery Pill right beside device name */}
+            <div className="flex items-center gap-1.5 bg-[#1C1C1E]/80 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 shadow-sm text-xs shrink-0" title={`Battery: ${batteryLevel}% ${isCharging ? '(Charging)' : ''}`}>
+              {isCharging ? (
+                <Zap size={12} className="text-[#FFD60A] fill-current animate-pulse" />
+              ) : batteryLevel > 20 ? (
+                <Battery size={13} className="text-[#34C759]" />
+              ) : (
+                <Battery size={13} className="text-[#FF3B30] animate-pulse" />
+              )}
+              <span className="font-semibold text-[#F0F0F2] font-mono text-[11px]">{batteryLevel}%</span>
+            </div>
 
             {/* Time & Date Pill right beside device name */}
             <div className="flex items-center gap-2 bg-[#1C1C1E]/80 backdrop-blur-md px-3 py-1 rounded-full border border-white/10 shadow-sm text-xs shrink-0">
