@@ -1264,6 +1264,10 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (settings.soundEffects) audio.playAppOpen();
     const targetApp = apps.find((a) => a.id === appId);
 
+    // Track active foreground app
+    setActiveAppId(appId);
+    setSearchOpen(false);
+
     // Track in running and recent apps
     setRunningApps((prev) => {
       if (!prev.includes(appId)) return [appId, ...prev.slice(0, 11)];
@@ -1309,49 +1313,34 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       });
       return;
     }
-
-    setActiveAppId(appId);
-    setSearchOpen(false);
   };
 
   const closeActiveApp = () => {
     if (settings.soundEffects) audio.playTap();
-    setActiveAppId(null);
+    minimizeActiveApp();
   };
 
   const minimizeActiveApp = () => {
     if (settings.soundEffects) audio.playTap();
-    if (activeAppId) {
-      setActiveAppId(null);
-    } else {
-      const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
-      if (bridge?.bringLauncherToFront) {
-        bridge.bringLauncherToFront();
-      }
+    setActiveAppId(null);
+    const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
+    if (bridge?.minimizeActiveWindow) {
+      bridge.minimizeActiveWindow();
+    } else if (bridge?.bringLauncherToFront) {
+      bridge.bringLauncherToFront();
     }
   };
 
   const toggleAppTask = (appId: string) => {
     if (settings.soundEffects) audio.playTap();
-    const targetApp = apps.find((a) => a.id === appId);
 
-    // 1. Internal Window App (Settings, Terminal, Studio, etc.)
-    if (!targetApp?.packageName) {
-      if (activeAppId === appId) {
-        // Frontmost -> minimize to taskbar
-        setActiveAppId(null);
-      } else {
-        // Bring to front
-        setActiveAppId(appId);
-        setRunningApps((prev) => {
-          if (!prev.includes(appId)) return [appId, ...prev.slice(0, 11)];
-          return [appId, ...prev.filter((id) => id !== appId)];
-        });
-      }
+    // 1. If this app is ALREADY the active foreground app -> MINIMIZE IT TO BACKGROUND!
+    if (activeAppId === appId) {
+      minimizeActiveApp();
       return;
     }
 
-    // 2. Native Android App (unified launch pipeline preserving floating/fullscreen mode consistently)
+    // 2. Otherwise -> Bring this app to the foreground!
     launchApp(appId);
   };
 
@@ -1359,13 +1348,13 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (settings.soundEffects) audio.playTap();
     setRunningApps((prev) => prev.filter((id) => id !== appId));
     if (activeAppId === appId) {
-      setActiveAppId(null);
+      minimizeActiveApp();
     }
   };
 
   const clearAllRunningApps = () => {
     setRunningApps([]);
-    setActiveAppId(null);
+    minimizeActiveApp();
   };
 
   const toggleQuickSetting = (key: keyof QuickSettingsState) => {

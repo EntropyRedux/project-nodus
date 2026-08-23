@@ -160,6 +160,10 @@ class LauncherActivity : AppCompatActivity() {
                 @JavascriptInterface
                 fun bringLauncherToFront(): Boolean {
                     return try {
+                        val a11y = com.nodus.launcher.service.NodusAccessibilityService.instance
+                        if (a11y != null) {
+                            a11y.performHome()
+                        }
                         val intent = Intent(this@LauncherActivity, LauncherActivity::class.java).apply {
                             addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
@@ -194,6 +198,11 @@ class LauncherActivity : AppCompatActivity() {
 
                 @JavascriptInterface
                 fun minimizeApp(packageName: String): Boolean {
+                    return bringLauncherToFront()
+                }
+
+                @JavascriptInterface
+                fun minimizeActiveWindow(): Boolean {
                     return bringLauncherToFront()
                 }
 
