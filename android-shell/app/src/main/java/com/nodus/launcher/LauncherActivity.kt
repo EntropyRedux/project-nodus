@@ -161,15 +161,15 @@ class LauncherActivity : AppCompatActivity() {
                 @JavascriptInterface
                 fun bringLauncherToFront(): Boolean {
                     return try {
-                        val a11y = com.nodus.launcher.service.NodusAccessibilityService.instance
-                        if (a11y != null) {
-                            a11y.performHome()
-                        }
                         val intent = Intent(this@LauncherActivity, LauncherActivity::class.java).apply {
                             addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         }
                         startActivity(intent)
+                        runOnUiThread {
+                            window.decorView.requestFocus()
+                        }
                         true
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to bring launcher to front", e)
@@ -209,16 +209,6 @@ class LauncherActivity : AppCompatActivity() {
                             sendBroadcast(miuiIntent)
                         } catch (_: Exception) {}
 
-                        // A11y global action home if service active
-                        val a11y = com.nodus.launcher.service.NodusAccessibilityService.instance
-                        a11y?.performHome()
-
-                        // Native Home Intent dispatch
-                        val homeIntent = Intent(Intent.ACTION_MAIN).apply {
-                            addCategory(Intent.CATEGORY_HOME)
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                        }
-                        startActivity(homeIntent)
                         bringLauncherToFront()
                         true
                     } catch (e: Exception) {
@@ -229,20 +219,7 @@ class LauncherActivity : AppCompatActivity() {
 
                 @JavascriptInterface
                 fun minimizeActiveWindow(): Boolean {
-                    return try {
-                        val a11y = com.nodus.launcher.service.NodusAccessibilityService.instance
-                        a11y?.performHome()
-                        val homeIntent = Intent(Intent.ACTION_MAIN).apply {
-                            addCategory(Intent.CATEGORY_HOME)
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                        }
-                        startActivity(homeIntent)
-                        bringLauncherToFront()
-                        true
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to minimize active window", e)
-                        bringLauncherToFront()
-                    }
+                    return bringLauncherToFront()
                 }
 
                 @JavascriptInterface
