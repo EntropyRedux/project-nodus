@@ -6,17 +6,21 @@ import {
   LayoutGrid, 
   Search, 
   Plus,
+  Trash2,
+  Edit2,
   Sparkles, 
   Layers, 
   Clipboard as ClipboardIcon, 
   PanelLeftClose, 
   PanelLeft,
   Activity,
-  Check
+  Check,
+  CheckSquare,
+  Square,
+  Sliders
 } from 'lucide-react';
 import { useLauncher } from '../../context/LauncherContext';
 import { DynamicIcon } from '../common/DynamicIcon';
-import { TabOrganizerModal } from '../home/TabOrganizerModal';
 import { audio } from '../../utils/audio';
 import { AppItem } from '../../types/launcher';
 import { DEVICE_COLORS } from '../../utils/constants';
@@ -39,12 +43,22 @@ export const SmartAppTaskbar: React.FC = () => {
     toggleAppTask,
     drawerTabs,
     customTabAppMap,
+    addDrawerTab,
+    removeDrawerTab,
+    renameDrawerTab,
+    assignAppsToTab,
+    setAppCategory,
+    showToast,
     settings
   } = useLauncher();
 
   const [isOpen, setIsOpen] = useState(false);
   const [isStartMenuOpen, setIsStartMenuOpen] = useState(false);
-  const [isTabOrganizerOpen, setTabOrganizerOpen] = useState(false);
+  const [isOrganizeMode, setIsOrganizeMode] = useState(false);
+  const [isAddingNewTab, setIsAddingNewTab] = useState(false);
+  const [newTabInput, setNewTabInput] = useState('');
+  const [editingTabName, setEditingTabName] = useState<string | null>(null);
+  const [renameInput, setRenameInput] = useState('');
   const [menuSearch, setMenuSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   
@@ -254,6 +268,18 @@ export const SmartAppTaskbar: React.FC = () => {
     [recentApps, runningApps, apps]
   );
 
+  const systemTabs = useMemo(() => ['all', 'recents', 'running'], []);
+
+  // Selected tab assigned app IDs (for Organize Mode)
+  const assignedAppIds = useMemo(() => {
+    if (customTabAppMap[selectedCategory]) {
+      return customTabAppMap[selectedCategory];
+    }
+    return apps
+      .filter((a) => a.category.toLowerCase() === selectedCategory.toLowerCase())
+      .map((a) => a.id);
+  }, [selectedCategory, customTabAppMap, apps]);
+
   // Filter apps for Large Start Menu using dynamic drawerTabs and customTabAppMap
   const filteredStartApps = useMemo(() => {
     const q = menuSearch.toLowerCase().trim();
@@ -262,6 +288,11 @@ export const SmartAppTaskbar: React.FC = () => {
         !q ||
         app.name.toLowerCase().includes(q) ||
         app.category.toLowerCase().includes(q);
+
+      // In Organize Mode, show all apps for easy categorization unless searching
+      if (isOrganizeMode) {
+        return matchesSearch;
+      }
 
       let matchesCategory = true;
       if (selectedCategory === 'all') {
@@ -278,7 +309,37 @@ export const SmartAppTaskbar: React.FC = () => {
 
       return matchesSearch && matchesCategory;
     });
-  }, [apps, menuSearch, selectedCategory, recentApps, runningApps, customTabAppMap]);
+  }, [apps, menuSearch, selectedCategory, isOrganizeMode, recentApps, runningApps, customTabAppMap]);
+
+  const handleToggleAppAssignment = (appId: string) => {
+    audio.playTap();
+    if (systemTabs.includes(selectedCategory)) {
+      showToast('Select a category or custom tab above to organize apps into it');
+      return;
+    }
+    let nextIds: string[];
+    if (assignedAppIds.includes(appId)) {
+      nextIds = assignedAppIds.filter((id) => id !== appId);
+    } else {
+      nextIds = [...assignedAppIds, appId];
+    }
+    assignAppsToTab(selectedCategory, nextIds);
+    setAppCategory(appId, selectedCategory);
+  };
+
+  const handleCreateNewTab = (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = newTabInput.trim().toLowerCase();
+    if (!clean) return;
+    if (drawerTabs.includes(clean)) {
+      showToast(`Tab "${clean}" already exists`);
+      return;
+    }
+    addDrawerTab(clean);
+    setSelectedCategory(clean);
+    setNewTabInput('');
+    setIsAddingNewTab(false);
+  };
 
   const devColor = DEVICE_COLORS[activeDevice?.id] || '#34C759';
 
@@ -337,15 +398,24 @@ export const SmartAppTaskbar: React.FC = () => {
                   <div>
                     <h3 className="text-sm font-bold text-[#F0F0F2] flex items-center gap-2">
                       <span>App Drawer</span>
-                      <span className="text-[10px] text-[#34C759] bg-[#34C759]/15 px-2 py-0.5 rounded-full font-mono">
-                        {filteredStartApps.length} Apps
-                      </span>
+                      {isOrganizeMode ? (
+                        <span className="text-[10px] text-[#34C759] bg-[#34C759]/20 border border-[#34C759]/40 px-2 py-0.5 rounded-full font-bold animate-pulse">
+                          Organize Mode
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-[#34C759] bg-[#34C759]/15 px-2 py-0.5 rounded-full font-mono">
+                          {filteredStartApps.length} Apps
+                        </span>
+                      )}
                     </h3>
                   </div>
                 </div>
 
                 <button
-                  onClick={() => setIsStartMenuOpen(false)}
+                  onClick={() => {
+                    setIsStartMenuOpen(false);
+                    setIsOrganizeMode(false);
+                  }}
                   className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-[#8E8E93] hover:text-[#F0F0F2] transition"
                   title="Close Drawer"
                 >
@@ -358,49 +428,129 @@ export const SmartAppTaskbar: React.FC = () => {
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8E8E93]" />
                 <input
                   type="text"
-                  placeholder="Type to search apps..."
+                  placeholder={isOrganizeMode ? `Filter apps to assign to "${selectedCategory}"...` : "Type to search apps..."}
                   value={menuSearch}
                   onChange={(e) => setMenuSearch(e.target.value)}
                   className="w-full bg-[#1C1C22]/90 border border-white/10 rounded-2xl py-2 pl-9 pr-3 text-xs text-[#F0F0F2] placeholder-[#636366] focus:outline-none focus:border-[#34C759] focus:ring-1 focus:ring-[#34C759]/40 transition"
                 />
               </div>
 
-              {/* Category Pills (Dynamic from drawerTabs) */}
+              {/* Category Pills (Dynamic from drawerTabs + inline Tab Creator) */}
               <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-0.5">
-                {drawerTabs.map((cat) => (
-                  <button
-                    key={cat}
-                    onClick={() => {
-                      audio.playTap();
-                      setSelectedCategory(cat);
-                    }}
-                    className={`px-3 py-1 rounded-full text-[11px] font-semibold capitalize shrink-0 transition-all ${
-                      selectedCategory === cat
-                        ? 'bg-[#34C759] text-[#0A0A0C] shadow-md shadow-[#34C759]/20 font-bold'
-                        : 'bg-[#1C1C22]/80 text-[#8E8E93] hover:text-[#F0F0F2] border border-white/5 hover:border-white/15'
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                ))}
+                {drawerTabs.map((cat) => {
+                  const isSelected = selectedCategory === cat;
+                  const isSys = systemTabs.includes(cat);
+
+                  return (
+                    <div key={cat} className="relative group shrink-0 flex items-center">
+                      <button
+                        onClick={() => {
+                          audio.playTap();
+                          setSelectedCategory(cat);
+                        }}
+                        className={`px-3 py-1 rounded-full text-[11px] font-semibold capitalize shrink-0 transition-all flex items-center gap-1 ${
+                          isSelected
+                            ? 'bg-[#34C759] text-[#0A0A0C] shadow-md shadow-[#34C759]/20 font-bold'
+                            : 'bg-[#1C1C22]/80 text-[#8E8E93] hover:text-[#F0F0F2] border border-white/5 hover:border-white/15'
+                        }`}
+                      >
+                        <span>{cat}</span>
+                        {isOrganizeMode && !isSys && (
+                          <span
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              audio.playTap();
+                              removeDrawerTab(cat);
+                              if (selectedCategory === cat) setSelectedCategory('all');
+                            }}
+                            className="p-0.5 rounded-full hover:bg-black/30 text-current transition ml-0.5"
+                            title={`Delete tab "${cat}"`}
+                          >
+                            <X size={10} strokeWidth={3} />
+                          </span>
+                        )}
+                      </button>
+                    </div>
+                  );
+                })}
+
+                {/* Inline Add Tab Form in Organize Mode */}
+                {isOrganizeMode && (
+                  isAddingNewTab ? (
+                    <form onSubmit={handleCreateNewTab} className="flex items-center gap-1 bg-[#1C1C26] border border-[#34C759]/40 rounded-full px-2 py-0.5 shrink-0 animate-in fade-in">
+                      <input
+                        type="text"
+                        placeholder="Tab name..."
+                        value={newTabInput}
+                        onChange={(e) => setNewTabInput(e.target.value)}
+                        className="bg-transparent text-[11px] text-white placeholder-[#636366] focus:outline-none w-20 py-0.5"
+                      />
+                      <button
+                        type="submit"
+                        className="p-1 rounded-full bg-[#34C759] text-black hover:bg-[#30D158]"
+                        title="Add Tab"
+                      >
+                        <Check size={10} strokeWidth={3} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsAddingNewTab(false)}
+                        className="p-1 rounded-full text-[#8E8E93] hover:text-white"
+                        title="Cancel"
+                      >
+                        <X size={10} />
+                      </button>
+                    </form>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        audio.playTap();
+                        setIsAddingNewTab(true);
+                      }}
+                      className="px-2.5 py-1 rounded-full text-[11px] font-bold text-[#34C759] hover:text-[#30D158] bg-[#34C759]/15 hover:bg-[#34C759]/25 border border-[#34C759]/30 transition shrink-0 flex items-center gap-1"
+                    >
+                      <Plus size={11} strokeWidth={3} />
+                      <span>Tab</span>
+                    </button>
+                  )
+                )}
               </div>
             </div>
+
+            {/* Helper Banner in Organize Mode when on a system tab */}
+            {isOrganizeMode && systemTabs.includes(selectedCategory) && (
+              <div className="px-3 py-1.5 rounded-xl bg-[#FF9500]/15 border border-[#FF9500]/30 text-[#FF9500] text-[11px] flex items-center gap-2 animate-in fade-in">
+                <Sparkles size={13} className="shrink-0" />
+                <span>Select a category (e.g. <strong>productivity, media, tools</strong>, or <strong>+ Tab</strong>) to assign apps.</span>
+              </div>
+            )}
 
             {/* Scrollable Apps Grid */}
             <div className={`flex-1 overflow-y-auto pr-1 grid ${sizeConfig.drawerGrid} content-start min-h-[260px] max-h-[380px] scrollbar-thin`}>
               {filteredStartApps.map((app) => {
                 const isRunning = runningApps.includes(app.id);
                 const hasBadge = (app.badgeCount ?? 0) > 0;
+                const isAssigned = assignedAppIds.includes(app.id);
 
                 return (
                   <button
                     key={app.id}
                     onClick={() => {
-                      audio.playTap();
-                      launchApp(app.id);
-                      setIsStartMenuOpen(false);
+                      if (isOrganizeMode) {
+                        handleToggleAppAssignment(app.id);
+                      } else {
+                        audio.playTap();
+                        launchApp(app.id);
+                        setIsStartMenuOpen(false);
+                      }
                     }}
-                    className="group relative flex flex-col items-center gap-1.5 p-2 rounded-2xl hover:bg-white/10 active:scale-95 transition-all duration-150 text-center"
+                    className={`group relative flex flex-col items-center gap-1.5 p-2 rounded-2xl active:scale-95 transition-all duration-150 text-center ${
+                      isOrganizeMode && !systemTabs.includes(selectedCategory)
+                        ? isAssigned
+                          ? 'bg-[#34C759]/10 border border-[#34C759]/40 shadow-sm'
+                          : 'bg-white/5 border border-white/5 opacity-70 hover:opacity-100'
+                        : 'hover:bg-white/10'
+                    }`}
                   >
                     <div 
                       className={`${sizeConfig.drawerAppBox} rounded-2xl flex items-center justify-center bg-[#1C1C24] group-hover:scale-105 group-hover:shadow-lg transition shadow-sm relative overflow-hidden border border-white/5`}
@@ -411,16 +561,30 @@ export const SmartAppTaskbar: React.FC = () => {
                       ) : (
                         <DynamicIcon name={app.iconName} size={sizeConfig.drawerAppIconSize} />
                       )}
-                      {hasBadge && (
-                        <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 rounded-full bg-[#FF3B30] text-white text-[8px] font-bold flex items-center justify-center shadow-md">
-                          {app.badgeCount}
-                        </span>
+
+                      {/* Organize Mode Checkbox Badge */}
+                      {isOrganizeMode && !systemTabs.includes(selectedCategory) ? (
+                        <div className="absolute top-1 right-1">
+                          {isAssigned ? (
+                            <div className="w-4 h-4 rounded-md bg-[#34C759] text-black flex items-center justify-center shadow-md">
+                              <Check size={11} strokeWidth={3} />
+                            </div>
+                          ) : (
+                            <div className="w-4 h-4 rounded-md border border-white/40 bg-black/40" />
+                          )}
+                        </div>
+                      ) : (
+                        hasBadge && (
+                          <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 rounded-full bg-[#FF3B30] text-white text-[8px] font-bold flex items-center justify-center shadow-md">
+                            {app.badgeCount}
+                          </span>
+                        )
                       )}
                     </div>
                     <span className="text-[11px] text-[#8E8E93] group-hover:text-[#F0F0F2] font-medium truncate w-full px-1">
                       {app.name}
                     </span>
-                    {isRunning && (
+                    {!isOrganizeMode && isRunning && (
                       <span className="w-1.5 h-1.5 rounded-full bg-[#34C759] shadow-sm shadow-[#34C759]/40" />
                     )}
                   </button>
@@ -428,7 +592,7 @@ export const SmartAppTaskbar: React.FC = () => {
               })}
             </div>
 
-            {/* Bottom System Action Bar - Centralized Tab Organizer Button */}
+            {/* Bottom System Action Bar */}
             <div className="pt-3 border-t border-white/10 flex items-center justify-between text-xs text-[#8E8E93]">
               <div className="flex items-center gap-2">
                 <span 
@@ -441,19 +605,36 @@ export const SmartAppTaskbar: React.FC = () => {
                 <span className="text-[10px] text-[#636366]">({activeDevice?.os})</span>
               </div>
 
-              {/* Centralized Tab & App Organizer Action */}
+              {/* Centralized Tab & App Organizer Toggle Action */}
               <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => {
-                    audio.playTap();
-                    setTabOrganizerOpen(true);
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#34C759]/15 hover:bg-[#34C759]/25 text-[#34C759] hover:text-[#30D158] border border-[#34C759]/30 transition text-xs font-semibold shadow-sm hover:scale-105 active:scale-95"
-                  title="Add & Organize Tabs"
-                >
-                  <Plus size={13} strokeWidth={2.5} />
-                  <span>Organize Tabs</span>
-                </button>
+                {isOrganizeMode ? (
+                  <button
+                    onClick={() => {
+                      audio.playTap();
+                      setIsOrganizeMode(false);
+                      setIsAddingNewTab(false);
+                    }}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#34C759] hover:bg-[#30D158] text-black transition text-xs font-bold shadow-md shadow-[#34C759]/25 hover:scale-105 active:scale-95"
+                  >
+                    <Check size={13} strokeWidth={3} />
+                    <span>Done Organizing</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      audio.playTap();
+                      setIsOrganizeMode(true);
+                      if (systemTabs.includes(selectedCategory)) {
+                        setSelectedCategory('productivity');
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#34C759]/15 hover:bg-[#34C759]/25 text-[#34C759] hover:text-[#30D158] border border-[#34C759]/30 transition text-xs font-semibold shadow-sm hover:scale-105 active:scale-95"
+                    title="Organize Tabs & Assign Apps"
+                  >
+                    <Sliders size={13} strokeWidth={2.5} />
+                    <span>Organize Tabs</span>
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -648,12 +829,6 @@ export const SmartAppTaskbar: React.FC = () => {
           </button>
         </div>
       </div>
-
-      {/* Tab & Category Organizer Dialog */}
-      <TabOrganizerModal
-        isOpen={isTabOrganizerOpen}
-        onClose={() => setTabOrganizerOpen(false)}
-      />
     </>
   );
 };
