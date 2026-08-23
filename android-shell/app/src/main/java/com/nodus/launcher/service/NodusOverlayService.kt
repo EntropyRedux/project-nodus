@@ -1,5 +1,6 @@
 package com.nodus.launcher.service
 
+import android.annotation.SuppressLint
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -7,15 +8,24 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.webkit.JavascriptInterface
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.FrameLayout
-import android.widget.ImageView
+import androidx.webkit.WebViewAssetLoader
 import com.nodus.launcher.LauncherActivity
 import kotlin.math.abs
 
@@ -29,6 +39,10 @@ class NodusOverlayService : Service() {
     private var leftParams: WindowManager.LayoutParams? = null
     private var rightParams: WindowManager.LayoutParams? = null
     private var bottomParams: WindowManager.LayoutParams? = null
+
+    private var activeOverlayWebView: WebView? = null
+    private var assetLoader: WebViewAssetLoader? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     companion object {
         const val TAG = "NodusOverlayService"
@@ -45,6 +59,9 @@ class NodusOverlayService : Service() {
         super.onCreate()
         instance = this
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        assetLoader = WebViewAssetLoader.Builder()
+            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
+            .build()
         createOverlayHandles()
     }
 
@@ -96,10 +113,7 @@ class NodusOverlayService : Service() {
         leftHandleView = createPillView(
             isLeft = true,
             accentColor = Color.parseColor("#34C759")
-        ) {
-            openNodusPanel("device_switcher")
-        }
-
+        )
         setupDragListener(leftHandleView!!, leftParams!!, isLeft = true)
 
         // 2. RIGHT HANDLE (Clipboard History)
@@ -118,10 +132,7 @@ class NodusOverlayService : Service() {
         rightHandleView = createPillView(
             isLeft = false,
             accentColor = Color.parseColor("#007AFF")
-        ) {
-            openNodusPanel("clipboard")
-        }
-
+        )
         setupDragListener(rightHandleView!!, rightParams!!, isLeft = false)
 
         // 3. BOTTOM HANDLE (Taskbar & Home)
@@ -138,7 +149,7 @@ class NodusOverlayService : Service() {
         }
 
         bottomHandleView = createBottomPillView {
-            openNodusPanel("taskbar")
+            openModularOverlay("taskbar")
         }
 
         try {
@@ -151,7 +162,7 @@ class NodusOverlayService : Service() {
         }
     }
 
-    private fun createPillView(isLeft: Boolean, accentColor: Int, onTap: () -> Unit): View {
+    private fun createPillView(isLeft: Boolean, accentColor: Int): View {
         val root = FrameLayout(this).apply {
             val bg = GradientDrawable().apply {
                 setColor(Color.parseColor("#CC1C1C1E"))
@@ -242,9 +253,9 @@ class NodusOverlayService : Service() {
                     if (isClick) {
                         v.performClick()
                         if (isLeft) {
-                            openNodusPanel("device_switcher")
+                            openModularOverlay("devices")
                         } else {
-                            openNodusPanel("clipboard")
+                            openModularOverlay("clipboard")
                         }
                     }
                     true
@@ -254,17 +265,130 @@ class NodusOverlayService : Service() {
         }
     }
 
-    private fun openNodusPanel(panelName: String) {
-        try {
-            val intent = Intent(this, LauncherActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-                addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                putExtra("ACTION_OPEN_PANEL", panelName)
+    @SuppressLint("SetJavaScriptEnabled")
+    fun openModularOverlay(overlayType: String) {
+        mainHandler.post {
+            closeOverlay()
+
+            if (!Settings.canDrawOverlays(this)) return@post
+
+            val overlayTypeFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            } else {
+                @Suppress("DEPRECATION")
+                WindowManager.LayoutParams.TYPE_PHONE
             }
-            startActivity(intent)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to open panel $panelName", e)
+
+            val params = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
+                overlayTypeFlag,
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.CENTER
+            }
+
+            val webView = WebView(this).apply {
+                setBackgroundColor(Color.TRANSPARENT)
+                settings.apply {
+                    javaScriptEnabled = true
+                    domStorageEnabled = true
+                    databaseEnabled = true
+                    allowFileAccess = true
+                    cacheMode = WebSettings.LOAD_DEFAULT
+                }
+
+                addJavascriptInterface(object {
+                    @JavascriptInterface
+                    fun closeOverlay() {
+                        mainHandler.post {
+                            this@NodusOverlayService.closeOverlay()
+                        }
+                    }
+
+                    @JavascriptInterface
+                    fun copyToClipboard(text: String): Boolean {
+                        return try {
+                            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            val clip = android.content.ClipData.newPlainText("Nodus Clipboard", text)
+                            cm.setPrimaryClip(clip)
+                            mainHandler.post {
+                                this@NodusOverlayService.closeOverlay()
+                            }
+                            true
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to copy to clipboard", e)
+                            false
+                        }
+                    }
+
+                    @JavascriptInterface
+                    fun launchApp(packageName: String) {
+                        mainHandler.post {
+                            this@NodusOverlayService.closeOverlay()
+                            try {
+                                val intent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                                }
+                                if (intent != null) {
+                                    startActivity(intent)
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to launch app $packageName", e)
+                            }
+                        }
+                    }
+
+                    @JavascriptInterface
+                    fun bringLauncherToFront() {
+                        mainHandler.post {
+                            this@NodusOverlayService.closeOverlay()
+                            try {
+                                val intent = Intent(this@NodusOverlayService, LauncherActivity::class.java).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                startActivity(intent)
+                            } catch (_: Exception) {}
+                        }
+                    }
+                }, "NodusNativeBridge")
+
+                webViewClient = object : WebViewClient() {
+                    override fun shouldInterceptRequest(
+                        view: WebView,
+                        request: WebResourceRequest
+                    ): WebResourceResponse? {
+                        val response = assetLoader?.shouldInterceptRequest(request.url)
+                        if (response != null) {
+                            return response
+                        }
+                        return super.shouldInterceptRequest(view, request)
+                    }
+                }
+
+                loadUrl("https://appassets.androidplatform.net/assets/frontend/index.html?overlay=$overlayType")
+            }
+
+            activeOverlayWebView = webView
+            try {
+                windowManager?.addView(webView, params)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to add floating overlay window", e)
+            }
+        }
+    }
+
+    fun closeOverlay() {
+        mainHandler.post {
+            activeOverlayWebView?.let {
+                try {
+                    windowManager?.removeView(it)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to remove overlay view: ${e.message}")
+                }
+                activeOverlayWebView = null
+            }
         }
     }
 
@@ -273,11 +397,15 @@ class NodusOverlayService : Service() {
         leftHandleView?.visibility = visibility
         rightHandleView?.visibility = visibility
         bottomHandleView?.visibility = visibility
+        if (!visible) {
+            closeOverlay()
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         instance = null
+        closeOverlay()
         try {
             leftHandleView?.let { windowManager?.removeView(it) }
             rightHandleView?.let { windowManager?.removeView(it) }

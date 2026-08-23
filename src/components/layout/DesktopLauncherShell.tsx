@@ -627,20 +627,19 @@ export const DesktopLauncherShell: React.FC = () => {
             </div>
           )}
 
-          {/* Right Desktop Column: Cross-Device Clipboard History Panel (GPU-Accelerated Floating Sheet) */}
-          <div
-            className={`fixed top-14 bottom-14 right-4 z-40 w-80 sm:w-84 xl:w-90 flex flex-col rounded-3xl shadow-2xl transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform ${isClipboardOpen
-                ? 'translate-x-0 opacity-100 pointer-events-auto shadow-2xl shadow-black/80'
-                : 'translate-x-[110%] opacity-0 pointer-events-none'
-              }`}
-            style={{ contain: 'layout paint' }}
-          >
-            <ClipboardHistoryPanel onClose={() => setClipboardOpen(false)} />
-          </div>
         </div>
       </main>
 
       {/* Global Overlays & Modals */}
+      {/* Right Desktop Column: Cross-Device Clipboard History Panel (GPU-Accelerated Floating Sheet) */}
+      <div
+        className={`fixed top-14 bottom-14 right-4 z-50 w-80 sm:w-84 xl:w-90 flex flex-col rounded-3xl shadow-2xl transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform ${isClipboardOpen
+            ? 'translate-x-0 opacity-100 pointer-events-auto shadow-2xl shadow-black/90'
+            : 'translate-x-[110%] opacity-0 pointer-events-none'
+          }`}
+      >
+        <ClipboardHistoryPanel onClose={() => setClipboardOpen(false)} />
+      </div>
       <SmartAppTaskbar />
       <QuickSettingsShade />
       <FolderModal />
