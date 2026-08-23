@@ -200,7 +200,7 @@ class LauncherActivity : AppCompatActivity() {
                 @JavascriptInterface
                 fun minimizeApp(packageName: String): Boolean {
                     return try {
-                        // Send MIUI/HyperOS Freeform minimize broadcast
+                        // 1. Send MIUI/HyperOS Freeform minimize broadcast
                         try {
                             val miuiIntent = Intent("miui.intent.action.FREEFORM_MINIMIZE").apply {
                                 putExtra("package_name", packageName)
@@ -209,7 +209,38 @@ class LauncherActivity : AppCompatActivity() {
                             sendBroadcast(miuiIntent)
                         } catch (_: Exception) {}
 
-                        bringLauncherToFront()
+                        // 2. Re-target the app into the standard fullscreen background layer (Layer 1)
+                        try {
+                            val appIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+                                addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                                putExtra("miui.intent.extra.open_in_floating_window", false)
+                                putExtra("miui.intent.extra.floating_window", false)
+                                putExtra("android.intent.extra.WINDOW_MODE", 1) // WINDOWING_MODE_FULLSCREEN = 1
+                            }
+                            if (appIntent != null) {
+                                val options = ActivityOptions.makeBasic()
+                                val bundle = options.toBundle() ?: Bundle()
+                                bundle.putInt("android:activity.launchWindowingMode", 1)
+                                bundle.putInt("android.activity.windowingMode", 1)
+                                startActivity(appIntent, bundle)
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Could not convert task windowing mode: ${e.message}")
+                        }
+
+                        // 3. Bring Nodus LauncherActivity in front of it on Layer 1
+                        val launcherIntent = Intent(this@LauncherActivity, LauncherActivity::class.java).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        startActivity(launcherIntent)
+
+                        runOnUiThread {
+                            window.decorView.requestFocus()
+                        }
                         true
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to minimize app $packageName", e)
