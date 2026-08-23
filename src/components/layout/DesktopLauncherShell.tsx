@@ -69,6 +69,7 @@ export const DesktopLauncherShell: React.FC = () => {
     openQuickSettings,
     devices,
     activeDeviceId,
+    activeDevice,
     setSearchOpen,
     isClipboardOpen,
     setClipboardOpen,
@@ -97,7 +98,7 @@ export const DesktopLauncherShell: React.FC = () => {
   const unreadNotificationCount = totalUnreadNotifications;
 
   const [hoveredFolderId, setHoveredFolderId] = useState<string | null>(null);
-  const [batteryLevel, setBatteryLevel] = useState<number>(currentDevice?.battery ?? 85);
+  const [batteryLevel, setBatteryLevel] = useState<number>(activeDevice?.battery ?? 85);
   const [isCharging, setIsCharging] = useState<boolean>(false);
 
   useEffect(() => {
@@ -117,10 +118,10 @@ export const DesktopLauncherShell: React.FC = () => {
           battery.removeEventListener('chargingchange', onChargingChange);
         };
       }).catch(() => {});
-    } else if (currentDevice?.battery) {
-      setBatteryLevel(currentDevice.battery);
+    } else if (activeDevice?.battery) {
+      setBatteryLevel(activeDevice.battery);
     }
-  }, [currentDevice?.battery]);
+  }, [activeDevice?.battery]);
 
   const draggedApp = useMemo(() => {
     return apps.find((a) => a.id === draggedAppId);
@@ -295,7 +296,7 @@ export const DesktopLauncherShell: React.FC = () => {
             {/* Device Name Badge */}
             <span className="text-xs font-bold text-[#F0F0F2] tracking-wider uppercase bg-[#1C1C1E]/80 backdrop-blur-md px-3 py-1 rounded-full border border-white/10 shadow-sm flex items-center gap-1.5 shrink-0">
               <span className="w-1.5 h-1.5 rounded-full bg-[#34C759] animate-pulse" />
-              {currentDevice?.name || 'Android Node'}
+              {activeDevice?.name || 'Android Node'}
             </span>
 
             {/* Battery Pill right beside device name */}
