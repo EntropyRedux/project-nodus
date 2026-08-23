@@ -90,21 +90,20 @@ class NodusOverlayService : Service() {
         }
 
         val flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
 
         val dm = resources.displayMetrics
         val initialY = (dm.heightPixels * 0.28).toInt()
 
-        // 1. LEFT HANDLE (Device Switcher) - 24dp touch width
+        // 1. LEFT HANDLE (Device Switcher) - 32dp touch width x 80dp height
         leftParams = WindowManager.LayoutParams(
-            dpToPx(24),
-            dpToPx(64),
+            dpToPx(32),
+            dpToPx(80),
             overlayType,
             flags,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.START or Gravity.TOP
+            gravity = Gravity.LEFT or Gravity.TOP
             x = 0
             y = initialY
         }
@@ -115,15 +114,15 @@ class NodusOverlayService : Service() {
         )
         setupDragListener(leftHandleView!!, leftParams!!, isLeft = true)
 
-        // 2. RIGHT HANDLE (Clipboard History) - 24dp touch width
+        // 2. RIGHT HANDLE (Clipboard History) - 32dp touch width x 80dp height
         rightParams = WindowManager.LayoutParams(
-            dpToPx(24),
-            dpToPx(64),
+            dpToPx(32),
+            dpToPx(80),
             overlayType,
             flags,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.END or Gravity.TOP
+            gravity = Gravity.RIGHT or Gravity.TOP
             x = 0
             y = initialY
         }
@@ -134,10 +133,10 @@ class NodusOverlayService : Service() {
         )
         setupDragListener(rightHandleView!!, rightParams!!, isLeft = false)
 
-        // 3. BOTTOM HANDLE (Taskbar & Home) - 96dp x 24dp touch area
+        // 3. BOTTOM HANDLE (Taskbar & Home) - 120dp x 28dp touch area
         bottomParams = WindowManager.LayoutParams(
-            dpToPx(96),
-            dpToPx(24),
+            dpToPx(120),
+            dpToPx(28),
             overlayType,
             flags,
             PixelFormat.TRANSLUCENT
@@ -148,6 +147,7 @@ class NodusOverlayService : Service() {
         }
 
         bottomHandleView = createBottomPillView {
+            Log.i(TAG, "Bottom handle tapped")
             openModularOverlay("taskbar")
         }
 
@@ -162,21 +162,22 @@ class NodusOverlayService : Service() {
     }
 
     private fun createPillView(isLeft: Boolean, accentColor: Int): View {
-        // Outer touch container (24dp wide for effortless tapping/dragging)
         val root = FrameLayout(this).apply {
-            setPadding(if (isLeft) 0 else dpToPx(8), dpToPx(4), if (isLeft) dpToPx(8) else 0, dpToPx(4))
+            isClickable = true
+            isFocusable = false
+            setBackgroundColor(Color.TRANSPARENT)
+            setPadding(if (isLeft) 0 else dpToPx(8), dpToPx(6), if (isLeft) dpToPx(8) else 0, dpToPx(6))
         }
 
-        // Inner visual pill
         val innerPill = FrameLayout(this).apply {
             val bg = GradientDrawable().apply {
-                setColor(Color.parseColor("#E61C1C1E"))
+                setColor(Color.parseColor("#EE1C1C1E"))
                 if (isLeft) {
-                    cornerRadii = floatArrayOf(0f, 0f, dpToPx(14).toFloat(), dpToPx(14).toFloat(), dpToPx(14).toFloat(), dpToPx(14).toFloat(), 0f, 0f)
+                    cornerRadii = floatArrayOf(0f, 0f, dpToPx(16).toFloat(), dpToPx(16).toFloat(), dpToPx(16).toFloat(), dpToPx(16).toFloat(), 0f, 0f)
                 } else {
-                    cornerRadii = floatArrayOf(dpToPx(14).toFloat(), dpToPx(14).toFloat(), 0f, 0f, 0f, 0f, dpToPx(14).toFloat(), dpToPx(14).toFloat())
+                    cornerRadii = floatArrayOf(dpToPx(16).toFloat(), dpToPx(16).toFloat(), 0f, 0f, 0f, 0f, dpToPx(16).toFloat(), dpToPx(16).toFloat())
                 }
-                setStroke(dpToPx(1), Color.parseColor("#44FFFFFF"))
+                setStroke(dpToPx(1), Color.parseColor("#55FFFFFF"))
             }
             background = bg
             elevation = dpToPx(8).toFloat()
@@ -190,7 +191,7 @@ class NodusOverlayService : Service() {
             background = barBg
         }
 
-        val lp = FrameLayout.LayoutParams(dpToPx(5), dpToPx(28)).apply {
+        val lp = FrameLayout.LayoutParams(dpToPx(6), dpToPx(36)).apply {
             gravity = if (isLeft) Gravity.START or Gravity.CENTER_VERTICAL else Gravity.END or Gravity.CENTER_VERTICAL
             setMargins(if (isLeft) dpToPx(3) else 0, 0, if (!isLeft) dpToPx(3) else 0, 0)
         }
@@ -202,14 +203,17 @@ class NodusOverlayService : Service() {
 
     private fun createBottomPillView(onTap: () -> Unit): View {
         val root = FrameLayout(this).apply {
+            isClickable = true
+            isFocusable = false
+            setBackgroundColor(Color.TRANSPARENT)
             setPadding(0, dpToPx(6), 0, dpToPx(6))
         }
 
         val innerPill = FrameLayout(this).apply {
             val bg = GradientDrawable().apply {
-                setColor(Color.parseColor("#B31C1C1E"))
-                cornerRadius = dpToPx(6).toFloat()
-                setStroke(dpToPx(1), Color.parseColor("#33FFFFFF"))
+                setColor(Color.parseColor("#CC1C1C1E"))
+                cornerRadius = dpToPx(8).toFloat()
+                setStroke(dpToPx(1), Color.parseColor("#44FFFFFF"))
             }
             background = bg
             elevation = dpToPx(4).toFloat()
@@ -217,13 +221,13 @@ class NodusOverlayService : Service() {
 
         val bar = View(this).apply {
             val barBg = GradientDrawable().apply {
-                setColor(Color.parseColor("#88FFFFFF"))
+                setColor(Color.parseColor("#AAFFFFFF"))
                 cornerRadius = dpToPx(3).toFloat()
             }
             background = barBg
         }
 
-        val lp = FrameLayout.LayoutParams(dpToPx(54), dpToPx(3)).apply {
+        val lp = FrameLayout.LayoutParams(dpToPx(64), dpToPx(4)).apply {
             gravity = Gravity.CENTER
         }
         innerPill.addView(bar, lp)
@@ -244,6 +248,7 @@ class NodusOverlayService : Service() {
         view.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
+                    Log.i(TAG, "Touch DOWN on ${if (isLeft) "LEFT" else "RIGHT"} handle (rawY=${event.rawY})")
                     initialParamY = params.y
                     initialTouchY = event.rawY
                     isDrag = false
@@ -251,9 +256,9 @@ class NodusOverlayService : Service() {
                 }
                 MotionEvent.ACTION_MOVE -> {
                     val delta = (event.rawY - initialTouchY).toInt()
-                    if (abs(delta) > dpToPx(6)) {
+                    if (abs(delta) > dpToPx(4)) {
                         isDrag = true
-                        params.y = (initialParamY + delta).coerceIn(dpToPx(40), resources.displayMetrics.heightPixels - dpToPx(100))
+                        params.y = (initialParamY + delta).coerceIn(dpToPx(40), resources.displayMetrics.heightPixels - dpToPx(120))
                         try {
                             windowManager?.updateViewLayout(view, params)
                         } catch (_: Exception) {}
@@ -261,8 +266,8 @@ class NodusOverlayService : Service() {
                     true
                 }
                 MotionEvent.ACTION_UP -> {
+                    Log.i(TAG, "Touch UP on ${if (isLeft) "LEFT" else "RIGHT"} handle (isDrag=$isDrag)")
                     if (!isDrag) {
-                        Log.i(TAG, "Handle tapped: ${if (isLeft) "devices" else "clipboard"}")
                         openModularOverlay(if (isLeft) "devices" else "clipboard")
                     }
                     true
@@ -374,7 +379,6 @@ class NodusOverlayService : Service() {
                     }
                 }
 
-                // Load with hash routing for 100% reliable local asset resolution
                 loadUrl("https://appassets.androidplatform.net/assets/frontend/index.html#overlay=$overlayType")
             }
 

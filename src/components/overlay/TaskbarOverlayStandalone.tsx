@@ -1,8 +1,11 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { SmartAppTaskbar } from '../layout/SmartAppTaskbar';
 
 export const TaskbarOverlayStandalone: React.FC = () => {
+  const mountTimeRef = useRef(Date.now());
+
   const handleClose = () => {
+    if (Date.now() - mountTimeRef.current < 350) return;
     try {
       if ((window as any).NodusNativeBridge?.closeOverlay) {
         (window as any).NodusNativeBridge.closeOverlay();

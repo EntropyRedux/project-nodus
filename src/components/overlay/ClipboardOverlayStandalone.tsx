@@ -1,8 +1,12 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { ClipboardHistoryPanel } from '../desktop/ClipboardHistoryPanel';
 
 export const ClipboardOverlayStandalone: React.FC = () => {
+  const mountTimeRef = useRef(Date.now());
+
   const handleClose = () => {
+    // Prevent initial tap bleed-through from closing immediately
+    if (Date.now() - mountTimeRef.current < 350) return;
     try {
       if ((window as any).NodusNativeBridge?.closeOverlay) {
         (window as any).NodusNativeBridge.closeOverlay();

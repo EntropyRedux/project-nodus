@@ -1,9 +1,12 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { DeviceSidebar } from '../layout/DeviceSidebar';
 import { DeviceProcessSidePanel } from '../layout/DeviceProcessSidePanel';
 
 export const DeviceSwitcherOverlayStandalone: React.FC = () => {
+  const mountTimeRef = useRef(Date.now());
+
   const handleClose = () => {
+    if (Date.now() - mountTimeRef.current < 350) return;
     try {
       if ((window as any).NodusNativeBridge?.closeOverlay) {
         (window as any).NodusNativeBridge.closeOverlay();
