@@ -4,7 +4,6 @@ import { DeviceSidebar } from './DeviceSidebar';
 import { DeviceProcessSidePanel } from './DeviceProcessSidePanel';
 import { ClipboardHistoryPanel } from '../desktop/ClipboardHistoryPanel';
 import { SmartAppTaskbar } from './SmartAppTaskbar';
-import { FloatingEdgeHandles } from './FloatingEdgeHandles';
 import { DesktopAppWindow } from '../desktop/DesktopAppWindow';
 import { QuickSettingsShade } from './QuickSettingsShade';
 import { FolderModal } from '../home/FolderModal';
@@ -71,6 +70,8 @@ export const DesktopLauncherShell: React.FC = () => {
     devices,
     activeDeviceId,
     activeDevice,
+    isSidebarCollapsed,
+    toggleSidebar,
     setSearchOpen,
     isClipboardOpen,
     setClipboardOpen,
@@ -81,6 +82,27 @@ export const DesktopLauncherShell: React.FC = () => {
     totalUnreadNotifications,
     toggleQuickSettings,
   } = useLauncher();
+
+  // Listen to Native System Overlay Open Panel events
+  useEffect(() => {
+    const handleOpenPanel = (e: any) => {
+      const panel = e.detail?.panel;
+      if (panel === 'clipboard') {
+        audio.playTap();
+        setClipboardOpen(true);
+      } else if (panel === 'device_switcher') {
+        audio.playTap();
+        if (isSidebarCollapsed) {
+          toggleSidebar();
+        }
+      } else if (panel === 'taskbar') {
+        audio.playTap();
+        setSearchOpen(false);
+      }
+    };
+    window.addEventListener('nodus_open_panel', handleOpenPanel);
+    return () => window.removeEventListener('nodus_open_panel', handleOpenPanel);
+  }, [isSidebarCollapsed, toggleSidebar, setClipboardOpen, setSearchOpen]);
 
   const [currentTime, setCurrentTime] = useState(new Date());
   useEffect(() => {
@@ -619,7 +641,6 @@ export const DesktopLauncherShell: React.FC = () => {
       </main>
 
       {/* Global Overlays & Modals */}
-      <FloatingEdgeHandles />
       <SmartAppTaskbar />
       <QuickSettingsShade />
       <FolderModal />

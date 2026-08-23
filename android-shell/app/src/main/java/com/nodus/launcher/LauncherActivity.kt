@@ -570,6 +570,13 @@ class LauncherActivity : AppCompatActivity() {
             Log.i(TAG, "Loading Launcher UI from: $startUrl")
             webView.loadUrl(startUrl)
 
+            // Start Persistent Native Overlay Service
+            try {
+                startService(Intent(this, com.nodus.launcher.service.NodusOverlayService::class.java))
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to start NodusOverlayService: ${e.message}")
+            }
+
         } catch (e: Exception) {
             Log.e(TAG, "Fatal error initializing LauncherActivity WebView", e)
         }
@@ -577,9 +584,18 @@ class LauncherActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        // When Nodus Home is in foreground, hide overlay handles so desktop is clean
+        com.nodus.launcher.service.NodusOverlayService.setHandlesVisible(false)
+        handleActionOpenPanel(intent)
         runOnUiThread {
             webView.evaluateJavascript("(function(){ if (window.dispatchEvent) { window.dispatchEvent(new CustomEvent('nodus-package-changed')); } })()", null)
         }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // When third-party apps are opened, display overlay handles
+        com.nodus.launcher.service.NodusOverlayService.setHandlesVisible(true)
     }
 
     override fun onDestroy() {
@@ -624,6 +640,18 @@ class LauncherActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handlePairingIntent(intent)
+        handleActionOpenPanel(intent)
+    }
+
+    private fun handleActionOpenPanel(intent: Intent?) {
+        val panel = intent?.getStringExtra("ACTION_OPEN_PANEL")
+        if (!panel.isNullOrEmpty()) {
+            intent.removeExtra("ACTION_OPEN_PANEL")
+            runOnUiThread {
+                val js = "(function(){ if (window.dispatchEvent) { window.dispatchEvent(new CustomEvent('nodus_open_panel', { detail: { panel: '$panel' } })); } })()"
+                webView.evaluateJavascript(js, null)
+            }
+        }
     }
 
     private fun handlePairingIntent(intent: Intent?) {
