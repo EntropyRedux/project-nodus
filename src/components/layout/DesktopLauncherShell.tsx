@@ -4,6 +4,7 @@ import { DeviceSidebar } from './DeviceSidebar';
 import { DeviceProcessSidePanel } from './DeviceProcessSidePanel';
 import { ClipboardHistoryPanel } from '../desktop/ClipboardHistoryPanel';
 import { SmartAppTaskbar } from './SmartAppTaskbar';
+import { FloatingEdgeHandles } from './FloatingEdgeHandles';
 import { DesktopAppWindow } from '../desktop/DesktopAppWindow';
 import { QuickSettingsShade } from './QuickSettingsShade';
 import { FolderModal } from '../home/FolderModal';
@@ -618,6 +619,7 @@ export const DesktopLauncherShell: React.FC = () => {
       </main>
 
       {/* Global Overlays & Modals */}
+      <FloatingEdgeHandles />
       <SmartAppTaskbar />
       <QuickSettingsShade />
       <FolderModal />
