@@ -231,16 +231,28 @@ class LauncherActivity : AppCompatActivity() {
                         }
 
                         // 3. Bring Nodus LauncherActivity in front of it on Layer 1
-                        val launcherIntent = Intent(this@LauncherActivity, LauncherActivity::class.java).apply {
-                            addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-                            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        val bringToFrontAction = {
+                            try {
+                                val launcherIntent = Intent(this@LauncherActivity, LauncherActivity::class.java).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                                    addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                startActivity(launcherIntent)
+                                runOnUiThread {
+                                    window.decorView.requestFocus()
+                                }
+                            } catch (e2: Exception) {
+                                Log.e(TAG, "Failed to re-assert launcher on front", e2)
+                            }
                         }
-                        startActivity(launcherIntent)
 
-                        runOnUiThread {
-                            window.decorView.requestFocus()
-                        }
+                        // Execute immediately and queue right after transition frame
+                        bringToFrontAction()
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            bringToFrontAction()
+                        }, 120)
+
                         true
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to minimize app $packageName", e)
