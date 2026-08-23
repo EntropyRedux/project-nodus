@@ -1351,17 +1351,8 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return;
     }
 
-    // 2. Native Android App
-    const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
-    if (bridge?.bringAppToFront) {
-      bridge.bringAppToFront(targetApp.packageName);
-      setRunningApps((prev) => {
-        if (!prev.includes(appId)) return [appId, ...prev.slice(0, 11)];
-        return [appId, ...prev.filter((id) => id !== appId)];
-      });
-    } else {
-      launchApp(appId);
-    }
+    // 2. Native Android App (unified launch pipeline preserving floating/fullscreen mode consistently)
+    launchApp(appId);
   };
 
   const killApp = (appId: string) => {

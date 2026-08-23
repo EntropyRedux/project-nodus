@@ -85,18 +85,9 @@ export const AppIcon: React.FC<AppIconProps> = memo(({ app, size = 'normal' }) =
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
-
-    if (!hasTriggeredDrag.current && pointerStartPos.current) {
-      const dist = Math.hypot(e.clientX - pointerStartPos.current.x, e.clientY - pointerStartPos.current.y);
-      if (dist <= 8) {
-        if (!isEditing) {
-          launchApp(app.id);
-        }
-      }
-    }
     pointerStartPos.current = null;
     hasTriggeredDrag.current = false;
-  }, [isEditing, launchApp, app.id]);
+  }, []);
 
   const handlePointerCancel = useCallback(() => {
     if (longPressTimerRef.current) {

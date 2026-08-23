@@ -202,8 +202,8 @@ class LauncherActivity : AppCompatActivity() {
                     return try {
                         val intent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            addFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT)
+                            addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
                             // Xiaomi HyperOS / MIUI floating window extras
                             putExtra("miui.intent.extra.open_in_floating_window", true)
                             putExtra("miui.intent.extra.floating_window", true)
