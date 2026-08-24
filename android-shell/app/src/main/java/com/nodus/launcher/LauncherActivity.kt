@@ -16,6 +16,8 @@ import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
 import android.util.Base64
@@ -627,6 +629,8 @@ class LauncherActivity : AppCompatActivity() {
         }
     }
 
+    private val mainHandler = Handler(Looper.getMainLooper())
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -639,10 +643,13 @@ class LauncherActivity : AppCompatActivity() {
         if (!panel.isNullOrEmpty()) {
             intent?.removeExtra("action_open_panel")
             intent?.removeExtra("ACTION_OPEN_PANEL")
-            runOnUiThread {
+            val dispatch = {
                 val js = "(function(){ if (window.dispatchEvent) { window.dispatchEvent(new CustomEvent('nodus_open_panel', { detail: { panel: '$panel' } })); } })()"
                 webView.evaluateJavascript(js, null)
             }
+            runOnUiThread { dispatch() }
+            mainHandler.postDelayed({ dispatch() }, 100)
+            mainHandler.postDelayed({ dispatch() }, 300)
         }
     }
 

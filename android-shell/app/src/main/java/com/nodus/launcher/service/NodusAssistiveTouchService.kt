@@ -1,5 +1,6 @@
 package com.nodus.launcher.service
 
+import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.app.Service
 import android.content.Context
@@ -17,6 +18,8 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.view.animation.DecelerateInterpolator
+import android.view.animation.OvershootInterpolator
 import android.widget.FrameLayout
 import android.widget.GridLayout
 import com.nodus.launcher.LauncherActivity
@@ -28,6 +31,16 @@ class NodusAssistiveTouchService : Service() {
     private var floatCircleView: View? = null
     private var circleParams: WindowManager.LayoutParams? = null
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var snapAnimator: ValueAnimator? = null
+
+    private val idleRunnable = Runnable {
+        floatCircleView?.animate()
+            ?.alpha(0.55f)
+            ?.scaleX(0.92f)
+            ?.scaleY(0.92f)
+            ?.setDuration(400)
+            ?.start()
+    }
 
     companion object {
         const val TAG = "NodusAssistiveTouch"
@@ -55,6 +68,17 @@ class NodusAssistiveTouchService : Service() {
     private fun dpToPx(dp: Int): Int {
         val density = resources.displayMetrics.density
         return (dp * density).toInt()
+    }
+
+    private fun resetIdleTimer() {
+        mainHandler.removeCallbacks(idleRunnable)
+        floatCircleView?.animate()
+            ?.alpha(1.0f)
+            ?.scaleX(1.0f)
+            ?.scaleY(1.0f)
+            ?.setDuration(180)
+            ?.start()
+        mainHandler.postDelayed(idleRunnable, 3500)
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -99,6 +123,7 @@ class NodusAssistiveTouchService : Service() {
         try {
             windowManager?.addView(floatCircleView, circleParams)
             Log.i(TAG, "Floating Assistive Circle attached successfully at ($initialX, $initialY)")
+            resetIdleTimer()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to attach Floating Assistive Circle", e)
         }
@@ -115,11 +140,11 @@ class NodusAssistiveTouchService : Service() {
         val innerCircle = FrameLayout(this).apply {
             val bg = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setColor(Color.parseColor("#E61C1C1E"))
-                setStroke(dpToPx(1), Color.parseColor("#55FFFFFF"))
+                setColor(Color.parseColor("#EE16161A"))
+                setStroke(dpToPx(1.5f.toInt()), Color.parseColor("#44FFFFFF"))
             }
             background = bg
-            elevation = dpToPx(8).toFloat()
+            elevation = dpToPx(10).toFloat()
         }
 
         // Center 4-dot Nodus logo icon
@@ -147,7 +172,7 @@ class NodusAssistiveTouchService : Service() {
             val lp = GridLayout.LayoutParams().apply {
                 width = dpToPx(6)
                 height = dpToPx(6)
-                setMargins(dpToPx(1), dpToPx(1), dpToPx(1), dpToPx(1))
+                setMargins(dpToPx(1.2f.toInt()), dpToPx(1.2f.toInt()), dpToPx(1.2f.toInt()), dpToPx(1.2f.toInt()))
             }
             iconGrid.addView(dot, lp)
         }
@@ -176,12 +201,22 @@ class NodusAssistiveTouchService : Service() {
         view.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
+                    snapAnimator?.cancel()
+                    mainHandler.removeCallbacks(idleRunnable)
+
                     initialX = params.x
                     initialY = params.y
                     touchStartX = event.rawX
                     touchStartY = event.rawY
                     isDragging = false
-                    view.animate().scaleX(1.15f).scaleY(1.15f).setDuration(120).start()
+
+                    view.animate()
+                        .alpha(1.0f)
+                        .scaleX(1.18f)
+                        .scaleY(1.18f)
+                        .setInterpolator(OvershootInterpolator(1.8f))
+                        .setDuration(160)
+                        .start()
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
@@ -199,10 +234,10 @@ class NodusAssistiveTouchService : Service() {
                     true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    view.animate().scaleX(1.0f).scaleY(1.0f).setDuration(150).start()
+                    resetIdleTimer()
 
                     if (isDragging) {
-                        // Magnetically snap to nearest edge: Left, Right, or Bottom
+                        // Smooth physics-animated magnetic snap to nearest edge
                         val screenW = resources.displayMetrics.widthPixels
                         val screenH = resources.displayMetrics.heightPixels
                         val curX = params.x
@@ -212,24 +247,37 @@ class NodusAssistiveTouchService : Service() {
                         val distToRight = screenW - (curX + dpToPx(52))
                         val distToBottom = screenH - (curY + dpToPx(52))
 
+                        var targetX = curX
+                        var targetY = curY.coerceIn(dpToPx(48), screenH - dpToPx(68))
+
                         if (distToBottom < dpToPx(70) && distToBottom < Math.min(distToLeft, distToRight)) {
-                            params.y = screenH - dpToPx(68)
+                            targetY = screenH - dpToPx(68)
                         } else if (distToLeft <= distToRight) {
-                            params.x = dpToPx(12)
+                            targetX = dpToPx(12)
                         } else {
-                            params.x = screenW - dpToPx(64)
+                            targetX = screenW - dpToPx(64)
                         }
 
-                        params.y = params.y.coerceIn(dpToPx(48), screenH - dpToPx(68))
-                        try {
-                            windowManager?.updateViewLayout(view, params)
-                        } catch (_: Exception) {}
+                        animateSnap(view, params, curX, curY, targetX, targetY)
                     } else {
+                        view.animate().scaleX(1.0f).scaleY(1.0f).setDuration(150).start()
+
                         // Double tap detection
                         val now = System.currentTimeMillis()
                         if (now - lastTapTime < 380) {
                             lastTapTime = 0L
                             Log.i(TAG, "DOUBLE TAP confirmed on Assistive Circle -> summoning Nodus Taskbar")
+                            
+                            // Pulse animation feedback on double tap
+                            view.animate()
+                                .scaleX(1.35f)
+                                .scaleY(1.35f)
+                                .setDuration(120)
+                                .withEndAction {
+                                    view.animate().scaleX(1.0f).scaleY(1.0f).setDuration(180).start()
+                                }
+                                .start()
+
                             onAssistiveCircleDoubleTap()
                         } else {
                             lastTapTime = now
@@ -242,8 +290,32 @@ class NodusAssistiveTouchService : Service() {
         }
     }
 
+    private fun animateSnap(
+        view: View,
+        params: WindowManager.LayoutParams,
+        startX: Int,
+        startY: Int,
+        targetX: Int,
+        targetY: Int
+    ) {
+        snapAnimator?.cancel()
+        snapAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 280
+            interpolator = OvershootInterpolator(0.85f)
+            addUpdateListener { anim ->
+                val fraction = anim.animatedFraction
+                params.x = (startX + (targetX - startX) * fraction).toInt()
+                params.y = (startY + (targetY - startY) * fraction).toInt()
+                try {
+                    windowManager?.updateViewLayout(view, params)
+                } catch (_: Exception) {}
+            }
+            start()
+        }
+    }
+
     private fun onAssistiveCircleDoubleTap() {
-        // Bring Nodus Launcher to front with taskbar active
+        // Bring Nodus Launcher to front and instruct it to open the Taskbar
         try {
             val intent = Intent(this, LauncherActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
@@ -258,6 +330,8 @@ class NodusAssistiveTouchService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         instance = null
+        mainHandler.removeCallbacks(idleRunnable)
+        snapAnimator?.cancel()
         try {
             floatCircleView?.let { windowManager?.removeView(it) }
         } catch (e: Exception) {

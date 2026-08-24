@@ -59,11 +59,25 @@ export const SmartAppTaskbar: React.FC = () => {
   useEffect(() => {
     if (isTaskbarOpen) {
       setIsOpen(true);
+      resetAutoHideTimer(8000);
     } else {
       setIsOpen(false);
       setIsStartMenuOpen(false);
     }
   }, [isTaskbarOpen]);
+
+  // Global event listener for native system-wide overlay triggers
+  useEffect(() => {
+    const handlePanelOpen = (e: any) => {
+      if (e.detail?.panel === 'taskbar') {
+        audio.playUnlock();
+        setIsOpen(true);
+        resetAutoHideTimer(10000);
+      }
+    };
+    window.addEventListener('nodus_open_panel', handlePanelOpen);
+    return () => window.removeEventListener('nodus_open_panel', handlePanelOpen);
+  }, []);
   const [isStartMenuOpen, setIsStartMenuOpen] = useState(false);
   const [isOrganizeMode, setIsOrganizeMode] = useState(false);
   const [isAddingNewTab, setIsAddingNewTab] = useState(false);
