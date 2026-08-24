@@ -304,7 +304,7 @@ class NodusOverlayService : Service() {
         }
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
+    @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
     private fun openModularOverlayDirect(overlayType: String) {
         closeOverlayDirect()
 
@@ -317,14 +317,31 @@ class NodusOverlayService : Service() {
             WindowManager.LayoutParams.TYPE_PHONE
         }
 
+        val flags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
+
+        val dm = resources.displayMetrics
+        val screenHeight = dm.heightPixels
+
+        // Dynamic Edge-Bounded Dimensions to NEVER block center screen touches
+        val (windowWidth, windowHeight, windowGravity, marginY) = when (overlayType) {
+            "devices" -> Quadruple(dpToPx(380).coerceAtMost((dm.widthPixels * 0.42).toInt()), (screenHeight * 0.88).toInt(), Gravity.LEFT or Gravity.CENTER_VERTICAL, 0)
+            "clipboard" -> Quadruple(dpToPx(360).coerceAtMost((dm.widthPixels * 0.38).toInt()), (screenHeight * 0.88).toInt(), Gravity.RIGHT or Gravity.CENTER_VERTICAL, 0)
+            "taskbar" -> Quadruple(dpToPx(620).coerceAtMost((dm.widthPixels * 0.85).toInt()), dpToPx(88), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL, dpToPx(12))
+            else -> Quadruple(dpToPx(360), (screenHeight * 0.85).toInt(), Gravity.CENTER, 0)
+        }
+
         val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.MATCH_PARENT,
+            windowWidth,
+            windowHeight,
             overlayTypeFlag,
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+            flags,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.CENTER
+            gravity = windowGravity
+            y = marginY
         }
 
         val themedContext = ContextThemeWrapper(this, android.R.style.Theme_DeviceDefault_NoActionBar)
@@ -345,6 +362,17 @@ class NodusOverlayService : Service() {
                 override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
                     Log.d("NodusOverlayConsole", "[${consoleMessage?.messageLevel()}] ${consoleMessage?.message()} (${consoleMessage?.sourceId()}:${consoleMessage?.lineNumber()})")
                     return true
+                }
+            }
+
+            // Outside touch listener: automatically dismisses overlay when touching center screen/underlying app
+            setOnTouchListener { _, event ->
+                if (event.action == MotionEvent.ACTION_OUTSIDE) {
+                    Log.i(TAG, "Touch outside sheet detected -> auto-dismissing overlay")
+                    closeOverlayDirect()
+                    false
+                } else {
+                    false
                 }
             }
 
@@ -423,11 +451,13 @@ class NodusOverlayService : Service() {
         currentOpenOverlay = overlayType
         try {
             windowManager?.addView(webView, params)
-            Log.i(TAG, "Opened modular overlay: $overlayType")
+            Log.i(TAG, "Opened modular overlay: $overlayType (width=$windowWidth, height=$windowHeight)")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to add floating overlay window", e)
         }
     }
+
+    private data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
 
     private fun closeOverlayDirect() {
         activeOverlayWebView?.let {
@@ -454,14 +484,14 @@ class NodusOverlayService : Service() {
         rightHandleView?.visibility = visibility
         bottomHandleView?.visibility = visibility
         if (!visible) {
-            closeOverlay()
+            closeOverlayDirect()
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         instance = null
-        closeOverlay()
+        closeOverlayDirect()
         try {
             leftHandleView?.let { windowManager?.removeView(it) }
             rightHandleView?.let { windowManager?.removeView(it) }
