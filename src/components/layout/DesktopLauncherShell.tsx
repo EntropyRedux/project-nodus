@@ -77,6 +77,7 @@ export const DesktopLauncherShell: React.FC = () => {
     isClipboardOpen,
     setClipboardOpen,
     toggleClipboardPanel,
+    setTaskbarOpen,
     isFloatingModeArmed,
     toggleFloatingMode,
     notifications,
@@ -98,12 +99,13 @@ export const DesktopLauncherShell: React.FC = () => {
         }
       } else if (panel === 'taskbar') {
         audio.playTap();
+        setTaskbarOpen(true);
         setSearchOpen(false);
       }
     };
     window.addEventListener('nodus_open_panel', handleOpenPanel);
     return () => window.removeEventListener('nodus_open_panel', handleOpenPanel);
-  }, [isSidebarCollapsed, toggleSidebar, setClipboardOpen, setSearchOpen]);
+  }, [isSidebarCollapsed, toggleSidebar, setClipboardOpen, setTaskbarOpen, setSearchOpen]);
 
   const [currentTime, setCurrentTime] = useState(new Date());
   useEffect(() => {

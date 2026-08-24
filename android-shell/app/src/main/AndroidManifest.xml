@@ -76,5 +76,10 @@
             </intent-filter>
         </service>
 
+        <!-- System-Wide Floating Assistive Circle Service -->
+        <service
+            android:name=".service.NodusAssistiveTouchService"
+            android:exported="true" />
+
     </application>
 </manifest>

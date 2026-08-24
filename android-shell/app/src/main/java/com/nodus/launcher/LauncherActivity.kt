@@ -567,6 +567,13 @@ class LauncherActivity : AppCompatActivity() {
 
             // Load local frontend safely through WebViewAssetLoader virtual domain
             val startUrl = "https://appassets.androidplatform.net/assets/frontend/index.html"
+            // Start Native Floating Assistive Touch Service
+            try {
+                startService(Intent(this, com.nodus.launcher.service.NodusAssistiveTouchService::class.java))
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to start NodusAssistiveTouchService: ${e.message}")
+            }
+
             Log.i(TAG, "Loading Launcher UI from: $startUrl")
             webView.loadUrl(startUrl)
 
@@ -599,12 +606,7 @@ class LauncherActivity : AppCompatActivity() {
     private fun drawableToBase64(drawable: Drawable): String {
         return try {
             val bitmap = if (drawable is BitmapDrawable && drawable.bitmap != null) {
-                val orig = drawable.bitmap
-                if (orig.width > 128 || orig.height > 128) {
-                    Bitmap.createScaledBitmap(orig, 128, 128, true)
-                } else {
-                    orig
-                }
+                drawable.bitmap
             } else {
                 val width = if (drawable.intrinsicWidth > 0) Math.min(drawable.intrinsicWidth, 128) else 96
                 val height = if (drawable.intrinsicHeight > 0) Math.min(drawable.intrinsicHeight, 128) else 96
@@ -633,9 +635,10 @@ class LauncherActivity : AppCompatActivity() {
     }
 
     private fun handleActionOpenPanel(intent: Intent?) {
-        val panel = intent?.getStringExtra("ACTION_OPEN_PANEL")
+        val panel = intent?.getStringExtra("action_open_panel") ?: intent?.getStringExtra("ACTION_OPEN_PANEL")
         if (!panel.isNullOrEmpty()) {
-            intent.removeExtra("ACTION_OPEN_PANEL")
+            intent?.removeExtra("action_open_panel")
+            intent?.removeExtra("ACTION_OPEN_PANEL")
             runOnUiThread {
                 val js = "(function(){ if (window.dispatchEvent) { window.dispatchEvent(new CustomEvent('nodus_open_panel', { detail: { panel: '$panel' } })); } })()"
                 webView.evaluateJavascript(js, null)
