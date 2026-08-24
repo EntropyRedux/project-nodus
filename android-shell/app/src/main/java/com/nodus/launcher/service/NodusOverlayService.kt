@@ -13,11 +13,14 @@ import android.os.IBinder
 import android.os.Looper
 import android.provider.Settings
 import android.util.Log
+import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
@@ -40,6 +43,7 @@ class NodusOverlayService : Service() {
     private var bottomParams: WindowManager.LayoutParams? = null
 
     private var activeOverlayWebView: WebView? = null
+    private var currentOpenOverlay: String? = null
     private var assetLoader: WebViewAssetLoader? = null
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -112,7 +116,7 @@ class NodusOverlayService : Service() {
             isLeft = true,
             accentColor = Color.parseColor("#34C759")
         )
-        setupDragListener(leftHandleView!!, leftParams!!, isLeft = true)
+        setupDoubleTapAndDragListener(leftHandleView!!, leftParams!!, isLeft = true)
 
         // 2. RIGHT HANDLE (Clipboard History) - 32dp touch width x 80dp height
         rightParams = WindowManager.LayoutParams(
@@ -131,7 +135,7 @@ class NodusOverlayService : Service() {
             isLeft = false,
             accentColor = Color.parseColor("#007AFF")
         )
-        setupDragListener(rightHandleView!!, rightParams!!, isLeft = false)
+        setupDoubleTapAndDragListener(rightHandleView!!, rightParams!!, isLeft = false)
 
         // 3. BOTTOM HANDLE (Taskbar & Home) - 120dp x 28dp touch area
         bottomParams = WindowManager.LayoutParams(
@@ -146,9 +150,16 @@ class NodusOverlayService : Service() {
             y = dpToPx(4)
         }
 
+        var lastBottomTapTime = 0L
         bottomHandleView = createBottomPillView {
-            Log.i(TAG, "Bottom handle tapped")
-            openModularOverlay("taskbar")
+            val now = System.currentTimeMillis()
+            if (now - lastBottomTapTime < 380) {
+                // Double tap bottom handle -> toggle taskbar dock
+                lastBottomTapTime = 0L
+                toggleModularOverlay("taskbar")
+            } else {
+                lastBottomTapTime = now
+            }
         }
 
         try {
@@ -240,15 +251,15 @@ class NodusOverlayService : Service() {
         return root
     }
 
-    private fun setupDragListener(view: View, params: WindowManager.LayoutParams, isLeft: Boolean) {
+    private fun setupDoubleTapAndDragListener(view: View, params: WindowManager.LayoutParams, isLeft: Boolean) {
         var initialParamY = 0
         var initialTouchY = 0f
         var isDrag = false
+        var lastTapTime = 0L
 
         view.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    Log.i(TAG, "Touch DOWN on ${if (isLeft) "LEFT" else "RIGHT"} handle (rawY=${event.rawY})")
                     initialParamY = params.y
                     initialTouchY = event.rawY
                     isDrag = false
@@ -266,14 +277,30 @@ class NodusOverlayService : Service() {
                     true
                 }
                 MotionEvent.ACTION_UP -> {
-                    Log.i(TAG, "Touch UP on ${if (isLeft) "LEFT" else "RIGHT"} handle (isDrag=$isDrag)")
                     if (!isDrag) {
-                        openModularOverlay(if (isLeft) "devices" else "clipboard")
+                        val now = System.currentTimeMillis()
+                        if (now - lastTapTime < 380) {
+                            // Confirmed DOUBLE TAP -> toggle overlay panel
+                            lastTapTime = 0L
+                            val targetOverlay = if (isLeft) "devices" else "clipboard"
+                            Log.i(TAG, "DOUBLE TAP confirmed on ${if (isLeft) "LEFT" else "RIGHT"} handle -> toggling $targetOverlay")
+                            toggleModularOverlay(targetOverlay)
+                        } else {
+                            lastTapTime = now
+                        }
                     }
                     true
                 }
                 else -> false
             }
+        }
+    }
+
+    fun toggleModularOverlay(overlayType: String) {
+        if (activeOverlayWebView != null && currentOpenOverlay == overlayType) {
+            closeOverlay()
+        } else {
+            openModularOverlay(overlayType)
         }
     }
 
@@ -295,20 +322,31 @@ class NodusOverlayService : Service() {
                 WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.MATCH_PARENT,
                 overlayTypeFlag,
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
                 PixelFormat.TRANSLUCENT
             ).apply {
                 gravity = Gravity.CENTER
             }
 
-            val webView = WebView(this).apply {
+            val themedContext = ContextThemeWrapper(this, android.R.style.Theme_DeviceDefault_NoActionBar)
+            val webView = WebView(themedContext).apply {
                 setBackgroundColor(Color.TRANSPARENT)
                 settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = true
                     databaseEnabled = true
                     allowFileAccess = true
+                    allowContentAccess = true
                     cacheMode = WebSettings.LOAD_DEFAULT
+                    loadWithOverviewMode = true
+                    useWideViewPort = true
+                }
+
+                webChromeClient = object : WebChromeClient() {
+                    override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                        Log.d("NodusOverlayConsole", "[${consoleMessage?.messageLevel()}] ${consoleMessage?.message()} (${consoleMessage?.sourceId()}:${consoleMessage?.lineNumber()})")
+                        return true
+                    }
                 }
 
                 addJavascriptInterface(object {
@@ -383,6 +421,7 @@ class NodusOverlayService : Service() {
             }
 
             activeOverlayWebView = webView
+            currentOpenOverlay = overlayType
             try {
                 windowManager?.addView(webView, params)
                 Log.i(TAG, "Opened modular overlay: $overlayType")
@@ -402,6 +441,7 @@ class NodusOverlayService : Service() {
                     Log.w(TAG, "Failed to remove overlay view: ${e.message}")
                 }
                 activeOverlayWebView = null
+                currentOpenOverlay = null
             }
         }
     }
