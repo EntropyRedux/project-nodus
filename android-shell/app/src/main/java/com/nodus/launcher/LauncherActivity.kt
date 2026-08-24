@@ -672,13 +672,15 @@ class LauncherActivity : AppCompatActivity() {
         if (!panel.isNullOrEmpty()) {
             intent?.removeExtra("action_open_panel")
             intent?.removeExtra("ACTION_OPEN_PANEL")
+            Log.i(TAG, "Dispatching nodus_open_panel event to WebView: panel=$panel")
             val dispatch = {
-                val js = "(function(){ if (window.dispatchEvent) { window.dispatchEvent(new CustomEvent('nodus_open_panel', { detail: { panel: '$panel' } })); } })()"
+                val js = "(function(){ console.log('[NodusBridge] nodus_open_panel dispatched:', '$panel'); if (window.dispatchEvent) { window.dispatchEvent(new CustomEvent('nodus_open_panel', { detail: { panel: '$panel' } })); } })()"
                 webView.evaluateJavascript(js, null)
             }
             runOnUiThread { dispatch() }
             mainHandler.postDelayed({ dispatch() }, 100)
-            mainHandler.postDelayed({ dispatch() }, 300)
+            mainHandler.postDelayed({ dispatch() }, 250)
+            mainHandler.postDelayed({ dispatch() }, 500)
         }
     }
 

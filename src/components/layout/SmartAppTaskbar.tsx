@@ -154,7 +154,7 @@ export const SmartAppTaskbar: React.FC = () => {
   }, [scale]);
 
   // Reset or set auto-hide timer
-  const resetAutoHideTimer = (delay = 4500) => {
+  const resetAutoHideTimer = (delay = 6000) => {
     if (isStartMenuOpen) return;
     if (hideTimerRef.current) {
       clearTimeout(hideTimerRef.current);
@@ -162,6 +162,7 @@ export const SmartAppTaskbar: React.FC = () => {
     hideTimerRef.current = window.setTimeout(() => {
       if (!isStartMenuOpen) {
         setIsOpen(false);
+        setTaskbarOpen(false);
       }
     }, delay);
   };
