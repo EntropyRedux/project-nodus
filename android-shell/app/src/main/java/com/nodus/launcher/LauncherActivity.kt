@@ -487,6 +487,28 @@ class LauncherActivity : AppCompatActivity() {
                         false
                     }
                 }
+
+                @JavascriptInterface
+                fun isOverlayPermissionGranted(): Boolean {
+                    return Settings.canDrawOverlays(this@LauncherActivity)
+                }
+
+                @JavascriptInterface
+                fun requestOverlayPermission(): Boolean {
+                    return try {
+                        val intent = Intent(
+                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:${packageName}")
+                        ).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        startActivity(intent)
+                        true
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to open overlay settings", e)
+                        false
+                    }
+                }
             }, "NodusNativeBridge")
 
             // Real-time Push of OS Notifications to Frontend
@@ -586,6 +608,13 @@ class LauncherActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (Settings.canDrawOverlays(this)) {
+            try {
+                startService(Intent(this, com.nodus.launcher.service.NodusAssistiveTouchService::class.java))
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to start NodusAssistiveTouchService in onResume: ${e.message}")
+            }
+        }
         handleActionOpenPanel(intent)
         runOnUiThread {
             webView.evaluateJavascript("(function(){ if (window.dispatchEvent) { window.dispatchEvent(new CustomEvent('nodus-package-changed')); } })()", null)
