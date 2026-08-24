@@ -2,7 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import { useLauncher } from '../../context/LauncherContext';
 import { SmartAppTaskbar } from '../layout/SmartAppTaskbar';
 import { ClipboardHistoryPanel } from '../desktop/ClipboardHistoryPanel';
-import { DeviceProcessSidePanel } from '../layout/DeviceProcessSidePanel';
+import { DeviceSwitcherOverlayStandalone } from './DeviceSwitcherOverlayStandalone';
 import { ToastNotification } from '../common/ToastNotification';
 import { AppContextMenu } from '../home/AppContextMenu';
 
@@ -51,10 +51,10 @@ export const TaskbarOverlayStandalone: React.FC = () => {
         <ClipboardHistoryPanel onClose={() => setClipboardOpen(false)} />
       </div>
 
-      {/* Floating Device Process Side Panel (Left Side) */}
+      {/* Floating Device Switcher Sheet (Left Side) */}
       {!isSidebarCollapsed && (
-        <div className="fixed top-12 bottom-20 left-4 z-50 w-80 sm:w-84 flex flex-col rounded-3xl shadow-2xl animate-in slide-in-from-left duration-250">
-          <DeviceProcessSidePanel />
+        <div className="fixed top-12 bottom-20 left-4 z-50 w-80 sm:w-96 flex flex-col rounded-3xl shadow-2xl shadow-black/90 animate-in slide-in-from-left duration-250">
+          <DeviceSwitcherOverlayStandalone onClose={() => toggleSidebar()} />
         </div>
       )}
 
@@ -63,7 +63,7 @@ export const TaskbarOverlayStandalone: React.FC = () => {
         className="w-full max-w-4xl flex flex-col items-center justify-center pb-3"
         onClick={(e) => e.stopPropagation()}
       >
-        <SmartAppTaskbar />
+        <SmartAppTaskbar forceOpen={true} />
       </div>
 
       <ToastNotification />

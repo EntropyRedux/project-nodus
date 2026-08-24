@@ -20,7 +20,11 @@ import { AddDeviceModal } from '../layout/AddDeviceModal';
 import { DeviceProcessSidePanel } from '../layout/DeviceProcessSidePanel';
 import { DEVICE_COLORS } from '../../utils/constants';
 
-export const DeviceSwitcherOverlayStandalone: React.FC = () => {
+interface DeviceSwitcherOverlayStandaloneProps {
+  onClose?: () => void;
+}
+
+export const DeviceSwitcherOverlayStandalone: React.FC<DeviceSwitcherOverlayStandaloneProps> = ({ onClose }) => {
   const [isAddModalOpen, setAddModalOpen] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [targetAvatarDeviceId, setTargetAvatarDeviceId] = useState<string | null>(null);
@@ -37,6 +41,10 @@ export const DeviceSwitcherOverlayStandalone: React.FC = () => {
   } = useLauncher();
 
   const handleClose = () => {
+    if (onClose) {
+      onClose();
+      return;
+    }
     try {
       if ((window as any).NodusNativeBridge?.closeOverlay) {
         (window as any).NodusNativeBridge.closeOverlay();
@@ -122,11 +130,11 @@ export const DeviceSwitcherOverlayStandalone: React.FC = () => {
           </div>
 
           {/* Devices List */}
-          <div className="flex-1 overflow-y-auto p-2.5 space-y-2">
+          <div className="flex-1 overflow-y-auto p-2.5 space-y-2 scrollbar-thin">
             {devices.map((device) => {
               const isActive = device.id === activeDeviceId;
               const isLocal = device.isLocal;
-              const colorInfo = DEVICE_COLORS[device.color] || DEVICE_COLORS.blue;
+              const devColor = DEVICE_COLORS[device.id] || '#34C759';
 
               return (
                 <div
@@ -149,13 +157,13 @@ export const DeviceSwitcherOverlayStandalone: React.FC = () => {
                         handleTriggerAvatarUpload(device.id);
                       }}
                       className="relative w-10 h-10 rounded-2xl flex items-center justify-center border border-white/10 shrink-0 overflow-hidden group cursor-pointer"
-                      style={{ backgroundColor: `${colorInfo.hex}25` }}
+                      style={{ backgroundColor: `${devColor}25` }}
                       title="Click to customize device portrait"
                     >
                       {device.avatar ? (
                         <img src={device.avatar} alt={device.name} className="w-full h-full object-cover" />
                       ) : (
-                        <div style={{ color: colorInfo.hex }}>
+                        <div style={{ color: devColor }}>
                           {getDeviceIcon(device.type, 18)}
                         </div>
                       )}
@@ -174,15 +182,15 @@ export const DeviceSwitcherOverlayStandalone: React.FC = () => {
                           </span>
                         )}
                       </div>
-                      <p className="text-[10px] text-[#8E8E93] truncate">{device.os || device.type} • {device.ip || '127.0.0.1'}</p>
+                      <p className="text-[10px] text-[#8E8E93] truncate">{device.os || device.type} • {device.ipAddress || '127.0.0.1'}</p>
                       
                       {/* Live Stats */}
                       <div className="flex items-center gap-2.5 mt-1 text-[9px] text-white/70 font-mono">
                         <span className="flex items-center gap-1">
-                          <Cpu size={9} className="text-[#34C759]" /> {device.cpuUsage ?? 24}%
+                          <Cpu size={9} className="text-[#34C759]" /> {device.cpuLoad ?? 18}%
                         </span>
                         <span className="flex items-center gap-1">
-                          <Activity size={9} className="text-[#007AFF]" /> {device.ramUsage ?? 48}%
+                          <Activity size={9} className="text-[#007AFF]" /> {device.ramUsage ?? '2.4 / 8.0 GB'}
                         </span>
                       </div>
                     </div>
