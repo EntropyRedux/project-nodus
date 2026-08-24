@@ -570,13 +570,6 @@ class LauncherActivity : AppCompatActivity() {
             Log.i(TAG, "Loading Launcher UI from: $startUrl")
             webView.loadUrl(startUrl)
 
-            // Start Persistent Native Overlay Service
-            try {
-                startService(Intent(this, com.nodus.launcher.service.NodusOverlayService::class.java))
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to start NodusOverlayService: ${e.message}")
-            }
-
         } catch (e: Exception) {
             Log.e(TAG, "Fatal error initializing LauncherActivity WebView", e)
         }
@@ -584,8 +577,6 @@ class LauncherActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // When Nodus Home is in foreground, hide overlay handles so desktop is clean
-        com.nodus.launcher.service.NodusOverlayService.setHandlesVisible(false)
         handleActionOpenPanel(intent)
         runOnUiThread {
             webView.evaluateJavascript("(function(){ if (window.dispatchEvent) { window.dispatchEvent(new CustomEvent('nodus-package-changed')); } })()", null)
@@ -594,8 +585,6 @@ class LauncherActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
-        // When third-party apps are opened, display overlay handles
-        com.nodus.launcher.service.NodusOverlayService.setHandlesVisible(true)
     }
 
     override fun onDestroy() {

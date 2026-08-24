@@ -76,10 +76,5 @@
             </intent-filter>
         </service>
 
-        <!-- Persistent System-Wide Edge Handles Overlay Service -->
-        <service
-            android:name=".service.NodusOverlayService"
-            android:exported="true" />
-
     </application>
 </manifest>
