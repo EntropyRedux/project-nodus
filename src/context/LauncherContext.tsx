@@ -109,6 +109,9 @@ interface LauncherContextType {
   setHoverTargetAppId: (id: string | null) => void;
   
   // System Shades & UI
+  isTaskbarOpen: boolean;
+  setTaskbarOpen: (val: boolean) => void;
+  toggleTaskbar: () => void;
   isQuickSettingsOpen: boolean;
   setQuickSettingsOpen: (val: boolean) => void;
   toggleQuickSettings: () => void;
@@ -275,6 +278,11 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const saved = localStorage.getItem('nova_launcher_sidebar_collapsed');
     return saved !== null ? JSON.parse(saved) : false;
   });
+
+  const [isTaskbarOpen, setTaskbarOpen] = useState<boolean>(false);
+  const toggleTaskbar = useCallback(() => {
+    setTaskbarOpen((prev) => !prev);
+  }, []);
 
   // Load saved state or default
   const [apps, setApps] = useState<AppItem[]>(() => {
@@ -1764,6 +1772,9 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         isClipboardOpen,
         setClipboardOpen,
         toggleClipboardPanel,
+        isTaskbarOpen,
+        setTaskbarOpen,
+        toggleTaskbar,
         drawerTabs,
         customTabAppMap,
         addDrawerTab,

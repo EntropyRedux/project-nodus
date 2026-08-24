@@ -49,10 +49,21 @@ export const SmartAppTaskbar: React.FC = () => {
     assignAppsToTab,
     setAppCategory,
     showToast,
+    isTaskbarOpen,
+    setTaskbarOpen,
     settings
   } = useLauncher();
 
   const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    if (isTaskbarOpen) {
+      setIsOpen(true);
+    } else {
+      setIsOpen(false);
+      setIsStartMenuOpen(false);
+    }
+  }, [isTaskbarOpen]);
   const [isStartMenuOpen, setIsStartMenuOpen] = useState(false);
   const [isOrganizeMode, setIsOrganizeMode] = useState(false);
   const [isAddingNewTab, setIsAddingNewTab] = useState(false);
@@ -821,6 +832,7 @@ export const SmartAppTaskbar: React.FC = () => {
               audio.playTap();
               setIsStartMenuOpen(false);
               setIsOpen(false);
+              setTaskbarOpen(false);
             }}
             className="p-1.5 ml-0.5 rounded-xl text-[#8E8E93] hover:text-[#F0F0F2] hover:bg-white/10 transition shrink-0"
             title="Hide Taskbar"
