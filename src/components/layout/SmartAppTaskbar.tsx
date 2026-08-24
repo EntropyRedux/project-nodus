@@ -56,28 +56,24 @@ export const SmartAppTaskbar: React.FC = () => {
 
   const [isOpen, setIsOpen] = useState(false);
 
-  useEffect(() => {
-    if (isTaskbarOpen) {
-      setIsOpen(true);
-      resetAutoHideTimer(8000);
-    } else {
-      setIsOpen(false);
-      setIsStartMenuOpen(false);
-    }
-  }, [isTaskbarOpen]);
-
   // Global event listener for native system-wide overlay triggers
   useEffect(() => {
     const handlePanelOpen = (e: any) => {
       if (e.detail?.panel === 'taskbar') {
         audio.playUnlock();
         setIsOpen(true);
-        resetAutoHideTimer(10000);
+        setTaskbarOpen(true);
       }
     };
     window.addEventListener('nodus_open_panel', handlePanelOpen);
     return () => window.removeEventListener('nodus_open_panel', handlePanelOpen);
-  }, []);
+  }, [setTaskbarOpen]);
+
+  useEffect(() => {
+    if (isTaskbarOpen) {
+      setIsOpen(true);
+    }
+  }, [isTaskbarOpen]);
   const [isStartMenuOpen, setIsStartMenuOpen] = useState(false);
   const [isOrganizeMode, setIsOrganizeMode] = useState(false);
   const [isAddingNewTab, setIsAddingNewTab] = useState(false);
@@ -399,7 +395,7 @@ export const SmartAppTaskbar: React.FC = () => {
         onMouseEnter={cancelAutoHide}
         onMouseLeave={() => resetAutoHideTimer(3500)}
         className={`fixed bottom-3 left-1/2 -translate-x-1/2 z-50 transition-all duration-250 ease-out select-none ${
-          isOpen || isStartMenuOpen
+          isOpen || isStartMenuOpen || isTaskbarOpen
             ? 'opacity-100 translate-y-0 scale-100 pointer-events-auto'
             : 'opacity-0 translate-y-12 scale-95 pointer-events-none'
         }`}
