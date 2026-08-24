@@ -154,7 +154,6 @@ class NodusOverlayService : Service() {
         bottomHandleView = createBottomPillView {
             val now = System.currentTimeMillis()
             if (now - lastBottomTapTime < 380) {
-                // Double tap bottom handle -> toggle taskbar dock
                 lastBottomTapTime = 0L
                 toggleModularOverlay("taskbar")
             } else {
@@ -280,7 +279,6 @@ class NodusOverlayService : Service() {
                     if (!isDrag) {
                         val now = System.currentTimeMillis()
                         if (now - lastTapTime < 380) {
-                            // Confirmed DOUBLE TAP -> toggle overlay panel
                             lastTapTime = 0L
                             val targetOverlay = if (isLeft) "devices" else "clipboard"
                             Log.i(TAG, "DOUBLE TAP confirmed on ${if (isLeft) "LEFT" else "RIGHT"} handle -> toggling $targetOverlay")
@@ -297,152 +295,156 @@ class NodusOverlayService : Service() {
     }
 
     fun toggleModularOverlay(overlayType: String) {
-        if (activeOverlayWebView != null && currentOpenOverlay == overlayType) {
-            closeOverlay()
-        } else {
-            openModularOverlay(overlayType)
+        mainHandler.post {
+            if (activeOverlayWebView != null && currentOpenOverlay == overlayType) {
+                closeOverlayDirect()
+            } else {
+                openModularOverlayDirect(overlayType)
+            }
         }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
-    fun openModularOverlay(overlayType: String) {
-        mainHandler.post {
-            closeOverlay()
+    private fun openModularOverlayDirect(overlayType: String) {
+        closeOverlayDirect()
 
-            if (!Settings.canDrawOverlays(this)) return@post
+        if (!Settings.canDrawOverlays(this)) return
 
-            val overlayTypeFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            } else {
-                @Suppress("DEPRECATION")
-                WindowManager.LayoutParams.TYPE_PHONE
+        val overlayTypeFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        } else {
+            @Suppress("DEPRECATION")
+            WindowManager.LayoutParams.TYPE_PHONE
+        }
+
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            overlayTypeFlag,
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.CENTER
+        }
+
+        val themedContext = ContextThemeWrapper(this, android.R.style.Theme_DeviceDefault_NoActionBar)
+        val webView = WebView(themedContext).apply {
+            setBackgroundColor(Color.TRANSPARENT)
+            settings.apply {
+                javaScriptEnabled = true
+                domStorageEnabled = true
+                databaseEnabled = true
+                allowFileAccess = true
+                allowContentAccess = true
+                cacheMode = WebSettings.LOAD_DEFAULT
+                loadWithOverviewMode = true
+                useWideViewPort = true
             }
 
-            val params = WindowManager.LayoutParams(
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.MATCH_PARENT,
-                overlayTypeFlag,
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
-                PixelFormat.TRANSLUCENT
-            ).apply {
-                gravity = Gravity.CENTER
+            webChromeClient = object : WebChromeClient() {
+                override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                    Log.d("NodusOverlayConsole", "[${consoleMessage?.messageLevel()}] ${consoleMessage?.message()} (${consoleMessage?.sourceId()}:${consoleMessage?.lineNumber()})")
+                    return true
+                }
             }
 
-            val themedContext = ContextThemeWrapper(this, android.R.style.Theme_DeviceDefault_NoActionBar)
-            val webView = WebView(themedContext).apply {
-                setBackgroundColor(Color.TRANSPARENT)
-                settings.apply {
-                    javaScriptEnabled = true
-                    domStorageEnabled = true
-                    databaseEnabled = true
-                    allowFileAccess = true
-                    allowContentAccess = true
-                    cacheMode = WebSettings.LOAD_DEFAULT
-                    loadWithOverviewMode = true
-                    useWideViewPort = true
-                }
-
-                webChromeClient = object : WebChromeClient() {
-                    override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
-                        Log.d("NodusOverlayConsole", "[${consoleMessage?.messageLevel()}] ${consoleMessage?.message()} (${consoleMessage?.sourceId()}:${consoleMessage?.lineNumber()})")
-                        return true
+            addJavascriptInterface(object {
+                @JavascriptInterface
+                fun closeOverlay() {
+                    mainHandler.post {
+                        this@NodusOverlayService.closeOverlayDirect()
                     }
                 }
 
-                addJavascriptInterface(object {
-                    @JavascriptInterface
-                    fun closeOverlay() {
+                @JavascriptInterface
+                fun copyToClipboard(text: String): Boolean {
+                    return try {
+                        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        val clip = android.content.ClipData.newPlainText("Nodus Clipboard", text)
+                        cm.setPrimaryClip(clip)
                         mainHandler.post {
-                            this@NodusOverlayService.closeOverlay()
+                            this@NodusOverlayService.closeOverlayDirect()
                         }
+                        true
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to copy to clipboard", e)
+                        false
                     }
+                }
 
-                    @JavascriptInterface
-                    fun copyToClipboard(text: String): Boolean {
-                        return try {
-                            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                            val clip = android.content.ClipData.newPlainText("Nodus Clipboard", text)
-                            cm.setPrimaryClip(clip)
-                            mainHandler.post {
-                                this@NodusOverlayService.closeOverlay()
+                @JavascriptInterface
+                fun launchApp(packageName: String) {
+                    mainHandler.post {
+                        this@NodusOverlayService.closeOverlayDirect()
+                        try {
+                            val intent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                             }
-                            true
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Failed to copy to clipboard", e)
-                            false
-                        }
-                    }
-
-                    @JavascriptInterface
-                    fun launchApp(packageName: String) {
-                        mainHandler.post {
-                            this@NodusOverlayService.closeOverlay()
-                            try {
-                                val intent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
-                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-                                }
-                                if (intent != null) {
-                                    startActivity(intent)
-                                }
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Failed to launch app $packageName", e)
-                            }
-                        }
-                    }
-
-                    @JavascriptInterface
-                    fun bringLauncherToFront() {
-                        mainHandler.post {
-                            this@NodusOverlayService.closeOverlay()
-                            try {
-                                val intent = Intent(this@NodusOverlayService, LauncherActivity::class.java).apply {
-                                    addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
-                                }
+                            if (intent != null) {
                                 startActivity(intent)
-                            } catch (_: Exception) {}
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to launch app $packageName", e)
                         }
-                    }
-                }, "NodusNativeBridge")
-
-                webViewClient = object : WebViewClient() {
-                    override fun shouldInterceptRequest(
-                        view: WebView,
-                        request: WebResourceRequest
-                    ): WebResourceResponse? {
-                        val response = assetLoader?.shouldInterceptRequest(request.url)
-                        if (response != null) {
-                            return response
-                        }
-                        return super.shouldInterceptRequest(view, request)
                     }
                 }
 
-                loadUrl("https://appassets.androidplatform.net/assets/frontend/index.html#overlay=$overlayType")
+                @JavascriptInterface
+                fun bringLauncherToFront() {
+                    mainHandler.post {
+                        this@NodusOverlayService.closeOverlayDirect()
+                        try {
+                            val intent = Intent(this@NodusOverlayService, LauncherActivity::class.java).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            startActivity(intent)
+                        } catch (_: Exception) {}
+                    }
+                }
+            }, "NodusNativeBridge")
+
+            webViewClient = object : WebViewClient() {
+                override fun shouldInterceptRequest(
+                    view: WebView,
+                    request: WebResourceRequest
+                ): WebResourceResponse? {
+                    val response = assetLoader?.shouldInterceptRequest(request.url)
+                    if (response != null) {
+                        return response
+                    }
+                    return super.shouldInterceptRequest(view, request)
+                }
             }
 
-            activeOverlayWebView = webView
-            currentOpenOverlay = overlayType
+            loadUrl("https://appassets.androidplatform.net/assets/frontend/index.html#overlay=$overlayType")
+        }
+
+        activeOverlayWebView = webView
+        currentOpenOverlay = overlayType
+        try {
+            windowManager?.addView(webView, params)
+            Log.i(TAG, "Opened modular overlay: $overlayType")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to add floating overlay window", e)
+        }
+    }
+
+    private fun closeOverlayDirect() {
+        activeOverlayWebView?.let {
             try {
-                windowManager?.addView(webView, params)
-                Log.i(TAG, "Opened modular overlay: $overlayType")
+                windowManager?.removeView(it)
+                Log.i(TAG, "Closed modular overlay")
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to add floating overlay window", e)
+                Log.w(TAG, "Failed to remove overlay view: ${e.message}")
             }
+            activeOverlayWebView = null
+            currentOpenOverlay = null
         }
     }
 
     fun closeOverlay() {
         mainHandler.post {
-            activeOverlayWebView?.let {
-                try {
-                    windowManager?.removeView(it)
-                    Log.i(TAG, "Closed modular overlay")
-                } catch (e: Exception) {
-                    Log.w(TAG, "Failed to remove overlay view: ${e.message}")
-                }
-                activeOverlayWebView = null
-                currentOpenOverlay = null
-            }
+            closeOverlayDirect()
         }
     }
 
