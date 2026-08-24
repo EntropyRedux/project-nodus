@@ -25,7 +25,8 @@ import { audio } from '../../utils/audio';
 import { AppItem } from '../../types/launcher';
 import { DEVICE_COLORS } from '../../utils/constants';
 
-export const SmartAppTaskbar: React.FC = () => {
+export const SmartAppTaskbar: React.FC<{ forceOpen?: boolean }> = ({ forceOpen = false }) => {
+  const isOverlayMode = typeof window !== 'undefined' && window.location.hash.includes('overlay=taskbar');
   const { 
     apps, 
     runningApps, 
@@ -54,7 +55,7 @@ export const SmartAppTaskbar: React.FC = () => {
     settings
   } = useLauncher();
 
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(forceOpen || isOverlayMode);
 
   // Global event listener for native system-wide overlay triggers
   useEffect(() => {
@@ -368,35 +369,37 @@ export const SmartAppTaskbar: React.FC = () => {
   return (
     <>
       {/* 1. Diagonal Swipe Corner Indicator Pill (Bottom-Left Trigger) */}
-      <div
-        onClick={triggerOpen}
-        onMouseEnter={triggerOpen}
-        className={`fixed bottom-2.5 left-3.5 z-40 px-2 py-1 rounded-xl bg-[#1C1C1E]/80 hover:bg-[#2C2C2E] backdrop-blur-xl border border-white/10 shadow-lg cursor-pointer transition-all duration-300 flex items-center gap-1.5 group select-none ${
-          isOpen ? 'opacity-0 pointer-events-none translate-y-4' : 'opacity-85 hover:opacity-100 hover:scale-105'
-        }`}
-        title="Swipe ↗ diagonally or click to show taskbar"
-      >
-        <div 
-          className="p-1 rounded-lg border group-hover:scale-110 transition"
-          style={{
-            backgroundColor: `${devColor}20`,
-            borderColor: `${devColor}40`,
-            color: devColor,
-          }}
+      {!isOverlayMode && (
+        <div
+          onClick={triggerOpen}
+          onMouseEnter={triggerOpen}
+          className={`fixed bottom-2.5 left-3.5 z-40 px-2 py-1 rounded-xl bg-[#1C1C1E]/80 hover:bg-[#2C2C2E] backdrop-blur-xl border border-white/10 shadow-lg cursor-pointer transition-all duration-300 flex items-center gap-1.5 group select-none ${
+            isOpen ? 'opacity-0 pointer-events-none translate-y-4' : 'opacity-85 hover:opacity-100 hover:scale-105'
+          }`}
+          title="Swipe ↗ diagonally or click to show taskbar"
         >
-          <ArrowUpRight size={12} className="animate-pulse" />
+          <div 
+            className="p-1 rounded-lg border group-hover:scale-110 transition"
+            style={{
+              backgroundColor: `${devColor}20`,
+              borderColor: `${devColor}40`,
+              color: devColor,
+            }}
+          >
+            <ArrowUpRight size={12} className="animate-pulse" />
+          </div>
+          <span className="text-[10px] font-semibold text-[#8E8E93] group-hover:text-[#F0F0F2] pr-0.5 hidden sm:inline">
+            {activeDevice?.name} ↗
+          </span>
         </div>
-        <span className="text-[10px] font-semibold text-[#8E8E93] group-hover:text-[#F0F0F2] pr-0.5 hidden sm:inline">
-          {activeDevice?.name} ↗
-        </span>
-      </div>
+      )}
 
       {/* 2. Floating Smart Taskbar */}
       <div
         onMouseEnter={cancelAutoHide}
-        onMouseLeave={() => resetAutoHideTimer(3500)}
+        onMouseLeave={() => !isOverlayMode && resetAutoHideTimer(3500)}
         className={`fixed bottom-3 left-1/2 -translate-x-1/2 z-50 transition-all duration-250 ease-out select-none ${
-          isOpen || isStartMenuOpen || isTaskbarOpen
+          isOpen || isStartMenuOpen || isTaskbarOpen || isOverlayMode
             ? 'opacity-100 translate-y-0 scale-100 pointer-events-auto'
             : 'opacity-0 translate-y-12 scale-95 pointer-events-none'
         }`}

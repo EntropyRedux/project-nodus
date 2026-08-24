@@ -1,11 +1,29 @@
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
+import { useLauncher } from '../../context/LauncherContext';
 import { SmartAppTaskbar } from '../layout/SmartAppTaskbar';
+import { ClipboardHistoryPanel } from '../desktop/ClipboardHistoryPanel';
+import { DeviceProcessSidePanel } from '../layout/DeviceProcessSidePanel';
+import { ToastNotification } from '../common/ToastNotification';
+import { AppContextMenu } from '../home/AppContextMenu';
 
 export const TaskbarOverlayStandalone: React.FC = () => {
+  const {
+    isClipboardOpen,
+    setClipboardOpen,
+    isSidebarCollapsed,
+    toggleSidebar,
+    setTaskbarOpen,
+  } = useLauncher();
+
   const mountTimeRef = useRef(Date.now());
 
+  useEffect(() => {
+    // Open the Taskbar immediately upon overlay load
+    setTaskbarOpen(true);
+  }, [setTaskbarOpen]);
+
   const handleClose = () => {
-    if (Date.now() - mountTimeRef.current < 350) return;
+    if (Date.now() - mountTimeRef.current < 250) return;
     try {
       if ((window as any).NodusNativeBridge?.closeOverlay) {
         (window as any).NodusNativeBridge.closeOverlay();
@@ -14,20 +32,42 @@ export const TaskbarOverlayStandalone: React.FC = () => {
   };
 
   return (
-    <div 
-      className="h-screen w-screen bg-black/40 backdrop-blur-xs flex items-end justify-center p-3 select-none animate-in fade-in duration-200"
+    <div
+      className="fixed inset-0 h-screen w-screen bg-black/45 backdrop-blur-xs flex items-end justify-center select-none animate-in fade-in duration-200"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           handleClose();
         }
       }}
     >
-      <div 
-        className="w-full max-w-4xl flex flex-col items-center justify-center animate-in slide-in-from-bottom duration-300"
+      {/* Floating Clipboard History Sheet (Right Side) */}
+      <div
+        className={`fixed top-12 bottom-20 right-4 z-50 w-80 sm:w-84 xl:w-90 flex flex-col rounded-3xl shadow-2xl transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform ${
+          isClipboardOpen
+            ? 'translate-x-0 opacity-100 pointer-events-auto shadow-2xl shadow-black/90'
+            : 'translate-x-[110%] opacity-0 pointer-events-none'
+        }`}
+      >
+        <ClipboardHistoryPanel onClose={() => setClipboardOpen(false)} />
+      </div>
+
+      {/* Floating Device Process Side Panel (Left Side) */}
+      {!isSidebarCollapsed && (
+        <div className="fixed top-12 bottom-20 left-4 z-50 w-80 sm:w-84 flex flex-col rounded-3xl shadow-2xl animate-in slide-in-from-left duration-250">
+          <DeviceProcessSidePanel />
+        </div>
+      )}
+
+      {/* Center Bottom Floating Smart Taskbar */}
+      <div
+        className="w-full max-w-4xl flex flex-col items-center justify-center pb-3"
         onClick={(e) => e.stopPropagation()}
       >
         <SmartAppTaskbar />
       </div>
+
+      <ToastNotification />
+      <AppContextMenu />
     </div>
   );
 };

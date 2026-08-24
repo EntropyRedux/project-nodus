@@ -47,6 +47,14 @@ class LauncherActivity : AppCompatActivity() {
 
     companion object {
         const val TAG = "NodusLauncherActivity"
+        var isForegroundResumed: Boolean = false
+        var instance: LauncherActivity? = null
+    }
+
+    fun toggleDesktopTaskbar() {
+        runOnUiThread {
+            webView.evaluateJavascript("(function(){ if (window.dispatchEvent) { window.dispatchEvent(new CustomEvent('nodus_open_panel', { detail: { panel: 'taskbar' } })); } })()", null)
+        }
     }
 
     private lateinit var webView: WebView
@@ -608,6 +616,8 @@ class LauncherActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        instance = this
+        isForegroundResumed = true
         if (Settings.canDrawOverlays(this)) {
             try {
                 startService(Intent(this, com.nodus.launcher.service.NodusAssistiveTouchService::class.java))
@@ -623,10 +633,15 @@ class LauncherActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        isForegroundResumed = false
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        if (instance == this) {
+            instance = null
+        }
+        isForegroundResumed = false
         try {
             unregisterReceiver(packageChangeReceiver)
         } catch (e: Exception) {
