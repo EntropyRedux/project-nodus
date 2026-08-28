@@ -1,0 +1,18 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+agent-go/nodus-agent
+
+# Android build outputs & local config
+.gradle/
+**/build/
+android-shell/local.properties
+.idea/
+*.iml
+
+# Android signing keys (NEVER commit these)
+*.keystore
+*.jks
+android-shell/keystore.properties
+android-shell/nodus-release.keystore

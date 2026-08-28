@@ -1,36 +1,37 @@
 {
-  "name": "project-nodus",
-  "private": true,
+  "name": "project-nodus-workspace",
   "version": "1.0.0",
-  "type": "module",
+  "private": true,
+  "description": "Nodus Ecosystem Monorepo & Multi-Device Shell Workspace",
+  "workspaces": [
+    "packages/nodus-common",
+    "packages/nodus-home",
+    "packages/nodus-fleet",
+    "packages/nodus-assistive",
+    "packages/nodus-desktop",
+    "packages/nodus-legacy"
+  ],
+
   "scripts": {
-    "dev": "vite --port=3000 --host=0.0.0.0",
-    "build": "vite build",
-    "sync:assets": "mkdir -p android-shell/app/src/main/assets/frontend && cp -r dist/* android-shell/app/src/main/assets/frontend/",
-    "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "dev:home": "npm run --prefix packages/nodus-home dev",
+    "build:home": "npm run --prefix packages/nodus-home build",
+    "dev:fleet": "npm run --prefix packages/nodus-fleet dev",
+    "build:fleet": "npm run --prefix packages/nodus-fleet build",
+    "dev:aistudio": "npm run --prefix packages/nodus-home-aistudio dev",
+    "build:aistudio": "npm run --prefix packages/nodus-home-aistudio build",
+    "dev:desktop": "npm run --prefix packages/nodus-desktop tauri dev",
+    "build:desktop": "npm run --prefix packages/nodus-desktop tauri build",
+    "build:all": "npm run build --workspaces --if-present",
+    "clean": "npm run clean --workspaces --if-present"
   },
-  "dependencies": {
-    "@google/genai": "^2.4.0",
-    "@tailwindcss/vite": "^4.1.14",
-    "@vitejs/plugin-react": "^5.0.4",
-    "lucide-react": "^0.546.0",
-    "react": "^19.0.1",
-    "react-dom": "^19.0.1",
-    "vite": "^6.2.3",
-    "express": "^4.21.2",
-    "dotenv": "^17.2.3",
-    "motion": "^12.23.24"
-  },
-  "devDependencies": {
-    "@types/node": "^22.14.0",
-    "autoprefixer": "^10.4.21",
-    "esbuild": "^0.25.0",
-    "tailwindcss": "^4.1.14",
-    "tsx": "^4.21.0",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.3",
-    "@types/express": "^4.17.21"
-  }
+  "keywords": [
+    "nodus",
+    "launcher",
+    "tablet-os",
+    "hyperos",
+    "android",
+    "fleet-mesh"
+  ],
+  "author": "EntropyRedux",
+  "license": "MIT"
 }

@@ -1,18 +1,46 @@
+# Node & Web
 node_modules/
+**/node_modules/
 dist/
+**/dist/
 *.log
 .DS_Store
-agent-go/nodus-agent
 
-# Android build outputs & local config
+# Rust / Tauri
+target/
+**/target/
+
+# Android Build Outputs & Local Config
 .gradle/
+**/.gradle/
 **/build/
-android-shell/local.properties
+local.properties
+**/local.properties
 .idea/
+**/.idea/
 *.iml
+**/*.iml
 
-# Android signing keys (NEVER commit these)
+# Android Signing Keys & Credentials (NEVER commit)
 *.keystore
 *.jks
-android-shell/keystore.properties
-android-shell/nodus-release.keystore
+keystore.properties
+**/keystore.properties
+*.pem
+*.key
+*.p12
+
+# Environment files
+.env
+.env.local
+.env.*.local
+*.env
+
+# Binaries & Outputs
+*.apk
+*.aab
+*.exe
+*.dll
+*.so
+*.dylib
+

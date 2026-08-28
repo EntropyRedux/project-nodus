@@ -1,0 +1,31 @@
+{
+  "name": "project-nodus-fleet",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port=3001 --host=0.0.0.0",
+    "build": "vite build",
+    "sync:assets": "powershell -Command \"if (Test-Path android-shell/app/src/main/assets/frontend) { Remove-Item -Recurse -Force android-shell/app/src/main/assets/frontend/* } else { New-Item -ItemType Directory -Path android-shell/app/src/main/assets/frontend -Force }; Copy-Item -Recurse dist/* android-shell/app/src/main/assets/frontend/\"",
+    "preview": "vite preview",
+    "clean": "rm -rf dist",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@nodus/common": "file:../nodus-common",
+    "@tailwindcss/vite": "^4.1.14",
+    "@vitejs/plugin-react": "^5.0.4",
+    "lucide-react": "^0.546.0",
+    "motion": "^12.23.24",
+    "react": "^19.0.1",
+    "react-dom": "^19.0.1",
+    "vite": "^6.2.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "autoprefixer": "^10.4.21",
+    "esbuild": "^0.25.0",
+    "tailwindcss": "^4.1.14",
+    "typescript": "~5.8.2"
+  }
+}

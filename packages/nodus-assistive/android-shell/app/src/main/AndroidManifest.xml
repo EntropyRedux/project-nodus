@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Permissions -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="com.nodus.permission.FLEET_ACCESS" />
+
+    <!-- Android 11+ Package Visibility -->
+    <queries>
+        <package android:name="com.nodus.home" />
+        <package android:name="com.nodus.fleet" />
+        <package android:name="com.nodus.launcher" />
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="Nodus Touch"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
+        android:theme="@style/Theme.NodusHome">
+
+        <!-- Setup & Permission Wizard Activity -->
+        <activity
+            android:name=".PermissionActivity"
+            android:launchMode="singleTop"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Floating Assistive Overlay Service -->
+        <service
+            android:name=".service.AssistiveTouchService"
+            android:foregroundServiceType="specialUse"
+            android:exported="true">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Floating assistive accessibility taskbar overlay" />
+        </service>
+
+        <!-- Fleet & Home State Receiver -->
+        <receiver
+            android:name=".receiver.FleetStateReceiver"
+            android:permission="com.nodus.permission.FLEET_ACCESS"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.nodus.fleet.STATE_CHANGED" />
+                <action android:name="com.nodus.fleet.CLIPBOARD_CHANGED" />
+                <action android:name="com.nodus.home.SETTINGS_CHANGED" />
+            </intent-filter>
+        </receiver>
+
+    </application>
+</manifest>

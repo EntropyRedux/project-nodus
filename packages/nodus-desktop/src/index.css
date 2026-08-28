@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+/* ─── Nodus Desktop — Obsidian Glass Design System ──────────────── */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --nodus-bg-primary: #121218;
+  --nodus-bg-secondary: #181822;
+  --nodus-bg-tertiary: #20202C;
+  --nodus-text-primary: #F0F0F2;
+  --nodus-text-secondary: #8E8E93;
+  --nodus-accent-green: #34C759;
+  --nodus-accent-blue: #007AFF;
+  --nodus-accent-orange: #FF9500;
+  --nodus-accent-purple: #BF5AF2;
+  --nodus-accent-red: #FF3B30;
+  --nodus-border: rgba(255, 255, 255, 0.08);
+
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #F0F0F2;
+  background-color: #0A0A0E;
+  -webkit-font-smoothing: antialiased;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  background-color: #0A0A0E;
+  color: #F0F0F2;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* ─── Panel Glass Base ─────────────────────────────────────────── */
+.nodus-glass {
+  background: rgba(18, 18, 24, 0.92);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+}
+
+/* ─── Scrollbar ────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* ─── Truncate Utility ─────────────────────────────────────────── */
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

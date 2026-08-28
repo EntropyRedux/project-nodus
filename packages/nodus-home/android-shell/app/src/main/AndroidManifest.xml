@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Launcher Permissions -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+
+    <!-- IPC Signature Permission -->
+    <permission
+        android:name="com.nodus.permission.FLEET_ACCESS"
+        android:protectionLevel="signature" />
+
+    <uses-permission android:name="com.nodus.permission.FLEET_ACCESS" />
+
+    <!-- Android 11+ Package Visibility Declaration -->
+    <queries>
+        <package android:name="com.nodus.fleet" />
+        <package android:name="com.nodus.assistive" />
+        <package android:name="com.nodus.launcher" />
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="Nodus Home"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
+        android:theme="@style/Theme.NodusHome">
+
+        <!-- Native Android Launcher Home Activity -->
+        <activity
+            android:name=".HomeActivity"
+            android:launchMode="singleTask"
+            android:clearTaskOnLaunch="true"
+            android:stateNotNeeded="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- HMAC QR Code Deep Link Provisioning Filter -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="nodus" android:host="pair" />
+            </intent-filter>
+        </activity>
+
+        <!-- Settings ContentProvider for companion APKs -->
+        <provider
+            android:name=".provider.HomeSettingsProvider"
+            android:authorities="com.nodus.home.provider"
+            android:permission="com.nodus.permission.FLEET_ACCESS"
+            android:exported="true" />
+
+        <!-- Fleet State Change Receiver -->
+        <receiver
+            android:name=".receiver.FleetStateReceiver"
+            android:permission="com.nodus.permission.FLEET_ACCESS"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.nodus.fleet.STATE_CHANGED" />
+                <action android:name="com.nodus.fleet.CLIPBOARD_CHANGED" />
+                <action android:name="com.nodus.fleet.DEVICE_CONNECTED" />
+                <action android:name="com.nodus.fleet.DEVICE_DISCONNECTED" />
+                <action android:name="com.nodus.home.TOGGLE_TASKBAR" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Accessibility Service for hardware-level navigation -->
+        <service
+            android:name=".service.NodusAccessibilityService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
+        <!-- Real-Time OS App Notification Listener Service -->
+        <service
+            android:name=".service.NodusNotificationListenerService"
+            android:label="Nodus Notification Listener"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+    </application>
+</manifest>

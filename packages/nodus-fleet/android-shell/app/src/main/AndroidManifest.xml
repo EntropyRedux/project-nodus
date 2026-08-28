@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Network & Hardware Permissions -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- IPC Signature Permission -->
+    <permission
+        android:name="com.nodus.permission.FLEET_ACCESS"
+        android:protectionLevel="signature" />
+
+    <uses-permission android:name="com.nodus.permission.FLEET_ACCESS" />
+
+    <!-- Android 11+ Package Visibility -->
+    <queries>
+        <package android:name="com.nodus.home" />
+        <package android:name="com.nodus.assistive" />
+        <package android:name="com.nodus.launcher" />
+    </queries>
+
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="Nodus Fleet"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
+        android:theme="@style/Theme.NodusHome">
+
+        <!-- Standalone Fleet Controller Activity -->
+        <activity
+            android:name=".FleetActivity"
+            android:launchMode="singleTop"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Fleet ContentProvider for exporting device and clipboard data -->
+        <provider
+            android:name=".provider.FleetDataProvider"
+            android:authorities="com.nodus.fleet.provider"
+            android:permission="com.nodus.permission.FLEET_ACCESS"
+            android:exported="true" />
+
+        <!-- Persistent Background WebSocket Cluster Daemon -->
+        <service
+            android:name=".service.FleetDaemonService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false" />
+
+        <!-- Clipboard Sync Service -->
+        <service
+            android:name=".service.ClipboardSyncService"
+            android:exported="false" />
+
+    </application>
+</manifest>
