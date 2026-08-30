@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useFleet } from '../context/FleetContext';
 import {
   Server,
@@ -13,9 +13,13 @@ import {
   Trash2,
   RefreshCw,
   Layers,
-  Activity
+  Activity,
+  Sliders,
+  Send,
+  Plus
 } from 'lucide-react';
-import { DEVICE_COLORS } from '@nodus/common';
+import { DEVICE_COLORS, DeviceInfo } from '@nodus/common';
+import { DeviceControlModal } from './DeviceControlModal';
 
 export const FleetDashboard: React.FC = () => {
   const {
@@ -30,6 +34,10 @@ export const FleetDashboard: React.FC = () => {
     clearClipboard,
     refreshState
   } = useFleet();
+
+  const [controlDevice, setControlDevice] = useState<DeviceInfo | null>(null);
+  const [broadcastText, setBroadcastText] = useState('');
+  const [broadcastStatus, setBroadcastStatus] = useState<string | null>(null);
 
   const getDeviceIcon = (type: string) => {
     switch (type) {
@@ -146,6 +154,14 @@ export const FleetDashboard: React.FC = () => {
 
                     <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800/60">
                       <button
+                        onClick={() => setControlDevice(device)}
+                        className="px-2.5 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-xs font-semibold flex items-center gap-1.5 transition border border-blue-500/30"
+                        title="Open Control Deck"
+                      >
+                        <Sliders className="w-3.5 h-3.5" />
+                        <span>Control</span>
+                      </button>
+                      <button
                         onClick={() => rebootDevice(device.id)}
                         className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs flex items-center gap-1 transition"
                         title="Reboot Device"
@@ -194,6 +210,40 @@ export const FleetDashboard: React.FC = () => {
               <span className="font-semibold text-emerald-400">Active</span>
             </div>
 
+            {/* Broadcast Clipboard Bar */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!broadcastText.trim()) return;
+                const bridge = (window as any).NodusNativeBridge;
+                if (bridge && typeof bridge.setClipboardText === 'function') {
+                  bridge.setClipboardText(broadcastText);
+                }
+                setBroadcastStatus('Broadcasted to mesh');
+                setBroadcastText('');
+                setTimeout(() => setBroadcastStatus(null), 2000);
+              }}
+              className="flex gap-2"
+            >
+              <input
+                type="text"
+                value={broadcastText}
+                onChange={(e) => setBroadcastText(e.target.value)}
+                placeholder="Broadcast to all devices..."
+                className="flex-1 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+              />
+              <button
+                type="submit"
+                className="p-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs transition"
+                title="Send"
+              >
+                <Send className="w-3.5 h-3.5" />
+              </button>
+            </form>
+            {broadcastStatus && (
+              <p className="text-[11px] text-emerald-400 text-center font-medium">{broadcastStatus}</p>
+            )}
+
             {clipboardItems.length === 0 ? (
               <div className="py-6 text-center text-xs text-slate-500">
                 Clipboard history is empty. Items copied across mesh devices will automatically sync here.
@@ -217,6 +267,14 @@ export const FleetDashboard: React.FC = () => {
           </div>
         </div>
       </main>
+
+      {/* Device Control Modal */}
+      {controlDevice && (
+        <DeviceControlModal
+          device={controlDevice}
+          onClose={() => setControlDevice(null)}
+        />
+      )}
     </div>
   );
 };

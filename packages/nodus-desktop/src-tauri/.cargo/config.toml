@@ -1,6 +1,9 @@
 [build]
-jobs = 2
-rustflags = ["-C", "link-arg=/STACK:16777216"]
+jobs = 1
+rustflags = ["-C", "link-arg=/STACK:33554432"]
 
 [env]
-RUST_MIN_STACK = "16777216"
+RUST_MIN_STACK = "33554432"
+CARGO_BUILD_JOBS = "1"
+
+

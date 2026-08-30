@@ -9,7 +9,8 @@ export default defineConfig(() => {
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(__dirname, './src'),
+        '@nodus/common': path.resolve(__dirname, '../nodus-common/src'),
       },
     },
     server: {
