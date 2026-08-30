@@ -41,6 +41,33 @@ struct ClipboardReq {
     text: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct MouseMoveHttpReq {
+    dx: i32,
+    dy: i32,
+}
+
+#[derive(Debug, Deserialize)]
+struct MouseClickHttpReq {
+    button: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct MouseScrollHttpReq {
+    dx: Option<i32>,
+    dy: Option<i32>,
+}
+
+#[derive(Debug, Deserialize)]
+struct HotkeyHttpReq {
+    keys: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TextHttpReq {
+    text: String,
+}
+
 fn cors_headers() -> Vec<Header> {
     vec![
         Header::from_bytes(&b"Access-Control-Allow-Origin"[..], &b"*"[..]).unwrap(),
@@ -201,6 +228,101 @@ pub fn start_server(port: u16) {
                         }
                     } else {
                         (400, json!({ "status": "error", "message": "Invalid clipboard payload" }))
+                    }
+                }
+
+                // Virtual Mouse: Move
+                (Method::Post, "/api/input/mouse/move") => {
+                    let mut body_str = String::new();
+                    let _ = request.as_reader().read_to_string(&mut body_str);
+                    if let Ok(req) = serde_json::from_str::<MouseMoveHttpReq>(&body_str) {
+                        #[cfg(windows)]
+                        {
+                            match crate::commands::input::send_mouse_relative(req.dx, req.dy) {
+                                Ok(_) => (200, json!({ "status": "success" })),
+                                Err(e) => (500, json!({ "status": "error", "message": e })),
+                            }
+                        }
+                        #[cfg(not(windows))]
+                        (200, json!({ "status": "success" }))
+                    } else {
+                        (400, json!({ "status": "error", "message": "Invalid mouse move payload" }))
+                    }
+                }
+
+                // Virtual Mouse: Click
+                (Method::Post, "/api/input/mouse/click") => {
+                    let mut body_str = String::new();
+                    let _ = request.as_reader().read_to_string(&mut body_str);
+                    if let Ok(req) = serde_json::from_str::<MouseClickHttpReq>(&body_str) {
+                        #[cfg(windows)]
+                        {
+                            match crate::commands::input::send_mouse_click(&req.button) {
+                                Ok(_) => (200, json!({ "status": "success", "button": req.button })),
+                                Err(e) => (500, json!({ "status": "error", "message": e })),
+                            }
+                        }
+                        #[cfg(not(windows))]
+                        (200, json!({ "status": "success" }))
+                    } else {
+                        (400, json!({ "status": "error", "message": "Invalid mouse click payload" }))
+                    }
+                }
+
+                // Virtual Mouse: Scroll
+                (Method::Post, "/api/input/mouse/scroll") => {
+                    let mut body_str = String::new();
+                    let _ = request.as_reader().read_to_string(&mut body_str);
+                    if let Ok(req) = serde_json::from_str::<MouseScrollHttpReq>(&body_str) {
+                        #[cfg(windows)]
+                        {
+                            match crate::commands::input::send_mouse_scroll(req.dx.unwrap_or(0), req.dy.unwrap_or(0)) {
+                                Ok(_) => (200, json!({ "status": "success" })),
+                                Err(e) => (500, json!({ "status": "error", "message": e })),
+                            }
+                        }
+                        #[cfg(not(windows))]
+                        (200, json!({ "status": "success" }))
+                    } else {
+                        (400, json!({ "status": "error", "message": "Invalid mouse scroll payload" }))
+                    }
+                }
+
+                // Virtual Keyboard: Hotkey
+                (Method::Post, "/api/input/keyboard/hotkey") => {
+                    let mut body_str = String::new();
+                    let _ = request.as_reader().read_to_string(&mut body_str);
+                    if let Ok(req) = serde_json::from_str::<HotkeyHttpReq>(&body_str) {
+                        #[cfg(windows)]
+                        {
+                            match crate::commands::input::send_hotkey(&req.keys) {
+                                Ok(_) => (200, json!({ "status": "success", "keys": req.keys })),
+                                Err(e) => (500, json!({ "status": "error", "message": e })),
+                            }
+                        }
+                        #[cfg(not(windows))]
+                        (200, json!({ "status": "success" }))
+                    } else {
+                        (400, json!({ "status": "error", "message": "Invalid hotkey payload" }))
+                    }
+                }
+
+                // Virtual Keyboard: Text Typing
+                (Method::Post, "/api/input/keyboard/text") => {
+                    let mut body_str = String::new();
+                    let _ = request.as_reader().read_to_string(&mut body_str);
+                    if let Ok(req) = serde_json::from_str::<TextHttpReq>(&body_str) {
+                        #[cfg(windows)]
+                        {
+                            match crate::commands::input::send_unicode_text(&req.text) {
+                                Ok(_) => (200, json!({ "status": "success" })),
+                                Err(e) => (500, json!({ "status": "error", "message": e })),
+                            }
+                        }
+                        #[cfg(not(windows))]
+                        (200, json!({ "status": "success" }))
+                    } else {
+                        (400, json!({ "status": "error", "message": "Invalid text payload" }))
                     }
                 }
 

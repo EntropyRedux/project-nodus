@@ -112,4 +112,4 @@ export interface HotCornerConfig {
   corners: Record<'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight', string>;
 }
 
-export type ActiveTab = 'fleet' | 'config' | 'clipboard' | 'shortcuts' | 'hotcorners' | 'processes';
+export type ActiveTab = 'fleet' | 'remotedeck' | 'config' | 'clipboard' | 'shortcuts' | 'hotcorners' | 'processes';

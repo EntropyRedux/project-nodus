@@ -1,6 +1,7 @@
 import React from 'react';
 import { useDesktop } from '../../context/DesktopContext';
 import { FleetPanel } from '../panels/FleetPanel';
+import { RemoteDeckPanel } from '../panels/RemoteDeckPanel';
 import { ConfigPanel } from '../panels/ConfigPanel';
 import { ClipboardPanel } from '../panels/ClipboardPanel';
 import { ShortcutsPanel } from '../panels/ShortcutsPanel';
@@ -17,6 +18,7 @@ import {
   Layers, 
   Monitor, 
   Tablet,
+  MousePointer,
   CheckCircle2
 } from 'lucide-react';
 import { ActiveTab } from '../../types/desktop';
@@ -41,6 +43,7 @@ export const DesktopAppShell: React.FC = () => {
     accentColor: string;
   }> = [
     { id: 'fleet', label: 'Fleet Mesh', icon: Radio, badge: devices.length, accentColor: '#34C759' },
+    { id: 'remotedeck', label: 'Remote Deck & Touch', icon: MousePointer, accentColor: '#30D158' },
     { id: 'config', label: 'Bridge Config', icon: Settings, accentColor: '#34C759' },
     { id: 'clipboard', label: 'Clipboard Hub', icon: Clipboard, badge: clipboardItems.length || undefined, accentColor: '#007AFF' },
     { id: 'shortcuts', label: 'Remote Shortcuts', icon: Zap, badge: remoteExecutables.length || undefined, accentColor: '#BF5AF2' },
@@ -144,6 +147,7 @@ export const DesktopAppShell: React.FC = () => {
       {/* ─── Main Content Canvas ──────────────────────────────────── */}
       <main className="flex-1 h-full bg-[#0A0A0E] flex flex-col p-6 overflow-hidden">
         {activeTab === 'fleet' && <FleetPanel />}
+        {activeTab === 'remotedeck' && <RemoteDeckPanel />}
         {activeTab === 'config' && <ConfigPanel />}
         {activeTab === 'clipboard' && <ClipboardPanel />}
         {activeTab === 'shortcuts' && <ShortcutsPanel />}

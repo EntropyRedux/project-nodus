@@ -25,6 +25,11 @@ pub fn run() {
             commands::clipboard::get_clipboard_text,
             commands::clipboard::set_clipboard_text,
             commands::exec::execute_local_command,
+            commands::input::simulate_mouse_move,
+            commands::input::simulate_mouse_click,
+            commands::input::simulate_mouse_scroll,
+            commands::input::simulate_hotkey,
+            commands::input::simulate_text,
             hotcorners::get_hotcorner_config,
             hotcorners::set_hotcorner_enabled,
         ])

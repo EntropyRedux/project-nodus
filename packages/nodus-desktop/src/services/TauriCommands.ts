@@ -119,4 +119,49 @@ export const TauriService = {
       return false;
     }
   },
+
+  async simulateMouseMove(dx: number, dy: number): Promise<boolean> {
+    try {
+      return await invoke<boolean>('simulate_mouse_move', { dx, dy });
+    } catch (e) {
+      console.error('[TauriService] simulateMouseMove error:', e);
+      return false;
+    }
+  },
+
+  async simulateMouseClick(button: string): Promise<boolean> {
+    try {
+      return await invoke<boolean>('simulate_mouse_click', { button });
+    } catch (e) {
+      console.error(`[TauriService] simulateMouseClick(${button}) error:`, e);
+      return false;
+    }
+  },
+
+  async simulateMouseScroll(dx?: number, dy?: number): Promise<boolean> {
+    try {
+      return await invoke<boolean>('simulate_mouse_scroll', { dx, dy });
+    } catch (e) {
+      console.error('[TauriService] simulateMouseScroll error:', e);
+      return false;
+    }
+  },
+
+  async simulateHotkey(keys: string[]): Promise<boolean> {
+    try {
+      return await invoke<boolean>('simulate_hotkey', { keys });
+    } catch (e) {
+      console.error(`[TauriService] simulateHotkey(${keys.join('+')}) error:`, e);
+      return false;
+    }
+  },
+
+  async simulateText(text: string): Promise<boolean> {
+    try {
+      return await invoke<boolean>('simulate_text', { text });
+    } catch (e) {
+      console.error('[TauriService] simulateText error:', e);
+      return false;
+    }
+  },
 };

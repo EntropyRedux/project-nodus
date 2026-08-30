@@ -63,8 +63,10 @@ The project is structured as a **Turborepo/NPM modular monorepo** under `package
   - **Subnet UDP Beacon & Responder (`src-tauri/src/discovery/mod.rs`)**: Listens on UDP `8765` for `NODUS_DISCOVER_REQ` and `PCCONTROL_MASTER` probes; broadcasts 5-second discovery beacons across the LAN.
   - **Win32 Media Control (`src-tauri/src/commands/media.rs`)**: Direct `WM_APPCOMMAND` dispatch to `Shell_TrayWnd` for volume control, mute, and media playback.
   - **Host Clipboard Watcher (`src-tauri/src/commands/clipboard.rs`)**: Automatically synchronizes host Windows clipboard changes to the Clipboard Hub and connected tablet nodes.
+  - **Win32 Input Simulation Engine (`src-tauri/src/commands/input.rs`)**: Native `SendInput` backend supporting sub-millisecond mouse relative movement, left/right/double clicks, vertical/horizontal scrolling, system hotkey combos (`Ctrl+Shift+Esc`, `Win+D`, `Alt+Tab`, `Win+Shift+S`), and direct Unicode text typing into the focused Windows window.
+  - **Virtual Trackpad & Remote Deck UI (`src/components/panels/RemoteDeckPanel.tsx`)**: Precision glass trackpad surface with touch/mouse event capture, media scrubbing deck, hotkey launchpads, and remote text injector.
   - **Hot-Corner Detection (`src-tauri/src/hotcorners/mod.rs`)**: Low-overhead 60Hz cursor polling detecting screen corners to trigger customized actions.
-  - **Compilation Stability**: Configured `.cargo/config.toml` with `jobs = 4` and `crate-type = ["rlib"]` for fast Windows MSVC linking.
+  - **Compilation Stability**: Optimized `.cargo/config.toml` with `RUST_MIN_STACK = "16777216"`, `jobs = 2`, and `[profile.dev] opt-level = 1` preventing Windows MSVC compiler stack buffer overrun (`0xc0000409`).
 
 ### 2. `packages/nodus-home` (Primary Tablet Launcher)
 - **Engine**: React 19 + TypeScript + TailwindCSS hosted inside a native Kotlin Android shell (`HomeActivity.kt`) with `WebViewAssetLoader`.
@@ -107,6 +109,12 @@ The embedded Windows companion server (`http://<PC_IP>:9120`) exposes the follow
 | `POST` | `/api/exec` | Launch app, script, or URL | `{"command":"wt.exe","args":"-p PowerShell"}` |
 | `GET` | `/api/clipboard` | Read host clipboard | `{"status":"success","text":"https://github.com/..."}` |
 | `POST` | `/api/clipboard` | Write to host clipboard | `{"text":"Hello from POCO Pad"}` |
+| `POST` | `/api/input/mouse/move` | Relative mouse delta | `{"dx": 15, "dy": -8}` |
+| `POST` | `/api/input/mouse/click` | Mouse button click | `{"button": "left" \| "right" \| "middle" \| "double"}` |
+| `POST` | `/api/input/mouse/scroll` | Mouse wheel scroll | `{"dx": 0, "dy": 1}` |
+| `POST` | `/api/input/keyboard/hotkey` | Trigger key combination | `{"keys": ["ctrl", "shift", "esc"]}` |
+| `POST` | `/api/input/keyboard/text` | Type Unicode string | `{"text": "git commit -m 'feat: trackpad'"}` |
+
 
 ---
 
