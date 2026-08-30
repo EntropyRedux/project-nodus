@@ -1,9 +1,10 @@
-import React, { useRef, memo, useCallback, useState, useMemo } from 'react';
+import React, { useRef, memo, useCallback, useMemo } from 'react';
 import { X, FolderPlus } from 'lucide-react';
 import { AppItem } from '../../types/launcher';
 import { DynamicIcon } from '../common/DynamicIcon';
 import { useLauncher } from '../../context/LauncherContext';
 import { audio } from '../../utils/audio';
+import { getSystemTheme, getAccentColor } from '../../utils/themes';
 
 interface AppIconProps {
   app: AppItem;
@@ -16,7 +17,6 @@ export const AppIcon: React.FC<AppIconProps> = memo(({ app, size = 'normal' }) =
     isEditing, 
     setIsEditing, 
     uninstallApp, 
-    createFolderFromApps, 
     addAppToFolder,
     moveApp,
     draggedAppId,
@@ -27,6 +27,7 @@ export const AppIcon: React.FC<AppIconProps> = memo(({ app, size = 'normal' }) =
     showConfirm,
     notifications,
     appBadges,
+    openAppContextMenu,
   } = useLauncher();
 
   const pointerStartPos = useRef<{ x: number; y: number } | null>(null);
@@ -49,30 +50,24 @@ export const AppIcon: React.FC<AppIconProps> = memo(({ app, size = 'normal' }) =
     hasTriggeredDrag.current = false;
 
     if (isEditing) {
-      // In Arrange mode: instantly arm dragged item on pointer down
       hasTriggeredDrag.current = true;
       setDraggedAppId(app.id);
       setDragPosition({ x: e.clientX, y: e.clientY });
       audio.playTap();
     } else {
-      // In Normal mode: 350ms long-press enters arrange mode and starts drag
       longPressTimerRef.current = window.setTimeout(() => {
         audio.playTap();
-        setIsEditing(true);
-        hasTriggeredDrag.current = true;
-        setDraggedAppId(app.id);
-        setDragPosition({ x: e.clientX, y: e.clientY });
+        openAppContextMenu(app.id, e.clientX, e.clientY);
         longPressTimerRef.current = null;
-      }, 350);
+      }, 400);
     }
-  }, [isEditing, setIsEditing, app.id, setDraggedAppId, setDragPosition, size]);
+  }, [isEditing, app.id, setDraggedAppId, setDragPosition, size, openAppContextMenu]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     if (!pointerStartPos.current || hasTriggeredDrag.current) return;
     const dist = Math.hypot(e.clientX - pointerStartPos.current.x, e.clientY - pointerStartPos.current.y);
 
     if (dist > 8) {
-      // Cancel long press if user is scrolling in normal mode
       if (longPressTimerRef.current) {
         clearTimeout(longPressTimerRef.current);
         longPressTimerRef.current = null;
@@ -80,16 +75,7 @@ export const AppIcon: React.FC<AppIconProps> = memo(({ app, size = 'normal' }) =
     }
   }, []);
 
-  const handlePointerUp = useCallback((e: React.PointerEvent) => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-    pointerStartPos.current = null;
-    hasTriggeredDrag.current = false;
-  }, []);
-
-  const handlePointerCancel = useCallback(() => {
+  const handlePointerUp = useCallback(() => {
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
@@ -100,45 +86,74 @@ export const AppIcon: React.FC<AppIconProps> = memo(({ app, size = 'normal' }) =
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isEditing) {
-      return;
-    }
+    if (isEditing) return;
     launchApp(app.id);
   }, [isEditing, launchApp, app.id]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
-  }, []);
+    e.stopPropagation();
+    openAppContextMenu(app.id, e.clientX, e.clientY);
+  }, [app.id, openAppContextMenu]);
+
+  const currentTheme = getSystemTheme(settings.theme);
+  const currentAccent = getAccentColor(settings.accentColor);
 
   const iconStyle = settings.iconStyle;
   const iconSize = settings.iconSize || 'medium';
 
-  // Dynamic dimension mapping based on icon size setting
+  const radiusByArchetype = {
+    glass: {
+      small: 'rounded-xl',
+      medium: 'rounded-2xl',
+      large: 'rounded-2xl',
+      xlarge: 'rounded-[1.25rem]',
+    },
+    hud: {
+      small: 'rounded-none',
+      medium: 'rounded-none',
+      large: 'rounded-none',
+      xlarge: 'rounded-none',
+    },
+    brutalist: {
+      small: 'rounded-md',
+      medium: 'rounded-lg',
+      large: 'rounded-xl',
+      xlarge: 'rounded-xl',
+    },
+    minimal: {
+      small: 'rounded-none',
+      medium: 'rounded-none',
+      large: 'rounded-none',
+      xlarge: 'rounded-none',
+    },
+  }[currentTheme.archetype];
+
   const sizeMap = {
     small: {
-      box: 'w-12 h-12 rounded-[1.25rem]',
+      box: `w-12 h-12 ${radiusByArchetype.small}`,
       img: 'w-7 h-7 rounded-lg',
       icon: 18,
       text: 'text-[10px] max-w-[64px]',
       wrapper: 'min-w-[60px] max-w-[74px]',
     },
     medium: {
-      box: 'w-14 h-14 rounded-[1.5rem]',
+      box: `w-14 h-14 ${radiusByArchetype.medium}`,
       img: 'w-9 h-9 rounded-xl',
       icon: 22,
       text: 'text-[11px] max-w-[78px]',
       wrapper: 'min-w-[72px] max-w-[88px]',
     },
     large: {
-      box: 'w-16 h-16 rounded-[1.75rem]',
-      img: 'w-11 h-11 rounded-2xl',
+      box: `w-16 h-16 ${radiusByArchetype.large}`,
+      img: 'w-11 h-11 rounded-xl',
       icon: 26,
       text: 'text-xs max-w-[90px]',
       wrapper: 'min-w-[80px] max-w-[100px]',
     },
     xlarge: {
-      box: 'w-20 h-20 rounded-[2rem]',
-      img: 'w-14 h-14 rounded-2xl',
+      box: `w-20 h-20 ${radiusByArchetype.xlarge}`,
+      img: 'w-14 h-14 rounded-xl',
       icon: 32,
       text: 'text-xs font-medium max-w-[104px]',
       wrapper: 'min-w-[92px] max-w-[115px]',
@@ -147,36 +162,36 @@ export const AppIcon: React.FC<AppIconProps> = memo(({ app, size = 'normal' }) =
 
   const currentSize = size === 'dock' ? sizeMap.medium : sizeMap[iconSize];
 
-  // Icon container visual styling based on IconStyle preset
   const getIconClass = () => {
-    const base = `${currentSize.box} transition-all duration-200 flex items-center justify-center relative shadow-xl border border-white/5`;
-    
+    const base = `${currentSize.box} transition-all duration-200 flex items-center justify-center relative ${currentTheme.classes.iconBorder} ${currentTheme.classes.iconShadow}`;
+
     switch (iconStyle) {
       case 'material-you':
-        return `${base} bg-[#1C1C1E] text-white hover:bg-[#2C2C2E]`;
+        return `${base} ${currentTheme.classes.iconBg} text-[#F1F5F9] ${currentTheme.classes.iconHover}`;
       case 'monochrome':
-        return `${base} bg-[#1C1C1E] text-[#F0F0F2] hover:bg-[#2C2C2E]`;
+        return `${base} ${currentTheme.classes.iconBg} text-[#E2E8F0] ${currentTheme.classes.iconHover}`;
       case 'outline':
-        return `${base} bg-[#1C1C1E]/80 border-2 border-[#4A4A4F] text-[#F0F0F2] hover:border-[#8E8E93]`;
+        return `${base} ${currentTheme.classes.iconBg} ${currentTheme.classes.iconHover}`;
       case 'neon':
-        return `${base} bg-[#0A0A0C] border border-[#34C759]/60 text-[#34C759] shadow-lg shadow-[#34C759]/20`;
+        return `${base} ${currentTheme.classes.iconBg} ${currentTheme.classes.iconHover}`;
       case 'squircle-color':
-        return `${base} text-white shadow-lg`;
+        return `${base} text-white`;
       case 'minimal-text':
-        return `${base} bg-[#1C1C1E] text-[#8E8E93] hover:text-[#F0F0F2]`;
+        return `${base} ${currentTheme.classes.iconBg} text-[#94A3B8] ${currentTheme.classes.iconHover}`;
       default:
-        return `${base} bg-[#1C1C1E] text-white hover:bg-[#2C2C2E]`;
+        return `${base} ${currentTheme.classes.iconBg} text-white ${currentTheme.classes.iconHover}`;
     }
   };
 
   const isSquircle = iconStyle === 'squircle-color';
+  const dockIconClass = `w-14 h-14 ${radiusByArchetype.medium} ${currentTheme.classes.iconBg} ${currentTheme.classes.iconBorder} ${currentTheme.classes.iconHover} ${currentTheme.classes.iconShadow} flex items-center justify-center transition-all duration-200`;
 
   if (size === 'list') {
     return (
       <div
         onClick={handleClick}
         onContextMenu={handleContextMenu}
-        className="w-full flex items-center justify-between p-3 rounded-2xl bg-[#1C1C1E]/40 hover:bg-[#1C1C1E] border border-white/5 cursor-pointer active:scale-98 transition group mb-1.5"
+        className={`w-full flex items-center justify-between p-3 ${currentTheme.buttonRadius} ${currentTheme.classes.itemCard} cursor-pointer active:scale-98 transition group mb-1.5 shadow-sm`}
       >
         <div className="flex items-center gap-3.5 min-w-0">
           {app.customIcon ? (
@@ -187,12 +202,12 @@ export const AppIcon: React.FC<AppIconProps> = memo(({ app, size = 'normal' }) =
               style={{ backgroundColor: app.color }}
             />
           )}
-          <span className="text-sm font-medium text-[#F0F0F2] group-hover:text-white truncate">
+          <span className="text-xs font-semibold text-[#E2E8F0] group-hover:text-white truncate">
             {app.name}
           </span>
         </div>
         {settings.notificationBadges && unreadCount > 0 && (
-          <span className="px-2 py-0.5 rounded-full bg-[#FF3B30] text-white font-bold text-[10px] shadow-sm">
+          <span className="px-2 py-0.5 rounded-full bg-[#F43F5E] text-white font-mono font-bold text-[10px] shadow-sm">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}
@@ -207,22 +222,36 @@ export const AppIcon: React.FC<AppIconProps> = memo(({ app, size = 'normal' }) =
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerCancel}
+      onPointerCancel={handlePointerUp}
       onClick={handleClick}
       onContextMenu={handleContextMenu}
       className={`flex flex-col items-center justify-start w-full ${currentSize.wrapper} relative cursor-pointer group active:scale-95 transition-all select-none ${
         isEditing ? 'animate-wiggle touch-none' : ''
       } ${draggedAppId === app.id ? 'opacity-20 scale-90 pointer-events-none' : ''}`}
     >
-      {/* Icon Body Container with Positioned Badges */}
       <div className="relative">
         <div
-          className={`${size === 'dock' ? 'w-14 h-14 rounded-[1.5rem] bg-[#2C2C2E] flex items-center justify-center shadow-lg hover:bg-[#3A3A3C] transition-colors border border-white/5' : getIconClass()} ${
-            hoverTargetAppId === app.id ? 'ring-4 ring-[#34C759] scale-110 shadow-2xl shadow-[#34C759]/50 bg-[#34C759]/10' : ''
+          className={`${size === 'dock' ? dockIconClass : getIconClass()} ${
+            hoverTargetAppId === app.id ? 'ring-2 ring-[#38BDF8] scale-110 shadow-[0_0_20px_rgba(56,189,248,0.5)] bg-[#38BDF8]/10' : ''
           }`}
-          style={isSquircle ? { backgroundColor: app.color } : {}}
+          style={
+            isSquircle
+              ? { backgroundColor: app.color }
+              : iconStyle === 'neon'
+              ? { borderColor: `${currentAccent.hex}99`, boxShadow: `0 0 15px ${currentAccent.glowRgba}` }
+              : iconStyle === 'material-you'
+              ? { borderColor: `${currentAccent.hex}55` }
+              : {}
+          }
         >
-          {app.customIcon ? (
+          {app.remoteIconBase64 ? (
+            <img
+              src={app.remoteIconBase64}
+              alt={app.name}
+              className={`${currentSize.img} object-contain drop-shadow pointer-events-none`}
+              loading="lazy"
+            />
+          ) : app.customIcon ? (
             <img
               src={app.customIcon}
               alt={app.name}
@@ -230,11 +259,11 @@ export const AppIcon: React.FC<AppIconProps> = memo(({ app, size = 'normal' }) =
               loading="lazy"
             />
           ) : iconStyle === 'minimal-text' ? (
-            <span className="text-xs font-bold uppercase tracking-wider text-[#8E8E93] group-hover:text-white">
+            <span className="text-xs font-bold uppercase tracking-wider text-[#94A3B8] group-hover:text-white font-mono">
               {app.name.slice(0, 2)}
             </span>
           ) : (
-            <div style={{ color: isSquircle ? '#FFFFFF' : app.color }}>
+            <div style={{ color: isSquircle ? '#FFFFFF' : iconStyle === 'neon' ? currentAccent.hex : iconStyle === 'monochrome' ? '#E2E8F0' : app.color || currentAccent.hex }}>
               <DynamicIcon name={app.iconName} size={currentSize.icon} strokeWidth={2.2} />
             </div>
           )}
@@ -254,7 +283,7 @@ export const AppIcon: React.FC<AppIconProps> = memo(({ app, size = 'normal' }) =
                 true
               );
             }}
-            className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-[#FF3B30] text-white flex items-center justify-center shadow-md z-30 hover:scale-110 active:scale-90 transition border-2 border-[#0A0A0C]"
+            className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-[#F43F5E] text-white flex items-center justify-center shadow-md z-30 hover:scale-110 active:scale-90 transition border-2 border-[#090B10]"
             title={`Uninstall ${app.name}`}
           >
             <X size={11} strokeWidth={3} />
@@ -263,14 +292,25 @@ export const AppIcon: React.FC<AppIconProps> = memo(({ app, size = 'normal' }) =
 
         {/* Notification Dot / Counter Badge */}
         {!isEditing && settings.notificationBadges && unreadCount > 0 && (
-          <div className="absolute -top-1.5 -right-1.5 min-w-[20px] h-[20px] px-1.5 rounded-full bg-[#FF3B30] text-white font-extrabold text-[10px] flex items-center justify-center z-30 shadow-lg border-2 border-[#0A0A0C] pointer-events-none leading-none animate-in zoom-in duration-150">
+          <div className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#F43F5E] text-white font-mono font-extrabold text-[9px] flex items-center justify-center z-30 shadow-lg border-2 border-[#090B10] pointer-events-none leading-none animate-in zoom-in duration-150">
             {unreadCount > 99 ? '99+' : unreadCount}
           </div>
         )}
 
-        {/* Drop Target Indicator when an app is hovered over this slot */}
+        {/* Remote PC Badge Indicator */}
+        {!isEditing && app.isRemote && (
+          <div 
+            className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center shadow-md border border-[#090B10] z-20"
+            style={{ backgroundColor: currentAccent.hex, color: '#090B10' }}
+            title={`Runs on PC (${app.remoteDeviceName || 'Windows Node'})`}
+          >
+            <span className="text-[8px] font-black leading-none">PC</span>
+          </div>
+        )}
+
+        {/* Drop Target Indicator */}
         {hoverTargetAppId === app.id && (
-          <div className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-[#34C759] text-[#0A0A0C] flex items-center justify-center shadow-lg z-40 animate-bounce">
+          <div className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-[#38BDF8] text-[#090B10] flex items-center justify-center shadow-lg z-40 animate-bounce">
             <FolderPlus size={13} strokeWidth={2.5} />
           </div>
         )}
@@ -278,7 +318,7 @@ export const AppIcon: React.FC<AppIconProps> = memo(({ app, size = 'normal' }) =
 
       {/* App Label */}
       {settings.showLabels && size !== 'dock' && (
-        <span className={`${currentSize.text} font-medium text-[#8E8E93] group-hover:text-[#F0F0F2] transition-colors mt-1.5 truncate w-full text-center tracking-tight leading-tight select-none`}>
+        <span className={`${currentSize.text} font-medium text-[#94A3B8] group-hover:text-[#F1F5F9] transition-colors mt-1.5 truncate w-full text-center tracking-tight leading-tight select-none`}>
           {app.name}
         </span>
       )}

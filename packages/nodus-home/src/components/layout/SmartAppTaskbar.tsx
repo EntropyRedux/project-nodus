@@ -1,52 +1,31 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
-  ArrowUpRight, 
   X, 
-  Clock, 
   LayoutGrid, 
   Search, 
-  Plus,
-  Trash2,
-  Edit2,
   Sparkles, 
-  Layers, 
-  Clipboard as ClipboardIcon, 
-  PanelLeftClose, 
-  PanelLeft,
-  Activity,
-  Check,
-  CheckSquare,
-  Square,
-  Sliders,
-  ChevronLeft,
-  ChevronRight,
-  FolderPlus,
-  AppWindow,
-  Calendar,
-  Bell,
-  Settings as SettingsIcon,
-  Battery,
-  BatteryCharging,
-  Zap,
-  Tablet,
-  Smartphone,
-  Laptop,
-  Monitor,
-  User,
-  Camera,
-  Upload,
-  RotateCcw,
-  Wifi,
-  Radio,
-  RefreshCw,
-  Globe
+  Check, 
+  ChevronLeft, 
+  ChevronRight, 
+  FolderPlus, 
+  AppWindow, 
+  Bell, 
+  Settings as SettingsIcon, 
+  Tablet, 
+  Smartphone, 
+  Laptop, 
+  Monitor, 
+  Camera, 
+  RotateCcw, 
+  Wifi, 
+  Clipboard as ClipboardIcon 
 } from 'lucide-react';
-
 import { useLauncher } from '../../context/LauncherContext';
 import { DynamicIcon } from '../common/DynamicIcon';
 import { audio } from '../../utils/audio';
 import { AppItem } from '../../types/launcher';
-import { DEVICE_COLORS } from '../../utils/constants';
+import { DEVICE_COLORS, getDeviceColor } from '../../utils/constants';
+import { getSystemTheme, getAccentColor, getSurfaceRgba } from '../../utils/themes';
 
 export const SmartAppTaskbar: React.FC = () => {
   const { 
@@ -57,21 +36,13 @@ export const SmartAppTaskbar: React.FC = () => {
     launchApp, 
     killApp,
     activeDevice,
-    toggleQuickSettings,
     isClipboardOpen,
     toggleClipboardPanel,
     clipboardItems,
-    isSidebarCollapsed,
-    toggleSidebar,
     appBadges,
     toggleAppTask,
     drawerTabs,
     customTabAppMap,
-    addDrawerTab,
-    removeDrawerTab,
-    renameDrawerTab,
-    assignAppsToTab,
-    setAppCategory,
     showToast,
     settings,
     updateSettings,
@@ -87,30 +58,16 @@ export const SmartAppTaskbar: React.FC = () => {
     totalUnreadNotifications,
     isNotificationListenerEnabled,
     requestNotificationListenerPermission,
-    devices,
-    selectDevice,
-    addDevice,
-    removeDevice,
   } = useLauncher();
 
+  const currentTheme = getSystemTheme(settings.theme);
+  const currentAccent = getAccentColor(settings.accentColor);
+
   const [isStartMenuOpen, setIsStartMenuOpen] = useState(false);
-  const [isOrganizeMode, setIsOrganizeMode] = useState(false);
-  const [isAddingNewTab, setIsAddingNewTab] = useState(false);
-  const [newTabInput, setNewTabInput] = useState('');
-  const [editingTabName, setEditingTabName] = useState<string | null>(null);
-  const [renameInput, setRenameInput] = useState('');
   const [menuSearch, setMenuSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
-  // Custom User Avatar & Device Switcher Popover
   const [isDeviceMenuOpen, setIsDeviceMenuOpen] = useState(false);
-  const [isPairingExpanded, setIsPairingExpanded] = useState(false);
-  const [isScanningNodes, setIsScanningNodes] = useState(false);
-  const [manualNodeName, setManualNodeName] = useState('Windows PC');
-  const [manualNodeIp, setManualNodeIp] = useState('192.168.1.150');
-  const [manualNodePort, setManualNodePort] = useState('9120');
-  const [manualNodeType, setManualNodeType] = useState<'desktop' | 'tablet' | 'phone'>('desktop');
-
   const [userAvatar, setUserAvatar] = useState<string | null>(() => {
     try {
       return localStorage.getItem('nodus_user_avatar') || null;
@@ -123,8 +80,6 @@ export const SmartAppTaskbar: React.FC = () => {
   const startMenuRef = useRef<HTMLDivElement | null>(null);
   const deviceMenuRef = useRef<HTMLDivElement | null>(null);
 
-
-  // Close menus on click outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (deviceMenuRef.current && !deviceMenuRef.current.contains(e.target as Node)) {
@@ -170,47 +125,6 @@ export const SmartAppTaskbar: React.FC = () => {
     showToast('Reset to default device icon');
   };
 
-  // Live Clock
-  const [currentTime, setCurrentTime] = useState(new Date());
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const formattedTime = useMemo(() => {
-    return currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }, [currentTime]);
-
-  const formattedDate = useMemo(() => {
-    return currentTime.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-  }, [currentTime]);
-
-  // Battery Level & State
-  const [batteryLevel, setBatteryLevel] = useState<number>(activeDevice?.battery ?? 85);
-  const [isCharging, setIsCharging] = useState<boolean>(false);
-
-  useEffect(() => {
-    if (typeof navigator !== 'undefined' && 'getBattery' in navigator) {
-      (navigator as any).getBattery().then((battery: any) => {
-        setBatteryLevel(Math.round(battery.level * 100));
-        setIsCharging(battery.charging);
-
-        const onLevelChange = () => setBatteryLevel(Math.round(battery.level * 100));
-        const onChargingChange = () => setIsCharging(battery.charging);
-
-        battery.addEventListener('levelchange', onLevelChange);
-        battery.addEventListener('chargingchange', onChargingChange);
-
-        return () => {
-          battery.removeEventListener('levelchange', onLevelChange);
-          battery.removeEventListener('chargingchange', onChargingChange);
-        };
-      }).catch(() => {});
-    } else if (activeDevice?.battery) {
-      setBatteryLevel(activeDevice.battery);
-    }
-  }, [activeDevice?.battery]);
-
   const unreadNotificationCount = totalUnreadNotifications;
   const isContinuous = settings.drawerLayout === 'continuous';
   const iconSize = settings.iconSize || 'medium';
@@ -218,14 +132,11 @@ export const SmartAppTaskbar: React.FC = () => {
   const taskbarAlpha = (settings.taskbarOpacity ?? 92) / 100;
   const scale = settings.taskbarIconScale || 'medium';
 
-  // Sizing tiers for taskbar scaling
   const sizeConfig = useMemo(() => {
     switch (scale) {
       case 'small':
         return {
           dockHeight: 'h-12',
-          dockPadding: 'px-2 py-1',
-          dockGap: 'gap-1.5',
           btnSize: 'w-8 h-8',
           iconSize: 18,
           indicatorH: 'h-[2px]',
@@ -238,8 +149,6 @@ export const SmartAppTaskbar: React.FC = () => {
       case 'large':
         return {
           dockHeight: 'h-16',
-          dockPadding: 'px-3.5 py-1.5',
-          dockGap: 'gap-2.5',
           btnSize: 'w-12 h-12',
           iconSize: 26,
           indicatorH: 'h-[3px]',
@@ -252,8 +161,6 @@ export const SmartAppTaskbar: React.FC = () => {
       case 'xlarge':
         return {
           dockHeight: 'h-18',
-          dockPadding: 'px-4 py-2',
-          dockGap: 'gap-3',
           btnSize: 'w-14 h-14',
           iconSize: 32,
           indicatorH: 'h-[3.5px]',
@@ -267,8 +174,6 @@ export const SmartAppTaskbar: React.FC = () => {
       default:
         return {
           dockHeight: 'h-14',
-          dockPadding: 'px-3 py-1.5',
-          dockGap: 'gap-2',
           btnSize: 'w-10 h-10',
           iconSize: 22,
           indicatorH: 'h-[2.5px]',
@@ -295,7 +200,7 @@ export const SmartAppTaskbar: React.FC = () => {
       .filter((a): a is AppItem => a !== undefined);
   }, [recentApps, runningApps, apps]);
 
-  const devColor = activeDevice?.id ? DEVICE_COLORS[activeDevice.id] || '#34C759' : '#34C759';
+  const devColor = activeDevice?.id ? getDeviceColor(activeDevice.id, activeDevice.type, activeDevice.os, (activeDevice as any).customColor) : '#34C759';
 
   const systemTabs = ['all', 'productivity', 'media', 'tools', 'social', 'games'];
   const allTabs = useMemo(() => {
@@ -322,21 +227,19 @@ export const SmartAppTaskbar: React.FC = () => {
   }, [apps, selectedCategory, menuSearch, customTabAppMap]);
 
   const toggleStartMenu = () => {
-    if (settings.soundEffects) audio.playTap();
+    audio.playTap();
     setIsStartMenuOpen(!isStartMenuOpen);
     if (!isStartMenuOpen) {
-      setIsOrganizeMode(false);
       setMenuSearch('');
     }
   };
 
   const handleCreateFolder = () => {
-    if (settings.soundEffects) audio.playTap();
+    audio.playTap();
     createFolder('New Folder', currentPageIndex);
     showToast('Created new folder');
   };
 
-  // Render device icon for default avatar
   const renderDeviceIcon = () => {
     const type = activeDevice?.type || 'tablet';
     switch (type) {
@@ -354,7 +257,6 @@ export const SmartAppTaskbar: React.FC = () => {
 
   return (
     <>
-      {/* Hidden File Input for Avatar Selection */}
       <input
         type="file"
         ref={fileInputRef}
@@ -363,15 +265,15 @@ export const SmartAppTaskbar: React.FC = () => {
         className="hidden"
       />
 
-      {/* 0. Device Switcher & Avatar Popover */}
+      {/* Device Popover - Seamless Themed */}
       {isDeviceMenuOpen && (
         <div
           ref={deviceMenuRef}
-          className="fixed bottom-16 left-4 z-50 w-72 bg-[#121218]/95 backdrop-blur-2xl border border-white/15 rounded-2xl p-3.5 shadow-2xl shadow-black/80 flex flex-col gap-3 animate-in fade-in slide-in-from-bottom-3 duration-200"
+          className={`fixed bottom-16 left-4 z-50 w-76 ${currentTheme.classes.drawerFlyout} ${currentTheme.cardRadius} p-4 flex flex-col gap-3 animate-in fade-in slide-in-from-bottom-3 duration-200 ${currentTheme.classes.containerFont} backdrop-blur-2xl`}
+          style={{ backgroundColor: getSurfaceRgba(settings.theme, settings.taskbarOpacity, 'popup') }}
         >
-          {/* Header / Profile Card */}
-          <div className="flex items-center gap-3 p-2.5 bg-white/[0.04] rounded-xl border border-white/5">
-            <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-[#1C1C24] border border-white/10 flex items-center justify-center shrink-0">
+          <div className={`flex items-center gap-3 p-2.5 ${currentTheme.classes.itemCard} ${currentTheme.cardRadius}`}>
+            <div className={`relative w-11 h-11 ${currentTheme.archetype === 'hud' ? 'rounded-none' : 'rounded-full'} overflow-hidden bg-white/[0.04] border border-white/[0.08] flex items-center justify-center shrink-0`}>
               {userAvatar ? (
                 <img src={userAvatar} alt="User Avatar" className="w-full h-full object-cover" />
               ) : (
@@ -380,28 +282,27 @@ export const SmartAppTaskbar: React.FC = () => {
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="font-bold text-sm text-[#F0F0F2] truncate">
-                  {activeDevice?.name || 'Local Node'}
+                <span className="font-bold text-xs truncate" style={{ color: currentTheme.classes.textPrimary }}>
+                  {currentTheme.archetype === 'hud' ? `[NODE//${(activeDevice?.name || 'LOCAL').toUpperCase()}]` : (activeDevice?.name || 'Local Node')}
                 </span>
-                <span className="w-2 h-2 rounded-full bg-[#34C759] shrink-0" />
+                <span className="w-2 h-2 rounded-full bg-[#10B981] shrink-0 shadow-[0_0_6px_rgba(16,185,129,0.8)]" />
               </div>
-              <p className="text-[11px] text-[#8E8E93] truncate capitalize">
-                {activeDevice?.type || 'Tablet'} • HyperOS Node
+              <p className="text-[10px] text-[#94A3B8] truncate font-mono">
+                {activeDevice?.type || 'Workstation'} • {activeDevice?.ipAddress || '192.168.1.108'}
               </p>
             </div>
           </div>
 
-          {/* Avatar Actions */}
           <div className="space-y-1">
             <button
               onClick={() => {
                 audio.playTap();
                 fileInputRef.current?.click();
               }}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg bg-[#181822] hover:bg-[#222230] text-[#F0F0F2] text-xs font-semibold transition border border-white/5"
+              className={`w-full flex items-center gap-2.5 px-3 py-2 ${currentTheme.buttonRadius} ${currentTheme.classes.actionButton} text-xs font-semibold`}
             >
-              <Camera size={14} className="text-[#34C759]" />
-              <span>Change Profile Avatar</span>
+              <Camera size={14} style={{ color: currentAccent.hex }} />
+              <span>Change Node Avatar</span>
             </button>
 
             {userAvatar && (
@@ -410,210 +311,65 @@ export const SmartAppTaskbar: React.FC = () => {
                   audio.playTap();
                   handleResetAvatar();
                 }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/5 text-[#8E8E93] hover:text-[#FF453A] text-xs font-semibold transition"
+                className={`w-full flex items-center gap-2.5 px-3 py-2 ${currentTheme.buttonRadius} hover:bg-white/5 text-[#94A3B8] hover:text-[#F43F5E] text-xs font-semibold transition`}
               >
                 <RotateCcw size={14} />
-                <span>Reset to Device Icon</span>
+                <span>Reset to Hardware Icon</span>
               </button>
             )}
           </div>
 
-          {/* Device Switcher Section (Nodus Fleet Hub) */}
-          <div className="pt-2 border-t border-white/10 space-y-2">
-            <div className="flex items-center justify-between px-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[#8E8E93] flex items-center gap-1">
-                <Wifi size={11} className="text-[#007AFF]" />
-                Fleet Nodes ({devices.length})
+          <div className="pt-2 border-t border-white/[0.06]">
+            <div className="flex items-center justify-between px-1 mb-2 font-mono">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#94A3B8] flex items-center gap-1">
+                <Wifi size={11} style={{ color: currentAccent.hex }} />
+                Cluster Mesh
               </span>
-              <button
-                onClick={() => {
-                  audio.playTap();
-                  setIsPairingExpanded(!isPairingExpanded);
-                }}
-                className="text-[10px] font-bold text-[#007AFF] hover:text-[#34C759] flex items-center gap-1 transition"
-              >
-                <Plus size={11} />
-                <span>{isPairingExpanded ? 'Cancel' : 'Pair Node'}</span>
-              </button>
+              <span className="text-[10px] text-[#10B981] font-semibold">Active Node</span>
             </div>
 
-            {/* List of Devices */}
-            <div className="space-y-1.5 max-h-48 overflow-y-auto pr-0.5 scrollbar-thin">
-              {devices.map((dev) => {
-                const isActive = dev.id === activeDevice?.id;
-                return (
-                  <div
-                    key={dev.id}
-                    onClick={() => {
-                      audio.playTap();
-                      selectDevice(dev.id);
-                    }}
-                    className={`p-2 rounded-xl border flex items-center justify-between cursor-pointer transition ${
-                      isActive
-                        ? 'bg-[#34C759]/10 border-[#34C759]/30 shadow-sm'
-                        : 'bg-[#181822] hover:bg-[#20202C] border-white/5'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className={`p-1 rounded-md ${isActive ? 'bg-[#34C759]/20 text-[#34C759]' : 'bg-white/5 text-[#8E8E93]'}`}>
-                        {dev.type === 'desktop' ? <Monitor size={14} /> : dev.type === 'phone' ? <Smartphone size={14} /> : <Tablet size={14} />}
-                      </div>
-                      <div className="min-w-0 truncate">
-                        <div className="text-xs font-bold text-[#F0F0F2] truncate">{dev.name}</div>
-                        <div className="text-[10px] text-[#8E8E93] font-mono truncate">{dev.ipAddress}</div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <span className={`w-2 h-2 rounded-full ${isActive ? 'bg-[#34C759] shadow-sm shadow-[#34C759]' : 'bg-[#007AFF]'}`} />
-                      {dev.isCustom && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            audio.playTap();
-                            removeDevice(dev.id);
-                            showToast(`Removed ${dev.name}`);
-                          }}
-                          className="p-1 rounded text-[#8E8E93] hover:text-[#FF3B30] hover:bg-white/5 transition"
-                          title="Remove Node"
-                        >
-                          <Trash2 size={11} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Expandable Pairing Panel (Auto-Discover & Manual Connect) */}
-            {isPairingExpanded && (
-              <div className="p-2.5 rounded-xl bg-black/40 border border-white/10 space-y-2.5 animate-in fade-in slide-in-from-bottom-2 duration-150">
-                {/* 1-Click Auto-Discovery Button */}
-                <button
-                  onClick={async () => {
-                    audio.playTap();
-                    setIsScanningNodes(true);
-                    showToast('Broadcasting UDP scan on LAN...');
-                    setTimeout(() => {
-                      setIsScanningNodes(false);
-                      addDevice({
-                        name: 'Windows Workstation (Auto-Discovered)',
-                        type: 'desktop',
-                        os: 'Windows 11 Pro',
-                        status: 'connected',
-                        ipAddress: '192.168.1.150:9120',
-                        resolution: '3840 × 2160',
-                        battery: 100,
-                      });
-                      setIsPairingExpanded(false);
-                      showToast('Connected to Windows Workstation!');
-                    }, 1800);
-                  }}
-                  disabled={isScanningNodes}
-                  className="w-full py-1.5 rounded-lg bg-[#007AFF] hover:bg-[#0066D6] text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm transition disabled:opacity-50"
-                >
-                  <RefreshCw size={12} className={isScanningNodes ? 'animate-spin' : ''} />
-                  <span>{isScanningNodes ? 'Scanning Subnet...' : 'Auto-Discover Windows PC'}</span>
-                </button>
-
-                <div className="flex items-center gap-2">
-                  <div className="h-[1px] bg-white/10 flex-1" />
-                  <span className="text-[9px] uppercase font-bold text-[#8E8E93]">or Manual IP</span>
-                  <div className="h-[1px] bg-white/10 flex-1" />
+            <div className={`p-2 ${currentTheme.cardRadius} ${currentTheme.classes.itemCard} flex items-center justify-between`}>
+              <div className="flex items-center gap-2">
+                <div className={`p-1 ${currentTheme.buttonRadius} bg-white/[0.06]`} style={{ color: currentAccent.hex }}>
+                  {renderDeviceIcon()}
                 </div>
-
-                {/* Manual Connect Inputs */}
-                <div className="space-y-1.5">
-                  <input
-                    type="text"
-                    placeholder="Device Name (e.g. Workstation)"
-                    value={manualNodeName}
-                    onChange={(e) => setManualNodeName(e.target.value)}
-                    className="w-full px-2 py-1 rounded-lg bg-[#14141E] border border-white/10 text-xs text-[#F0F0F2] outline-none focus:border-[#34C759]"
-                  />
-                  <div className="grid grid-cols-3 gap-1.5">
-                    <input
-                      type="text"
-                      placeholder="192.168.1.xxx"
-                      value={manualNodeIp}
-                      onChange={(e) => setManualNodeIp(e.target.value)}
-                      className="col-span-2 px-2 py-1 rounded-lg bg-[#14141E] border border-white/10 text-xs font-mono text-[#F0F0F2] outline-none focus:border-[#34C759]"
-                    />
-                    <input
-                      type="text"
-                      placeholder="9120"
-                      value={manualNodePort}
-                      onChange={(e) => setManualNodePort(e.target.value)}
-                      className="px-2 py-1 rounded-lg bg-[#14141E] border border-white/10 text-xs font-mono text-[#F0F0F2] outline-none focus:border-[#34C759]"
-                    />
-                  </div>
-                  <div className="grid grid-cols-3 gap-1 pt-0.5">
-                    {(['desktop', 'tablet', 'phone'] as const).map((t) => (
-                      <button
-                        type="button"
-                        key={t}
-                        onClick={() => setManualNodeType(t)}
-                        className={`py-0.5 rounded text-[10px] font-semibold capitalize transition ${
-                          manualNodeType === t
-                            ? 'bg-[#34C759] text-[#0A0A0C] font-bold'
-                            : 'bg-white/5 hover:bg-white/10 text-[#8E8E93]'
-                        }`}
-                      >
-                        {t}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => {
-                      if (!manualNodeIp.trim()) return;
-                      audio.playTap();
-                      addDevice({
-                        name: manualNodeName.trim() || 'Custom Node',
-                        type: manualNodeType,
-                        os: manualNodeType === 'desktop' ? 'Windows 11 Pro' : 'Android',
-                        status: 'connected',
-                        ipAddress: `${manualNodeIp.trim()}:${manualNodePort.trim() || '9120'}`,
-                        resolution: manualNodeType === 'desktop' ? '3840 × 2160' : '2560 × 1600',
-                      });
-                      setIsPairingExpanded(false);
-                      showToast(`Paired with ${manualNodeName}!`);
-                    }}
-                    className="w-full py-1.5 rounded-lg bg-[#34C759] hover:bg-[#30D158] text-[#0A0A0C] text-xs font-extrabold flex items-center justify-center gap-1 shadow-sm transition"
-                  >
-                    <Plus size={12} strokeWidth={3} />
-                    <span>Connect Node</span>
-                  </button>
+                <div>
+                  <div className="text-xs font-bold text-[#F1F5F9]">{activeDevice?.name || 'Local Controller'}</div>
+                  <div className="text-[10px] font-mono" style={{ color: currentAccent.hex }}>Primary Controller</div>
                 </div>
               </div>
-            )}
+              <span className="w-2 h-2 rounded-full bg-[#10B981] shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
+            </div>
           </div>
         </div>
       )}
 
-
-      {/* 1. Start Menu Flyout Drawer */}
+      {/* Start Menu Flyout Drawer */}
       {isStartMenuOpen && (
         <div 
           ref={startMenuRef}
-          className={`fixed bottom-16 left-3 sm:left-4 z-50 ${sizeConfig.drawerWidth} ${sizeConfig.drawerMaxH} bg-[#101016]/95 backdrop-blur-2xl border border-white/15 rounded-3xl p-4 sm:p-5 shadow-2xl shadow-black/90 flex flex-col gap-3.5 animate-in fade-in slide-in-from-bottom-4 duration-200`}
+          className={`fixed bottom-16 left-3 sm:left-4 z-50 ${sizeConfig.drawerWidth} ${sizeConfig.drawerMaxH} ${currentTheme.classes.drawerFlyout} ${currentTheme.cardRadius} p-4 sm:p-5 flex flex-col gap-3.5 animate-in fade-in slide-in-from-bottom-4 duration-200 ${currentTheme.classes.containerFont} backdrop-blur-2xl`}
+          style={{ backgroundColor: getSurfaceRgba(settings.theme, settings.taskbarOpacity, 'panel') }}
         >
-          {/* Drawer Header */}
-          <div className="flex items-center justify-between pb-2.5 border-b border-white/10 shrink-0">
+          <div className={`flex items-center justify-between pb-2.5 ${currentTheme.classes.modalHeader} shrink-0`}>
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#007AFF] via-[#34C759] to-[#BF5AF2] p-[1px] flex items-center justify-center shadow-md">
-                <div className="w-full h-full bg-[#0E0E14] rounded-[11px] flex items-center justify-center">
-                  <LayoutGrid size={15} className="text-white" />
-                </div>
+              <div
+                className={`w-8 h-8 ${currentTheme.buttonRadius} flex items-center justify-center`}
+                style={{ backgroundColor: currentAccent.badgeBg, border: `1px solid ${currentAccent.badgeBorder}` }}
+              >
+                <LayoutGrid size={16} style={{ color: currentAccent.hex }} />
               </div>
               <div>
-                <h3 className="font-extrabold text-sm text-white tracking-wide flex items-center gap-1.5">
-                  Nodus Hub
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#34C759]/20 text-[#34C759] border border-[#34C759]/30">
-                    {filteredApps.length} Apps
+                <h3 className="font-extrabold text-sm text-[#F1F5F9] tracking-wide flex items-center gap-2">
+                  <span>{currentTheme.archetype === 'hud' ? '[SYS//EXECUTABLES]' : 'Workstation Hub'}</span>
+                  <span
+                    className={`text-[10px] font-mono font-bold px-1.5 py-0.5 ${currentTheme.classes.badgeStyle}`}
+                    style={{ backgroundColor: currentAccent.badgeBg, color: currentAccent.hex, borderColor: currentAccent.badgeBorder }}
+                  >
+                    {filteredApps.length} APPS
                   </span>
                 </h3>
-                <p className="text-[11px] text-[#8E8E93]">Desktop & Cloud Applications</p>
+                <p className="text-[11px] text-[#94A3B8]">Mesh Executables & System Utilities</p>
               </div>
             </div>
 
@@ -623,46 +379,44 @@ export const SmartAppTaskbar: React.FC = () => {
                   audio.playTap();
                   setIsEditing(!isEditing);
                 }}
-                className={`p-1.5 rounded-xl border transition ${
+                className={`p-1.5 ${currentTheme.buttonRadius} border transition ${
                   isEditing 
-                    ? 'bg-[#34C759] text-black border-[#34C759]' 
-                    : 'bg-[#181822] hover:bg-[#252530] text-[#8E8E93] hover:text-white border-white/10'
+                    ? 'bg-[#10B981] text-[#090B10] border-[#10B981] font-bold' 
+                    : `${currentTheme.classes.actionButton}`
                 }`}
-                title="Arrange Home Icons"
+                title="Arrange Workstation Grid"
               >
                 <Sparkles size={14} />
               </button>
 
               <button
                 onClick={() => setIsStartMenuOpen(false)}
-                className="p-1.5 rounded-xl bg-[#181822] hover:bg-[#252530] text-[#8E8E93] hover:text-white border border-white/10 transition"
+                className={`p-1.5 ${currentTheme.buttonRadius} ${currentTheme.classes.actionButton}`}
               >
                 <X size={14} />
               </button>
             </div>
           </div>
 
-          {/* Search Bar */}
           <div className="relative shrink-0">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8E8E93]" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
             <input 
               type="text"
               value={menuSearch}
               onChange={(e) => setMenuSearch(e.target.value)}
-              placeholder="Search apps or launch commands..."
-              className="w-full bg-[#181822] border border-white/10 rounded-xl pl-9 pr-8 py-2 text-xs text-white placeholder-[#8E8E93] focus:outline-none focus:border-[#34C759] focus:ring-1 focus:ring-[#34C759] transition"
+              placeholder="Search executables, scripts, or apps..."
+              className={`w-full ${currentTheme.classes.inputField} pl-9 pr-8 py-2 text-xs transition`}
             />
             {menuSearch && (
               <button 
                 onClick={() => setMenuSearch('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8E8E93] hover:text-white"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-white"
               >
                 <X size={12} />
               </button>
             )}
           </div>
 
-          {/* Category Tabs */}
           <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-1 shrink-0">
             {allTabs.map((tab) => {
               const isActive = selectedCategory === tab;
@@ -673,11 +427,12 @@ export const SmartAppTaskbar: React.FC = () => {
                     audio.playTap();
                     setSelectedCategory(tab);
                   }}
-                  className={`px-3 py-1 rounded-full text-xs font-semibold capitalize whitespace-nowrap transition-all ${
+                  className={`px-3 py-1 ${currentTheme.pillRadius} text-xs font-semibold capitalize whitespace-nowrap transition-all ${
                     isActive
-                      ? 'bg-[#34C759] text-[#0A0A0C] shadow-sm shadow-[#34C759]/30 font-bold scale-105'
-                      : 'bg-[#181822] hover:bg-[#242430] text-[#8E8E93] hover:text-white border border-white/5'
+                      ? 'font-bold scale-105 shadow-sm'
+                      : 'bg-white/[0.03] hover:bg-white/[0.08] text-[#94A3B8] hover:text-[#F1F5F9] border border-white/[0.04]'
                   }`}
+                  style={isActive ? { backgroundColor: currentAccent.hex, color: '#090B10' } : {}}
                 >
                   {tab}
                 </button>
@@ -685,7 +440,6 @@ export const SmartAppTaskbar: React.FC = () => {
             })}
           </div>
 
-          {/* App Grid */}
           <div className={`grid ${sizeConfig.drawerGrid} overflow-y-auto max-h-[360px] pr-1 scrollbar-thin scrollbar-thumb-white/10 flex-1 py-1`}>
             {filteredApps.map((app) => (
               <div
@@ -694,11 +448,11 @@ export const SmartAppTaskbar: React.FC = () => {
                   toggleStartMenu();
                   launchApp(app.id);
                 }}
-                className="flex flex-col items-center gap-1.5 p-2 rounded-2xl hover:bg-white/[0.08] cursor-pointer transition-all duration-150 group hover:scale-105"
+                className={`flex flex-col items-center gap-1.5 p-2 ${currentTheme.cardRadius} hover:bg-white/[0.04] cursor-pointer transition-all duration-150 group hover:scale-105`}
               >
                 <div 
-                  className={`${sizeConfig.drawerAppBox} rounded-2xl bg-[#181822] group-hover:bg-[#22222E] border border-white/10 group-hover:border-white/25 flex items-center justify-center shadow-md transition`}
-                  style={{ color: app.color }}
+                  className={`${sizeConfig.drawerAppBox} ${currentTheme.cardRadius} ${currentTheme.classes.iconBg} ${currentTheme.classes.iconBorder} ${currentTheme.classes.iconHover} ${currentTheme.classes.iconShadow} flex items-center justify-center transition`}
+                  style={{ color: app.color || currentAccent.hex }}
                 >
                   {app.customIcon ? (
                     <img src={app.customIcon} alt={app.name} className="w-3/4 h-3/4 object-contain rounded-lg" />
@@ -706,41 +460,45 @@ export const SmartAppTaskbar: React.FC = () => {
                     <DynamicIcon name={app.iconName} size={sizeConfig.drawerAppIconSize} strokeWidth={2.2} />
                   )}
                 </div>
-                <span className="text-[11px] font-medium text-[#E0E0E6] group-hover:text-white text-center truncate w-full">
+                <span className="text-[11px] font-medium text-[#E2E8F0] group-hover:text-white text-center truncate w-full">
                   {app.name}
                 </span>
               </div>
             ))}
           </div>
 
-          {/* Footer of Drawer */}
-          <div className="pt-2 border-t border-white/10 flex items-center justify-between text-xs text-[#8E8E93] shrink-0">
-            <span className="text-[11px]">Nodus OS • v2.0</span>
+          <div className={`pt-2 ${currentTheme.classes.modalHeader} flex items-center justify-between text-xs text-[#94A3B8] shrink-0 font-mono`}>
+            <span className="text-[10px]">NODUS WORKSTATION</span>
             <button
               onClick={() => {
                 toggleStartMenu();
                 launchApp('settings');
               }}
-              className="flex items-center gap-1 hover:text-[#34C759] transition text-[11px]"
+              className="flex items-center gap-1 transition text-[11px]"
+              style={{ color: currentAccent.hex }}
             >
               <SettingsIcon size={12} />
-              <span>Settings</span>
+              <span>Config</span>
             </button>
           </div>
         </div>
       )}
 
-      {/* Dedicated Floating Arrange Bar (Appears when isEditing is true) */}
+      {/* Arrange Mode Floating Bar - Seamless Themed */}
       {isEditing && (
-        <div className="fixed bottom-16 left-1/2 -translate-x-1/2 z-40 bg-[#12121A]/95 backdrop-blur-2xl border border-[#34C759]/40 rounded-full px-4 py-2 shadow-2xl shadow-black/80 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-2 duration-200">
-          <span className="text-xs font-bold text-[#34C759] flex items-center gap-1.5 pr-1 border-r border-white/15">
+        <div 
+          className={`fixed bottom-16 left-1/2 -translate-x-1/2 z-40 ${currentTheme.classes.drawerFlyout} ${currentTheme.pillRadius} px-4 py-2 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-2 duration-200 ${currentTheme.classes.containerFont} backdrop-blur-2xl`}
+          style={{ backgroundColor: getSurfaceRgba(settings.theme, settings.taskbarOpacity, 'panel') }}
+        >
+          <span className="text-xs font-bold flex items-center gap-1.5 pr-1 border-r border-white/15 font-mono" style={{ color: currentAccent.hex }}>
             <Sparkles size={13} />
-            Arrange Mode
+            GRID ARRANGE
           </span>
 
           <button
             onClick={handleCreateFolder}
-            className="px-2.5 py-1 bg-[#34C759]/20 hover:bg-[#34C759]/30 text-[#34C759] rounded-full text-xs font-semibold flex items-center gap-1.5 transition active:scale-95"
+            className={`px-2.5 py-1 ${currentTheme.pillRadius} text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 border`}
+            style={{ backgroundColor: currentAccent.badgeBg, color: currentAccent.hex, borderColor: currentAccent.badgeBorder }}
             title="Create a new folder"
           >
             <FolderPlus size={13} />
@@ -749,8 +507,7 @@ export const SmartAppTaskbar: React.FC = () => {
 
           <div className="h-4 w-[1px] bg-white/15" />
 
-          {/* Icon Size Pill Selector */}
-          <div className="flex items-center gap-1 text-[10px] font-bold bg-[#181822] px-1.5 py-0.5 rounded-full border border-white/10">
+          <div className={`flex items-center gap-1 text-[10px] font-bold bg-[#141924] px-1.5 py-0.5 ${currentTheme.pillRadius} border border-white/10 font-mono`}>
             {(['small', 'medium', 'large', 'xlarge'] as const).map((sz) => (
               <button
                 key={sz}
@@ -758,11 +515,12 @@ export const SmartAppTaskbar: React.FC = () => {
                   audio.playTap();
                   updateSettings({ iconSize: sz });
                 }}
-                className={`px-2 py-0.5 rounded-full transition uppercase ${
+                className={`px-2 py-0.5 ${currentTheme.pillRadius} transition uppercase ${
                   iconSize === sz
-                    ? 'bg-[#34C759] text-[#0A0A0C] font-extrabold'
-                    : 'text-[#8E8E93] hover:text-white'
+                    ? 'text-[#090B10] font-extrabold shadow-sm'
+                    : 'text-[#94A3B8] hover:text-white'
                 }`}
+                style={iconSize === sz ? { backgroundColor: currentAccent.hex } : {}}
                 title={`Icon Size: ${sz}`}
               >
                 {sz === 'xlarge' ? 'XL' : sz.charAt(0)}
@@ -772,27 +530,25 @@ export const SmartAppTaskbar: React.FC = () => {
 
           <div className="h-4 w-[1px] bg-white/15" />
 
-          {/* Layout Mode Switcher */}
           <button
             onClick={() => {
               audio.playTap();
               updateSettings({ drawerLayout: isContinuous ? 'paginated' : 'continuous' });
             }}
-            className="px-2.5 py-1 bg-[#181822] hover:bg-[#222230] text-[#F0F0F2] rounded-full text-xs font-semibold transition border border-white/10"
+            className={`px-2.5 py-1 bg-[#141924] hover:bg-[#1C2333] text-[#F1F5F9] ${currentTheme.pillRadius} text-xs font-semibold transition border border-white/10`}
             title="Toggle Continuous Drawer vs Paginated View"
           >
-            {isContinuous ? 'Switch to Pages' : 'Switch to Drawer'}
+            {isContinuous ? 'Pages View' : 'Drawer View'}
           </button>
 
           <div className="h-4 w-[1px] bg-white/15" />
 
-          {/* Done Button */}
           <button
             onClick={() => {
               audio.playTap();
               setIsEditing(false);
             }}
-            className="px-3 py-1 bg-[#34C759] hover:bg-[#30D158] text-[#0A0A0C] rounded-full text-xs font-extrabold flex items-center gap-1 shadow-md shadow-[#34C759]/30 transition active:scale-95"
+            className={`px-3 py-1 bg-[#10B981] hover:bg-[#059669] text-[#090B10] ${currentTheme.pillRadius} text-xs font-extrabold flex items-center gap-1 shadow-md shadow-[#10B981]/30 transition active:scale-95`}
             title="Exit Arrange Mode"
           >
             <Check size={13} strokeWidth={3} />
@@ -801,68 +557,66 @@ export const SmartAppTaskbar: React.FC = () => {
         </div>
       )}
 
-      {/* 2. Static Fixed Full-Width Desktop Taskbar */}
+      {/* Static Fixed Full-Width Desktop Taskbar - Seamless Floating Aesthetics */}
       <footer 
-        className={`fixed bottom-0 left-0 right-0 ${sizeConfig.dockHeight} backdrop-blur-2xl border-t border-white/10 px-3 sm:px-4 flex items-center justify-between z-40 select-none shadow-[0_-8px_32px_rgba(0,0,0,0.6)] transition-colors duration-200`}
-        style={{
-          backgroundColor: `rgba(10, 10, 14, ${taskbarAlpha})`,
-        }}
+        className={`fixed bottom-0 left-0 right-0 ${sizeConfig.dockHeight} ${currentTheme.classes.taskbarBg} ${currentTheme.classes.taskbarBorder} px-3 sm:px-4 flex items-center justify-between z-40 select-none transition-colors duration-200 backdrop-blur-2xl`}
+        style={{ backgroundColor: getSurfaceRgba(settings.theme, settings.taskbarOpacity, 'taskbar') }}
       >
-        {/* LEFT SECTION: Profile/Device Avatar, Start Button, Page Dots, Divider, Running Apps & Recent Apps (ALL ANCHORED LEFT) */}
+        {/* LEFT SECTION: Avatar, Start, Page Dots, Running & Recent Apps */}
         <div className="flex items-center gap-2 flex-1 min-w-0 pr-3">
-          {/* Avatar / Device Switcher Button */}
           <button
             id="nodus-avatar-btn"
             onClick={() => {
               audio.playTap();
               setIsDeviceMenuOpen(!isDeviceMenuOpen);
             }}
-            className="relative w-9 h-9 rounded-xl overflow-hidden bg-[#181822] hover:bg-[#22222E] border border-white/15 hover:border-[#34C759] transition flex items-center justify-center shrink-0 shadow-sm"
-            title="Profile & Device Switcher"
+            className="relative w-8.5 h-8.5 rounded-full overflow-hidden bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.06] transition flex items-center justify-center shrink-0 shadow-none"
+            style={{
+              borderColor: isDeviceMenuOpen ? currentAccent.hex : undefined,
+            }}
+            title="Profile & Node Status"
           >
             {userAvatar ? (
               <img src={userAvatar} alt="Profile" className="w-full h-full object-cover" />
             ) : (
               renderDeviceIcon()
             )}
-            <span className="absolute bottom-0.5 right-0.5 w-2 h-2 rounded-full bg-[#34C759] border-2 border-[#0A0A0E]" />
+            <span className="absolute bottom-0.5 right-0.5 w-2 h-2 rounded-full bg-[#10B981] border-2 border-[#090B10]" />
           </button>
 
-          {/* Start Menu Button (Windows/Nodus Quad Grid) */}
           <button
             id="nodus-start-btn"
             onClick={toggleStartMenu}
-            className={`${sizeConfig.btnSize} rounded-xl flex items-center justify-center transition-all duration-150 shrink-0 ${
+            className={`${sizeConfig.btnSize} ${currentTheme.buttonRadius} flex items-center justify-center transition-all duration-150 shrink-0 ${
               isStartMenuOpen
-                ? 'shadow-md scale-105 font-bold'
-                : 'bg-[#1C1C24] hover:bg-[#2C2C36] text-[#F0F0F2] border border-white/10 hover:border-white/20 hover:scale-105'
+                ? 'scale-105 font-bold'
+                : 'bg-white/[0.03] hover:bg-white/[0.08] text-[#F1F5F9] border border-white/[0.06] hover:border-white/[0.15] hover:scale-105'
             }`}
             style={{
-              backgroundColor: isStartMenuOpen ? devColor : undefined,
-              color: isStartMenuOpen ? '#0A0A0C' : undefined,
-              boxShadow: isStartMenuOpen ? `0 4px 16px ${devColor}50` : undefined,
+              backgroundColor: isStartMenuOpen ? currentAccent.hex : undefined,
+              color: isStartMenuOpen ? '#090B10' : undefined,
+              boxShadow: isStartMenuOpen ? `0 0 14px ${currentAccent.glowRgba}` : undefined,
             }}
-            title="App Drawer (Start Menu)"
+            title="Workstation App Drawer"
           >
             <div className="grid grid-cols-2 gap-1 p-0.5">
-              <span className={`w-2 h-2 rounded-[2px] ${isStartMenuOpen ? 'bg-[#0A0A0C]' : 'bg-[#007AFF]'}`} />
-              <span className={`w-2 h-2 rounded-[2px] ${isStartMenuOpen ? 'bg-[#0A0A0C]' : 'bg-[#34C759]'}`} />
-              <span className={`w-2 h-2 rounded-[2px] ${isStartMenuOpen ? 'bg-[#0A0A0C]' : 'bg-[#FF9500]'}`} />
-              <span className={`w-2 h-2 rounded-[2px] ${isStartMenuOpen ? 'bg-[#0A0A0C]' : 'bg-[#BF5AF2]'}`} />
+              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: isStartMenuOpen ? '#090B10' : currentAccent.hex }} />
+              <span className={`w-1.5 h-1.5 rounded-full ${isStartMenuOpen ? 'bg-[#090B10]' : 'bg-[#10B981]'}`} />
+              <span className={`w-1.5 h-1.5 rounded-full ${isStartMenuOpen ? 'bg-[#090B10]' : 'bg-[#F59E0B]'}`} />
+              <span className={`w-1.5 h-1.5 rounded-full ${isStartMenuOpen ? 'bg-[#090B10]' : 'bg-[#A855F7]'}`} />
             </div>
           </button>
 
-          {/* Page Dots (Only in Paginated Mode) */}
           {!isContinuous && totalPages > 1 && (
-            <div className="hidden lg:flex items-center gap-1 bg-[#18181F] px-2 py-0.5 rounded-full border border-white/10 shrink-0">
+            <div className="hidden lg:flex items-center gap-1 bg-white/[0.03] px-2 py-0.5 rounded-full border border-white/[0.04] shrink-0 font-mono">
               <button
                 disabled={currentPageIndex === 0}
                 onClick={() => {
                   audio.playTap();
                   setCurrentPageIndex(currentPageIndex - 1);
                 }}
-                className="p-0.5 rounded text-[#8E8E93] hover:text-[#F0F0F2] disabled:opacity-20 transition"
-                title="Previous Page"
+                className="p-0.5 rounded text-[#94A3B8] hover:text-[#F1F5F9] disabled:opacity-20 transition"
+                title="Previous Workspace"
               >
                 <ChevronLeft size={13} />
               </button>
@@ -876,9 +630,12 @@ export const SmartAppTaskbar: React.FC = () => {
                   }}
                   className={`transition-all duration-300 rounded-full ${
                     currentPageIndex === idx
-                      ? 'w-3.5 h-1.5 bg-[#34C759]'
-                      : 'w-1.5 h-1.5 bg-[#4A4A4F] hover:bg-[#8E8E93]'
+                      ? 'w-3.5 h-1.5'
+                      : 'w-1.5 h-1.5 bg-[#475569] hover:bg-[#94A3B8]'
                   }`}
+                  style={{
+                    backgroundColor: currentPageIndex === idx ? currentAccent.hex : undefined,
+                  }}
                 />
               ))}
 
@@ -888,20 +645,18 @@ export const SmartAppTaskbar: React.FC = () => {
                   audio.playTap();
                   setCurrentPageIndex(currentPageIndex + 1);
                 }}
-                className="p-0.5 rounded text-[#8E8E93] hover:text-[#F0F0F2] disabled:opacity-20 transition"
-                title="Next Page"
+                className="p-0.5 rounded text-[#94A3B8] hover:text-[#F1F5F9] disabled:opacity-20 transition"
+                title="Next Workspace"
               >
                 <ChevronRight size={13} />
               </button>
             </div>
           )}
 
-          {/* Divider */}
-          <div className="h-5 w-[1px] bg-white/10 shrink-0 mx-0.5" />
+          <div className="h-4 w-[1px] bg-white/[0.06] shrink-0 mx-0.5" />
 
-          {/* Left-Anchored Running & Recent App Icons Strip */}
+          {/* Running & Recent App Icons Strip */}
           <div className="flex items-center gap-2 overflow-x-auto scrollbar-none py-1 flex-1 min-w-0">
-            {/* Running Apps Strip */}
             <div className="flex items-center gap-2 shrink-0 py-1">
               {openAppItems.map((app) => {
                 const isActive = activeAppId === app.id;
@@ -914,14 +669,18 @@ export const SmartAppTaskbar: React.FC = () => {
                     onClick={() => {
                       toggleAppTask(app.id);
                     }}
-                    className={`group relative ${sizeConfig.btnSize} rounded-xl flex items-center justify-center cursor-pointer transition-all duration-150 ${
+                    className={`group relative ${sizeConfig.btnSize} ${currentTheme.buttonRadius} flex items-center justify-center cursor-pointer transition-all duration-150 ${
                       isActive
-                        ? 'bg-[#22222E] ring-1 ring-[#34C759] shadow-[0_0_14px_rgba(52,199,89,0.35)] scale-105'
-                        : 'bg-[#15151C] hover:bg-[#20202A] border border-white/10 hover:border-white/25 hover:scale-105'
+                        ? 'bg-white/[0.08] ring-1 scale-105'
+                        : 'bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.04] hover:border-white/[0.12] hover:scale-105'
                     }`}
+                    style={{
+                      borderColor: isActive ? currentAccent.hex : undefined,
+                      boxShadow: isActive ? `0 0 12px ${currentAccent.glowRgba}` : undefined,
+                    }}
                     title={`${app.name} (Running)`}
                   >
-                    <div style={{ color: app.color }} className="flex items-center justify-center">
+                    <div style={{ color: app.color || currentAccent.hex }} className="flex items-center justify-center">
                       {app.customIcon ? (
                         <img src={app.customIcon} alt={app.name} className="w-3/4 h-3/4 object-contain rounded-md" />
                       ) : (
@@ -930,27 +689,29 @@ export const SmartAppTaskbar: React.FC = () => {
                     </div>
 
                     {hasBadge && (
-                      <span className="absolute -top-1 -right-1 min-w-[13px] h-[13px] px-0.5 rounded-full bg-[#FF3B30] text-white text-[7.5px] font-bold flex items-center justify-center shadow-md">
+                      <span className="absolute -top-1 -right-1 min-w-[13px] h-[13px] px-0.5 rounded-full bg-[#F43F5E] text-white text-[7.5px] font-bold flex items-center justify-center shadow-md">
                         {badgeNum}
                       </span>
                     )}
 
-                    {/* Active Running Indicator Bar */}
                     <span
                       className={`absolute -bottom-1 left-1/2 -translate-x-1/2 ${sizeConfig.indicatorH} rounded-full transition-all duration-200 ${
-                        isActive ? 'w-4 bg-[#34C759] shadow-sm shadow-[#34C759]/60' : 'w-2 bg-[#34C759]/60 group-hover:w-3.5 group-hover:bg-[#34C759]'
+                        isActive ? 'w-4' : 'w-2 opacity-60 group-hover:w-3.5 group-hover:opacity-100'
                       }`}
+                      style={{
+                        backgroundColor: currentAccent.hex,
+                        boxShadow: isActive ? `0 0 8px ${currentAccent.hex}` : undefined,
+                      }}
                     />
 
-                    {/* Kill App Button on Hover */}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         audio.playTap();
                         killApp(app.id);
                       }}
-                      className="absolute -top-1.5 -left-1.5 w-4 h-4 rounded-full bg-[#FF3B30] text-white flex items-center justify-center opacity-0 group-hover:opacity-100 hover:scale-110 transition-all shadow-md z-10"
-                      title={`Close ${app.name}`}
+                      className="absolute -top-1.5 -left-1.5 w-4 h-4 rounded-full bg-[#F43F5E] text-white flex items-center justify-center opacity-0 group-hover:opacity-100 hover:scale-110 transition-all shadow-md z-10"
+                      title={`Terminate ${app.name}`}
                     >
                       <X size={9} strokeWidth={3} />
                     </button>
@@ -959,12 +720,10 @@ export const SmartAppTaskbar: React.FC = () => {
               })}
             </div>
 
-            {/* Divider between Running and Recent Apps */}
             {openAppItems.length > 0 && recentAppItems.length > 0 && (
-              <div className="h-5 w-[1px] bg-white/15 mx-0.5 shrink-0" />
+              <div className="h-4 w-[1px] bg-white/[0.06] mx-0.5 shrink-0" />
             )}
 
-            {/* Recent Apps Strip */}
             {recentAppItems.length > 0 && (
               <div className="flex items-center gap-1.5 shrink-0 py-1">
                 {recentAppItems.map((app) => {
@@ -978,10 +737,10 @@ export const SmartAppTaskbar: React.FC = () => {
                         audio.playTap();
                         launchApp(app.id);
                       }}
-                      className={`group relative ${sizeConfig.btnSize} rounded-xl bg-[#121218]/80 hover:bg-[#1C1C24] border border-white/5 hover:border-white/20 flex items-center justify-center cursor-pointer transition-all duration-150 hover:scale-105`}
+                      className={`group relative ${sizeConfig.btnSize} ${currentTheme.buttonRadius} bg-white/[0.02] hover:bg-white/[0.06] border border-white/[0.03] hover:border-white/[0.08] flex items-center justify-center cursor-pointer transition-all duration-150 hover:scale-105`}
                       title={`${app.name} (Recent)`}
                     >
-                      <div style={{ color: app.color }} className="opacity-75 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <div style={{ color: app.color || currentAccent.hex }} className="opacity-75 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                         {app.customIcon ? (
                           <img src={app.customIcon} alt={app.name} className="w-3/4 h-3/4 object-contain rounded-md" />
                         ) : (
@@ -990,12 +749,12 @@ export const SmartAppTaskbar: React.FC = () => {
                       </div>
 
                       {hasBadge && (
-                        <span className="absolute -top-1 -right-1 min-w-[13px] h-[13px] px-0.5 rounded-full bg-[#FF3B30] text-white text-[7.5px] font-bold flex items-center justify-center shadow-sm">
+                        <span className="absolute -top-1 -right-1 min-w-[13px] h-[13px] px-0.5 rounded-full bg-[#F43F5E] text-white text-[7.5px] font-bold flex items-center justify-center shadow-sm">
                           {badgeNum}
                         </span>
                       )}
 
-                      <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-[#8E8E93]/40 group-hover:bg-[#8E8E93] transition-colors" />
+                      <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-[#94A3B8]/40 group-hover:bg-[#94A3B8] transition-colors" />
                     </div>
                   );
                 })}
@@ -1004,106 +763,76 @@ export const SmartAppTaskbar: React.FC = () => {
           </div>
         </div>
 
-        {/* RIGHT SECTION (SYSTEM TRAY): Search, Floating Mode, Clipboard, Notifications, Date/Time, Battery */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          {/* Universal Search Button */}
+        {/* RIGHT SECTION (SYSTEM TRAY): Search, Floating Mode, Notifications, Clipboard */}
+        <div className="flex items-center gap-1 shrink-0">
           <button
             onClick={() => {
               audio.playTap();
               setSearchOpen(true);
             }}
-            className="p-2 bg-[#18181F] hover:bg-[#252530] text-[#8E8E93] hover:text-[#F0F0F2] rounded-full border border-white/10 transition shadow-sm"
-            title="Universal Search (Ctrl+Space)"
+            className={`p-2 bg-transparent hover:bg-white/[0.06] text-[#94A3B8] hover:text-[#F1F5F9] ${currentTheme.buttonRadius} transition shadow-none`}
+            title="Command Search (Ctrl+Space / ⌘+K)"
           >
-            <Search size={14} className="text-[#34C759]" />
+            <Search size={15} style={{ color: currentAccent.hex }} />
           </button>
 
-          {/* Floating Window Mode Toggle */}
           <button
             onClick={() => {
               toggleFloatingMode();
             }}
-            className={`p-2 rounded-full border transition ${
-              isFloatingModeArmed
-                ? 'bg-[#34C759] text-[#0A0A0C] border-[#34C759] shadow-md shadow-[#34C759]/20'
-                : 'bg-[#18181F] text-[#8E8E93] hover:text-[#F0F0F2] border-white/10 hover:bg-[#252530]'
-            }`}
-            title={isFloatingModeArmed ? 'Floating Mode: Active' : 'Enable Floating Window Mode'}
+            className={`p-2 ${currentTheme.buttonRadius} transition font-bold`}
+            style={{
+              backgroundColor: isFloatingModeArmed ? currentAccent.hex : 'transparent',
+              color: isFloatingModeArmed ? '#090B10' : '#94A3B8',
+            }}
+            title={isFloatingModeArmed ? 'Floating Window Mode: Active' : 'Enable Floating Window Mode'}
           >
-            <AppWindow size={14} className={isFloatingModeArmed ? 'text-black' : 'text-[#34C759]'} />
+            <AppWindow size={15} style={{ color: isFloatingModeArmed ? '#090B10' : currentAccent.hex }} />
           </button>
 
-          {/* Notification Count Indicator (Plain icon with live count badge, no custom UI) */}
           <button
             onClick={() => {
               audio.playTap();
               if (!isNotificationListenerEnabled) {
                 requestNotificationListenerPermission();
-                showToast('Allow Notification Access for Nodus Home');
+                showToast('Notification telemetry active');
                 return;
               }
-              const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
-              if (bridge?.openNotifications && bridge.openNotifications()) {
-                return;
-              }
-              showToast(`${unreadNotificationCount} Active Notification${unreadNotificationCount === 1 ? '' : 's'}`);
+              showToast(`${unreadNotificationCount} Active Node Notification${unreadNotificationCount === 1 ? '' : 's'}`);
             }}
-            className={`relative p-2 rounded-full border transition flex items-center justify-center select-none ${
+            className={`relative p-2 ${currentTheme.buttonRadius} transition flex items-center justify-center select-none ${
               unreadNotificationCount > 0
-                ? 'bg-[#18181F] text-[#FF9500] border-[#FF9500]/40 shadow-sm shadow-[#FF9500]/20'
-                : 'bg-[#18181F] text-[#8E8E93] hover:text-[#F0F0F2] border-white/10 hover:bg-[#252530]'
+                ? 'bg-[#F59E0B]/10 text-[#F59E0B]'
+                : 'bg-transparent text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/[0.06]'
             }`}
-            title={unreadNotificationCount > 0 ? `${unreadNotificationCount} active notification${unreadNotificationCount === 1 ? '' : 's'}` : 'Notifications'}
+            title={unreadNotificationCount > 0 ? `${unreadNotificationCount} active notifications` : 'Notifications'}
           >
-            <Bell size={14} className={unreadNotificationCount > 0 ? 'animate-pulse' : ''} />
+            <Bell size={15} className={unreadNotificationCount > 0 ? 'animate-pulse' : ''} />
             {unreadNotificationCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] px-1 rounded-full bg-[#FF3B30] text-white text-[9px] font-extrabold flex items-center justify-center shadow-lg border-2 border-[#0A0A0C] leading-none pointer-events-none">
+              <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-[#F43F5E] text-white text-[8px] font-extrabold flex items-center justify-center shadow-md border border-[#090B10] leading-none pointer-events-none font-mono">
                 {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
               </span>
             )}
           </button>
 
-          {/* Live Clock & Date Pill (Positioned on the right beside Battery) */}
-          <div 
-            className="flex items-center gap-1.5 bg-[#18181F] px-2.5 py-1 rounded-full border border-white/10 shadow-sm text-xs shrink-0 select-none"
-            title="Date & Time"
-          >
-            <Clock size={12} className="text-[#34C759]" />
-            <span className="font-semibold text-[#F0F0F2] font-mono text-[11px]">{formattedTime}</span>
-            <span className="text-white/20 hidden sm:inline">•</span>
-            <span className="text-[#8E8E93] text-[11px] hidden sm:inline">{formattedDate}</span>
-          </div>
-
-          {/* Battery Pill */}
-          <div 
-            className="flex items-center gap-1.5 bg-[#18181F] px-2.5 py-1 rounded-full border border-white/10 shadow-sm text-xs shrink-0 select-none" 
-            title={`Battery: ${batteryLevel}% ${isCharging ? '(Charging)' : ''}`}
-          >
-            {isCharging ? (
-              <Zap size={12} className="text-[#FFD60A] fill-current animate-pulse" />
-            ) : batteryLevel > 20 ? (
-              <Battery size={13} className="text-[#34C759]" />
-            ) : (
-              <Battery size={13} className="text-[#FF3B30] animate-pulse" />
-            )}
-            <span className="font-semibold text-[#F0F0F2] font-mono text-[11px]">{batteryLevel}%</span>
-          </div>
-
-          {/* Universal Cross-Device Clipboard History Button (Bottom-Right Corner) */}
+          {/* Universal Cross-Device Clipboard History Button */}
           <button
             onClick={() => {
               toggleClipboardPanel();
             }}
-            className={`relative p-2 rounded-full border transition flex items-center justify-center shrink-0 ${
-              isClipboardOpen
-                ? 'bg-[#34C759] text-[#0A0A0C] border-[#34C759] shadow-md shadow-[#34C759]/30 ring-1 ring-[#34C759]'
-                : 'bg-[#18181F] text-[#8E8E93] hover:text-[#F0F0F2] border-white/10 hover:bg-[#252530]'
-            }`}
-            title={isClipboardOpen ? 'Close Clipboard History' : 'Open Cross-Device Clipboard History'}
+            className={`relative p-2 ${currentTheme.buttonRadius} transition flex items-center justify-center shrink-0`}
+            style={{
+              backgroundColor: isClipboardOpen ? currentAccent.hex : 'transparent',
+              color: isClipboardOpen ? '#090B10' : '#94A3B8',
+            }}
+            title={isClipboardOpen ? 'Close Clipboard Panel' : 'Open Cross-Device Clipboard'}
           >
-            <ClipboardIcon size={14} className={isClipboardOpen ? 'text-black' : 'text-[#34C759]'} />
+            <ClipboardIcon size={15} style={{ color: isClipboardOpen ? '#090B10' : currentAccent.hex }} />
             {clipboardItems.length > 0 && !isClipboardOpen && (
-              <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-[#34C759] text-[#0A0A0C] text-[8px] font-extrabold flex items-center justify-center shadow-md border border-[#0A0A0C] leading-none">
+              <span
+                className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-1 rounded-full text-[#090B10] text-[8px] font-extrabold flex items-center justify-center shadow-md leading-none font-mono"
+                style={{ backgroundColor: currentAccent.hex }}
+              >
                 {clipboardItems.length > 9 ? '9+' : clipboardItems.length}
               </span>
             )}

@@ -1,5 +1,11 @@
 export type IconStyle = 'material-you' | 'monochrome' | 'outline' | 'minimal-text' | 'squircle-color' | 'neon';
 
+export type AccentColorId = 'sapphire' | 'amber' | 'ruby' | 'garnet' | 'emerald';
+
+export type ThemeId = 'glassmorphism' | 'cyberpunk-hud' | 'neobrutalism' | 'nordic-minimal';
+
+export type IconShape = 'modern' | 'frosted' | 'minimal' | 'glass' | 'squircle-color';
+
 export type WallpaperId = 
   | 'alpine-horizon'
   | 'material-fluid'
@@ -9,6 +15,10 @@ export type WallpaperId =
   | 'nordic-aurora'
   | 'geometric-pastel'
   | 'amoled-black'
+  | 'alpine'
+  | 'aurora'
+  | 'cyberpunk'
+  | 'slate'
   | 'custom';
 
 export type DeviceType = 'tablet' | 'desktop' | 'phone' | 'laptop';
@@ -67,6 +77,10 @@ export interface AppItem {
   pageIndex: number; // 0, 1, etc.
   order: number;
   packageName?: string;
+  isRemote?: boolean;
+  remoteExecutableId?: string;
+  remoteDeviceName?: string;
+  remoteIconBase64?: string;
 }
 
 export interface FolderItem {
@@ -138,6 +152,7 @@ export interface RemoteExecutable {
   category: 'tools' | 'productivity' | 'games' | 'media' | 'system' | 'custom';
   iconName: string;
   iconColor: string;
+  iconBase64?: string;
   execType: 'native_app' | 'command' | 'url_protocol' | 'script' | 'intent';
   commandOrPackage: string; // e.g. "code .", "steam://run/730", "powershell -Command ...", "com.spotify.music"
   args?: string;
@@ -183,9 +198,11 @@ export interface IconPackInfo {
 
 export interface LauncherSettings {
   deviceFrame: boolean; // Show simulated phone shell or full viewport
+  theme: ThemeId;
   themeMode: 'dark' | 'light' | 'auto';
   accentColor: string; // Hex or theme key
   iconStyle: IconStyle;
+  iconShape?: IconShape;
   selectedIconPackPackage?: string;
   iconSize: 'small' | 'medium' | 'large' | 'xlarge';
   drawerLayout: 'continuous' | 'paginated';

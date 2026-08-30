@@ -2,6 +2,7 @@ import React from 'react';
 import { X, Minus } from 'lucide-react';
 import { useLauncher } from '../../context/LauncherContext';
 import { audio } from '../../utils/audio';
+import { getSystemTheme, getAccentColor, getSurfaceRgba } from '../../utils/themes';
 
 interface DesktopAppWindowProps {
   appId: string;
@@ -9,12 +10,15 @@ interface DesktopAppWindowProps {
 }
 
 export const DesktopAppWindow: React.FC<DesktopAppWindowProps> = ({ appId, children }) => {
-  const { apps, closeActiveApp, killApp } = useLauncher();
+  const { apps, closeActiveApp, killApp, settings } = useLauncher();
+
+  const currentTheme = getSystemTheme(settings.theme);
+  const currentAccent = getAccentColor(settings.accentColor);
 
   const currentApp = apps.find((a) => a.id === appId) || {
     id: appId,
     name: 'Preferences',
-    color: '#34C759',
+    color: currentAccent.hex,
   };
 
   const handleMinimize = () => {
@@ -28,20 +32,34 @@ export const DesktopAppWindow: React.FC<DesktopAppWindowProps> = ({ appId, child
   };
 
   return (
-    <div className="h-full w-full flex flex-col bg-[#0E0E14] border border-white/10 shadow-2xl overflow-hidden rounded-3xl backdrop-blur-2xl select-none">
+    <div 
+      className={`h-full w-full flex flex-col border border-white/10 shadow-2xl overflow-hidden ${currentTheme.cardRadius} backdrop-blur-3xl select-none transition-colors duration-200`}
+      style={{
+        backgroundColor: getSurfaceRgba(settings.theme, settings.taskbarOpacity, 'window'),
+      }}
+    >
       {/* Sleek Frosted Window Header */}
-      <div className="h-12 bg-[#161622]/90 border-b border-white/10 px-5 flex items-center justify-between flex-shrink-0 backdrop-blur-md">
+      <div 
+        className="h-12 border-b border-white/10 px-5 flex items-center justify-between flex-shrink-0 backdrop-blur-md bg-black/20"
+      >
         {/* Left: App Icon & Name */}
         <div className="flex items-center gap-2.5">
           <div
-            className="w-5 h-5 rounded-lg flex items-center justify-center text-[10px] font-bold text-white shadow-sm"
-            style={{ backgroundColor: currentApp.color || '#34C759' }}
+            className={`w-6 h-6 ${currentTheme.buttonRadius} flex items-center justify-center text-[10px] font-bold text-white shadow-sm`}
+            style={{ backgroundColor: currentApp.color || currentAccent.hex }}
           >
             {currentApp.name.charAt(0)}
           </div>
-          <span className="text-xs font-bold text-[#F0F0F2] tracking-wide">{currentApp.name}</span>
-          <span className="text-[10px] text-[#34C759] bg-[#34C759]/10 border border-[#34C759]/20 px-2 py-0.5 rounded-full font-mono font-medium">
-            Active
+          <span className={`text-xs font-bold ${currentTheme.classes.textPrimary} tracking-wide`}>{currentApp.name}</span>
+          <span 
+            className={`text-[9px] px-2 py-0.5 ${currentTheme.buttonRadius} font-mono font-bold border`}
+            style={{
+              backgroundColor: currentAccent.badgeBg,
+              color: currentAccent.hex,
+              borderColor: currentAccent.badgeBorder,
+            }}
+          >
+            ACTIVE
           </span>
         </div>
 

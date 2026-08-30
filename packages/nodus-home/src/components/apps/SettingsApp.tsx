@@ -17,6 +17,8 @@ import { useLauncher } from '../../context/LauncherContext';
 import { audio } from '../../utils/audio';
 import { WALLPAPER_PRESETS } from '../../utils/constants';
 import { useFleetDetection } from '../../hooks/useFleetDetection';
+import { THEME_LIST, getSystemTheme, ACCENT_COLOR_LIST, getAccentColor, getSurfaceRgba } from '../../utils/themes';
+import { ThemeId, AccentColorId } from '../../types/launcher';
 
 export const SettingsApp: React.FC = () => {
   const {
@@ -26,13 +28,11 @@ export const SettingsApp: React.FC = () => {
     showToast,
   } = useLauncher();
 
+  const currentTheme = getSystemTheme(settings.theme);
+  const currentAccent = getAccentColor(settings.accentColor);
   const { isFleetInstalled, isTouchInstalled } = useFleetDetection();
-
-  const [customWpInput, setCustomWpInput] = useState('');
   const [deviceIconPacks, setDeviceIconPacks] = useState<Array<{ packageName: string; label: string }>>([]);
-  const [resetSuccess, setResetSuccess] = useState(false);
 
-  // Query installed icon packs from native bridge
   useEffect(() => {
     try {
       if (typeof window !== 'undefined' && (window as any).NodusNativeBridge?.getInstalledIconPacks) {
@@ -44,15 +44,6 @@ export const SettingsApp: React.FC = () => {
       }
     } catch (_) {}
   }, []);
-
-  const handleCustomWallpaper = (url: string) => {
-    if (!url.trim()) return;
-    updateSettings({
-      wallpaper: 'custom',
-      customWallpaperUrl: url.trim(),
-    });
-    showToast('Custom wallpaper applied');
-  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -70,9 +61,30 @@ export const SettingsApp: React.FC = () => {
     reader.readAsDataURL(file);
   };
 
+  const handleAccentSelect = (accentId: AccentColorId) => {
+    audio.playTap();
+    const selected = getAccentColor(accentId);
+    updateSettings({
+      accentColor: accentId,
+    });
+    showToast(`${selected.name} accent applied`);
+  };
+
+  const handleThemeSelect = (themeId: ThemeId) => {
+    audio.playTap();
+    const selected = getSystemTheme(themeId);
+    updateSettings({
+      theme: themeId,
+      wallpaper: selected.wallpaperId,
+    });
+    showToast(`${selected.name} design theme applied`);
+  };
+
   const handleResetToDefaults = () => {
     audio.playTap();
     updateSettings({
+      theme: 'glassmorphism',
+      accentColor: 'sapphire',
       appLaunchMode: 'fullscreen',
       iconSize: 'medium',
       drawerLayout: 'continuous',
@@ -82,23 +94,167 @@ export const SettingsApp: React.FC = () => {
       iconPack: 'default',
       taskbarOpacity: 92,
       taskbarIconScale: 'medium',
-      enableMultiDevice: false,
+      enableMultiDevice: true,
       enableAssistiveTouch: false,
     });
-    setResetSuccess(true);
     showToast('Settings restored to default');
-    setTimeout(() => setResetSuccess(false), 2500);
   };
 
   return (
-    <div className="h-full w-full flex flex-col bg-[#0A0A0E] text-[#F0F0F2] font-sans select-none">
+    <div 
+      className={`h-full w-full flex flex-col ${currentTheme.classes.textPrimary} font-sans select-none bg-transparent`}
+    >
       {/* Scrollable Settings Form */}
       <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6 space-y-4 scrollbar-thin">
         
-        {/* SECTION 1: Multitasking & Windowing Mode */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-[#14141E]/80 border border-white/[0.08] backdrop-blur-xl shadow-sm space-y-3">
+        {/* SECTION 1: Appearance (Accent Colors Row + Compact Theme Cards) */}
+        <div className={`p-4 sm:p-5 ${currentTheme.cardRadius} ${currentTheme.classes.itemCard} shadow-sm space-y-3.5`}>
+          <div className="flex items-center justify-between pb-2 border-b border-white/5">
+            <div className="flex items-center gap-2 text-xs font-bold text-white tracking-wide uppercase">
+              <Palette size={15} style={{ color: currentAccent.hex }} />
+              <span>Theme & Accent</span>
+            </div>
+            <span
+              className={`text-[10px] font-semibold px-2 py-0.5 ${currentTheme.buttonRadius} border`}
+              style={{ backgroundColor: currentAccent.badgeBg, color: currentAccent.hex, borderColor: currentAccent.badgeBorder }}
+            >
+              {currentTheme.name} • {currentAccent.name}
+            </span>
+          </div>
+
+          {/* Accent Color: Compact Single Row */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-2.5 rounded-xl bg-black/25 border border-white/5">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold text-white uppercase tracking-wider">Accent</span>
+              <span className="text-[10px] text-[#94A3B8]">({currentAccent.name})</span>
+            </div>
+            
+            <div className="flex items-center gap-2 overflow-x-auto py-0.5">
+              {ACCENT_COLOR_LIST.map((accent) => {
+                const isSelected = (settings.accentColor || 'sapphire') === accent.id;
+                return (
+                  <button
+                    key={accent.id}
+                    type="button"
+                    title={`${accent.name} (${accent.hex})`}
+                    onClick={() => handleAccentSelect(accent.id)}
+                    className={`group relative flex items-center gap-1.5 px-2.5 py-1 ${currentTheme.buttonRadius} border transition-all duration-150 shrink-0 ${
+                      isSelected
+                        ? 'border-transparent shadow-sm'
+                        : 'border-white/10 hover:border-white/20 bg-white/[0.02] hover:bg-white/[0.05]'
+                    }`}
+                    style={
+                      isSelected
+                        ? {
+                            backgroundColor: accent.badgeBg,
+                            borderColor: accent.hex,
+                            boxShadow: `0 0 10px ${accent.glowRgba}`,
+                          }
+                        : undefined
+                    }
+                  >
+                    <span
+                      className="w-3.5 h-3.5 rounded-full flex items-center justify-center shrink-0 border border-white/20 shadow-sm transition-transform group-hover:scale-110"
+                      style={{
+                        backgroundColor: accent.hex,
+                        boxShadow: `0 0 6px ${accent.glowRgba}`,
+                      }}
+                    >
+                      {isSelected && <Check size={8} strokeWidth={3.5} className="text-black" />}
+                    </span>
+                    <span
+                      className="text-[11px] font-semibold"
+                      style={{ color: isSelected ? accent.hex : '#94A3B8' }}
+                    >
+                      {accent.name}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Theme Option Cards: Compact 2x2 Grid */}
+          <div className="space-y-1.5">
+            <div className="text-[11px] font-semibold text-[#8E8E93]">Design Systems</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {THEME_LIST.map((th) => {
+                const isSelected = (settings.theme || 'glassmorphism') === th.id;
+                return (
+                  <button
+                    key={th.id}
+                    type="button"
+                    onClick={() => handleThemeSelect(th.id)}
+                    className={`group relative p-3 ${currentTheme.cardRadius} border text-left transition-all duration-150 flex items-center justify-between gap-3 overflow-hidden ${
+                      isSelected
+                        ? 'border-transparent shadow-md'
+                        : 'border-white/[0.08] hover:border-white/[0.20] hover:bg-white/[0.02] bg-white/[0.01]'
+                    }`}
+                    style={{
+                      backgroundColor: isSelected ? 'rgba(255,255,255,0.05)' : undefined,
+                      boxShadow: isSelected ? `0 0 0 2px ${currentAccent.hex}, 0 4px 14px -2px ${currentAccent.glowRgba}` : undefined,
+                    }}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      {/* Mini Visual Indicator */}
+                      <div
+                        className="w-10 h-10 rounded-lg overflow-hidden shrink-0 border border-white/10 flex items-center justify-center relative p-1"
+                        style={th.wallpaperStyle}
+                      >
+                        {th.archetype === 'glass' && (
+                          <div className="w-5 h-5 rounded-md bg-gradient-to-b from-[#1E293B] to-[#0F1726] border border-white/30 shadow-sm" />
+                        )}
+                        {th.archetype === 'hud' && (
+                          <div className="w-5 h-5 rounded-none border border-cyan-400 bg-gradient-to-b from-[#0B2535] to-[#031018] font-mono text-[6px] text-cyan-300 flex items-center justify-center shadow-[0_0_8px_rgba(0,240,255,0.3)]">
+                            SYS
+                          </div>
+                        )}
+                        {th.archetype === 'brutalist' && (
+                          <div className="w-5 h-5 rounded-sm bg-[#2A3147] text-white font-black text-[6px] border-2 border-black shadow-[1.5px_1.5px_0px_#000] flex items-center justify-center">
+                            POP
+                          </div>
+                        )}
+                        {th.archetype === 'minimal' && (
+                          <div className="w-5 h-5 rounded-none bg-[#1E2638] border border-white/30 text-white text-[7px] flex items-center justify-center">
+                            01
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-white truncate">
+                            {th.name}
+                          </span>
+                          <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-white/[0.06] text-[#94A3B8] uppercase">
+                            {th.designSystem}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-[#94A3B8] truncate mt-0.5">
+                          {th.description}
+                        </p>
+                      </div>
+                    </div>
+
+                    {isSelected && (
+                      <div
+                        className="w-5 h-5 rounded-full shrink-0 flex items-center justify-center shadow text-black"
+                        style={{ backgroundColor: currentAccent.hex }}
+                      >
+                        <Check size={11} strokeWidth={3} />
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* SECTION 2: Multitasking & Windowing Mode */}
+        <div className={`p-4 sm:p-5 ${currentTheme.cardRadius} ${currentTheme.classes.itemCard} shadow-sm space-y-3`}>
           <div className="flex items-center gap-2 text-xs font-bold text-white tracking-wide uppercase pb-2 border-b border-white/5">
-            <AppWindow size={15} className="text-[#34C759]" />
+            <AppWindow size={15} style={{ color: currentAccent.hex }} />
             <span>Multitasking & Windowing</span>
           </div>
 
@@ -111,18 +267,19 @@ export const SettingsApp: React.FC = () => {
                   audio.playTap();
                   updateSettings({ appLaunchMode: 'fullscreen' });
                 }}
-                className={`p-3 rounded-xl border text-left transition flex flex-col gap-1 ${
+                className={`p-3 ${currentTheme.cardRadius} border text-left transition flex flex-col gap-1`}
+                style={
                   settings.appLaunchMode === 'fullscreen'
-                    ? 'bg-[#34C759]/15 border-[#34C759] text-white shadow-sm'
-                    : 'bg-[#181824]/60 border-white/5 text-[#8E8E93] hover:border-white/15 hover:text-white'
-                }`}
+                    ? { backgroundColor: currentAccent.badgeBg, borderColor: currentAccent.hex, color: '#F1F5F9' }
+                    : { backgroundColor: 'rgba(255,255,255,0.02)', borderColor: 'rgba(255,255,255,0.06)', color: '#8E8E93' }
+                }
               >
                 <div className="flex items-center justify-between">
-                  <Maximize2 size={14} className={settings.appLaunchMode === 'fullscreen' ? 'text-[#34C759]' : ''} />
-                  {settings.appLaunchMode === 'fullscreen' && <Check size={13} className="text-[#34C759]" />}
+                  <Maximize2 size={14} style={{ color: settings.appLaunchMode === 'fullscreen' ? currentAccent.hex : undefined }} />
+                  {settings.appLaunchMode === 'fullscreen' && <Check size={13} style={{ color: currentAccent.hex }} />}
                 </div>
-                <span className="text-xs font-bold">Standard</span>
-                <span className="text-[10px] opacity-75">Opens apps in full screen</span>
+                <span className="text-xs font-bold">Standard Fullscreen</span>
+                <span className="text-[10px] opacity-75">Opens apps in master window</span>
               </button>
 
               <button
@@ -131,27 +288,28 @@ export const SettingsApp: React.FC = () => {
                   audio.playTap();
                   updateSettings({ appLaunchMode: 'floating' });
                 }}
-                className={`p-3 rounded-xl border text-left transition flex flex-col gap-1 ${
+                className={`p-3 ${currentTheme.cardRadius} border text-left transition flex flex-col gap-1`}
+                style={
                   settings.appLaunchMode === 'floating'
-                    ? 'bg-[#34C759]/15 border-[#34C759] text-white shadow-sm'
-                    : 'bg-[#181824]/60 border-white/5 text-[#8E8E93] hover:border-white/15 hover:text-white'
-                }`}
+                    ? { backgroundColor: currentAccent.badgeBg, borderColor: currentAccent.hex, color: '#F1F5F9' }
+                    : { backgroundColor: 'rgba(255,255,255,0.02)', borderColor: 'rgba(255,255,255,0.06)', color: '#8E8E93' }
+                }
               >
                 <div className="flex items-center justify-between">
-                  <Minimize2 size={14} className={settings.appLaunchMode === 'floating' ? 'text-[#34C759]' : ''} />
-                  {settings.appLaunchMode === 'floating' && <Check size={13} className="text-[#34C759]" />}
+                  <Minimize2 size={14} style={{ color: settings.appLaunchMode === 'floating' ? currentAccent.hex : undefined }} />
+                  {settings.appLaunchMode === 'floating' && <Check size={13} style={{ color: currentAccent.hex }} />}
                 </div>
                 <span className="text-xs font-bold">Floating Window</span>
-                <span className="text-[10px] opacity-75">Freeform window on top of home</span>
+                <span className="text-[10px] opacity-75">Freeform window on desktop</span>
               </button>
             </div>
           </div>
         </div>
 
         {/* SECTION 2: Desktop Layout & Grid Density */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-[#14141E]/80 border border-white/[0.08] backdrop-blur-xl shadow-sm space-y-3">
+        <div className={`p-4 sm:p-5 ${currentTheme.cardRadius} ${currentTheme.classes.itemCard} shadow-sm space-y-3`}>
           <div className="flex items-center gap-2 text-xs font-bold text-white tracking-wide uppercase pb-2 border-b border-white/5">
-            <LayoutGrid size={15} className="text-[#007AFF]" />
+            <LayoutGrid size={15} style={{ color: currentAccent.hex }} />
             <span>Desktop Layout & Grid Density</span>
           </div>
 
@@ -168,11 +326,12 @@ export const SettingsApp: React.FC = () => {
                       audio.playTap();
                       updateSettings({ iconSize: size });
                     }}
-                    className={`py-2 rounded-xl text-xs font-bold transition uppercase border ${
+                    className={`py-2 ${currentTheme.buttonRadius} text-xs font-bold transition uppercase border`}
+                    style={
                       (settings.iconSize || 'medium') === size
-                        ? 'bg-[#007AFF] text-white border-[#007AFF] shadow-sm'
-                        : 'bg-[#181824]/60 border-white/5 text-[#8E8E93] hover:text-white'
-                    }`}
+                        ? { backgroundColor: currentAccent.hex, color: '#090B10', borderColor: currentAccent.hex }
+                        : { backgroundColor: 'rgba(255,255,255,0.02)', borderColor: 'rgba(255,255,255,0.06)', color: '#8E8E93' }
+                    }
                   >
                     {size === 'xlarge' ? 'XL' : size.charAt(0)}
                   </button>
@@ -190,11 +349,12 @@ export const SettingsApp: React.FC = () => {
                     audio.playTap();
                     updateSettings({ drawerLayout: 'continuous' });
                   }}
-                  className={`py-2 px-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 border ${
+                  className={`py-2 px-2.5 ${currentTheme.buttonRadius} text-xs font-bold transition flex items-center justify-center gap-1.5 border`}
+                  style={
                     (settings.drawerLayout ?? 'continuous') === 'continuous'
-                      ? 'bg-[#007AFF] text-white border-[#007AFF] shadow-sm'
-                      : 'bg-[#181824]/60 border-white/5 text-[#8E8E93] hover:text-white'
-                  }`}
+                      ? { backgroundColor: currentAccent.hex, color: '#090B10', borderColor: currentAccent.hex }
+                      : { backgroundColor: 'rgba(255,255,255,0.02)', borderColor: 'rgba(255,255,255,0.06)', color: '#8E8E93' }
+                  }
                 >
                   <LayoutGrid size={13} />
                   <span>Continuous</span>
@@ -206,11 +366,12 @@ export const SettingsApp: React.FC = () => {
                     audio.playTap();
                     updateSettings({ drawerLayout: 'paginated' });
                   }}
-                  className={`py-2 px-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 border ${
+                  className={`py-2 px-2.5 ${currentTheme.buttonRadius} text-xs font-bold transition flex items-center justify-center gap-1.5 border`}
+                  style={
                     settings.drawerLayout === 'paginated'
-                      ? 'bg-[#007AFF] text-white border-[#007AFF] shadow-sm'
-                      : 'bg-[#181824]/60 border-white/5 text-[#8E8E93] hover:text-white'
-                  }`}
+                      ? { backgroundColor: currentAccent.hex, color: '#090B10', borderColor: currentAccent.hex }
+                      : { backgroundColor: 'rgba(255,255,255,0.02)', borderColor: 'rgba(255,255,255,0.06)', color: '#8E8E93' }
+                  }
                 >
                   <AppWindow size={13} />
                   <span>Paginated</span>
@@ -221,14 +382,14 @@ export const SettingsApp: React.FC = () => {
         </div>
 
         {/* SECTION 3: Wallpaper & Atmosphere */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-[#14141E]/80 border border-white/[0.08] backdrop-blur-xl shadow-sm space-y-3">
+        <div className={`p-4 sm:p-5 ${currentTheme.cardRadius} ${currentTheme.classes.itemCard} shadow-sm space-y-3`}>
           <div className="flex items-center justify-between pb-2 border-b border-white/5">
             <div className="flex items-center gap-2 text-xs font-bold text-white tracking-wide uppercase">
-              <ImageIcon size={15} className="text-[#FF9500]" />
+              <ImageIcon size={15} style={{ color: currentAccent.hex }} />
               <span>Wallpaper & Atmosphere</span>
             </div>
 
-            <label className="cursor-pointer flex items-center gap-1.5 px-3 py-1 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-semibold text-[#F0F0F2] transition border border-white/10 hover:border-white/20">
+            <label className={`cursor-pointer flex items-center gap-1.5 px-3 py-1 ${currentTheme.buttonRadius} bg-white/5 hover:bg-white/10 text-xs font-semibold text-[#F0F0F2] transition border border-white/10 hover:border-white/20`}>
               <Upload size={12} />
               <span>Custom Image</span>
               <input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
@@ -246,17 +407,23 @@ export const SettingsApp: React.FC = () => {
                     audio.playTap();
                     updateSettings({ wallpaper: wp.id });
                   }}
-                  className={`group relative h-16 rounded-xl overflow-hidden border transition-all text-left flex flex-col justify-end p-2 ${
-                    isSelected ? 'ring-2 ring-[#FF9500] border-transparent shadow-sm' : 'border-white/10 hover:border-white/25'
+                  className={`group relative h-16 ${currentTheme.cardRadius} overflow-hidden border transition-all text-left flex flex-col justify-end p-2 ${
+                    isSelected ? 'ring-2 border-transparent shadow-sm' : 'border-white/10 hover:border-white/25'
                   }`}
-                  style={wp.style}
+                  style={{
+                    ...wp.style,
+                    boxShadow: isSelected ? `0 0 0 2px ${currentAccent.hex}` : undefined,
+                  }}
                 >
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
                   <span className="relative z-10 text-[10px] font-bold text-white truncate drop-shadow">
                     {wp.name}
                   </span>
                   {isSelected && (
-                    <div className="absolute top-1.5 right-1.5 z-10 w-3.5 h-3.5 rounded-full bg-[#FF9500] text-black flex items-center justify-center shadow">
+                    <div
+                      className="absolute top-1.5 right-1.5 z-10 w-3.5 h-3.5 rounded-full text-black flex items-center justify-center shadow"
+                      style={{ backgroundColor: currentAccent.hex }}
+                    >
                       <Check size={9} strokeWidth={3} />
                     </div>
                   )}
@@ -266,76 +433,101 @@ export const SettingsApp: React.FC = () => {
           </div>
         </div>
 
-        {/* SECTION 4: Icon Packs & Styling */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-[#14141E]/80 border border-white/[0.08] backdrop-blur-xl shadow-sm space-y-3">
-          <div className="flex items-center gap-2 text-xs font-bold text-white tracking-wide uppercase pb-2 border-b border-white/5">
-            <Palette size={15} className="text-[#AF52DE]" />
-            <span>Icon Packs & Styling</span>
+        {/* SECTION 4: Custom Icon Packs */}
+        <div className={`p-4 sm:p-5 ${currentTheme.cardRadius} ${currentTheme.classes.itemCard} shadow-sm space-y-3`}>
+          <div className="flex items-center justify-between pb-2 border-b border-white/5">
+            <div className="flex items-center gap-2 text-xs font-bold text-white tracking-wide uppercase">
+              <Sparkles size={15} style={{ color: currentAccent.hex }} />
+              <span>Custom Icon Packs</span>
+            </div>
+            <span
+              className={`text-[10px] font-semibold px-2 py-0.5 ${currentTheme.buttonRadius} border`}
+              style={{ backgroundColor: currentAccent.badgeBg, color: currentAccent.hex, borderColor: currentAccent.badgeBorder }}
+            >
+              {deviceIconPacks.length > 0 ? `${deviceIconPacks.length} Device Pack(s)` : 'Universal Pack Engine'}
+            </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-            {/* Shape Style */}
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-semibold text-[#8E8E93]">Icon Card Shape & Style</label>
-              <div className="grid grid-cols-2 gap-1.5">
-                {(['modern', 'frosted', 'minimal', 'glass'] as const).map((shape) => (
-                  <button
-                    key={shape}
-                    type="button"
-                    onClick={() => {
-                      audio.playTap();
-                      updateSettings({ iconShape: shape });
-                    }}
-                    className={`py-2 rounded-xl text-xs font-semibold capitalize transition border ${
-                      (settings.iconShape || 'modern') === shape
-                        ? 'bg-[#AF52DE] text-white border-[#AF52DE] shadow-sm'
-                        : 'bg-[#181824]/60 border-white/5 text-[#8E8E93] hover:text-white'
-                    }`}
-                  >
-                    {shape}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Icon Pack Selection */}
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-semibold text-[#8E8E93]">Installed Icon Pack</label>
-              <select
-                value={settings.iconPack || 'default'}
-                onChange={(e) => {
-                  audio.playTap();
-                  updateSettings({ iconPack: e.target.value });
-                  showToast(e.target.value === 'default' ? 'Default icons active' : 'Icon pack applied');
-                }}
-                className="w-full bg-[#181824]/80 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#AF52DE] transition"
-              >
-                <option value="default">Default Dynamic Material Icons</option>
-                {deviceIconPacks.map((pack) => (
-                  <option key={pack.packageName} value={pack.packageName}>
-                    {pack.label}
-                  </option>
-                ))}
-              </select>
-              <span className="text-[10px] text-[#8E8E93] block">
-                {deviceIconPacks.length > 0
-                  ? `${deviceIconPacks.length} icon pack(s) detected on device.`
-                  : 'Supports standard Nova, ADW, and Apex icon packs.'}
+          <div className="space-y-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <label className="text-[11px] font-semibold text-[#8E8E93]">
+                Installed / Active Icon Pack
+              </label>
+              <span className="text-[10px] text-[#94A3B8]">
+                Icon geometry is dynamically styled by current Theme
               </span>
             </div>
+
+            <select
+              value={settings.iconPack || 'default'}
+              onChange={(e) => {
+                audio.playTap();
+                updateSettings({ iconPack: e.target.value });
+                showToast(e.target.value === 'default' ? 'Default Material icons active' : 'Custom Icon Pack applied');
+              }}
+              className={`w-full ${currentTheme.classes.inputField} px-3.5 py-2.5 text-xs transition`}
+            >
+              <option value="default">Default Dynamic Material Icons (Adaptive)</option>
+              {deviceIconPacks.map((pack) => (
+                <option key={pack.packageName} value={pack.packageName}>
+                  {pack.label} ({pack.packageName})
+                </option>
+              ))}
+            </select>
+
+            <p className="text-[10px] text-[#94A3B8] leading-relaxed">
+              {deviceIconPacks.length > 0
+                ? `Detected ${deviceIconPacks.length} installed icon pack(s) on your system. Changes apply instantly across the launcher.`
+                : 'Compatible with standard Android icon pack packages (Nova, Lawnchair, ADW, Apex) when running on device.'}
+            </p>
           </div>
         </div>
 
-        {/* SECTION 5: Static Taskbar Customization */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-[#14141E]/80 border border-white/[0.08] backdrop-blur-xl shadow-sm space-y-3">
-          <div className="flex items-center gap-2 text-xs font-bold text-white tracking-wide uppercase pb-2 border-b border-white/5">
-            <Sliders size={15} className="text-[#64D2FF]" />
-            <span>Static Taskbar Customization</span>
+        {/* SECTION 5: Global Surface & UI Opacity */}
+        <div className={`p-4 sm:p-5 ${currentTheme.cardRadius} ${currentTheme.classes.itemCard} shadow-sm space-y-3.5`}>
+          <div className="flex items-center justify-between pb-2 border-b border-white/5">
+            <div className="flex items-center gap-2 text-xs font-bold text-white tracking-wide uppercase">
+              <Sliders size={15} style={{ color: currentAccent.hex }} />
+              <span>Global Surface & UI Opacity</span>
+            </div>
+            <span
+              className={`text-[10px] font-mono font-bold px-2 py-0.5 ${currentTheme.buttonRadius} border`}
+              style={{ backgroundColor: currentAccent.badgeBg, color: currentAccent.hex, borderColor: currentAccent.badgeBorder }}
+            >
+              {settings.taskbarOpacity ?? 92}% Opacity
+            </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-            {/* Taskbar Scale */}
-            <div className="space-y-1.5">
+          <div className="space-y-4">
+            {/* Global Opacity Slider */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-[11px]">
+                <div>
+                  <span className="font-semibold text-white">System Surface Opacity</span>
+                  <p className="text-[10px] text-[#94A3B8]">Modulates transparency across every modal, panel, taskbar, popup, and window</p>
+                </div>
+                <span className="font-mono text-xs font-bold" style={{ color: currentAccent.hex }}>
+                  {settings.taskbarOpacity ?? 92}%
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] font-mono text-[#64748B]">20%</span>
+                <input
+                  type="range"
+                  min="20"
+                  max="100"
+                  step="1"
+                  value={settings.taskbarOpacity ?? 92}
+                  onChange={(e) => updateSettings({ taskbarOpacity: Number(e.target.value) })}
+                  className="flex-1 h-2 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                  style={{ accentColor: currentAccent.hex }}
+                />
+                <span className="text-[10px] font-mono text-[#64748B]">100%</span>
+              </div>
+            </div>
+
+            {/* Taskbar Icon Sizing */}
+            <div className="space-y-1.5 pt-2 border-t border-white/5">
               <label className="text-[11px] font-semibold text-[#8E8E93]">Taskbar Sizing</label>
               <div className="grid grid-cols-4 gap-1.5">
                 {(['small', 'medium', 'large', 'xlarge'] as const).map((s) => (
@@ -346,60 +538,154 @@ export const SettingsApp: React.FC = () => {
                       audio.playTap();
                       updateSettings({ taskbarIconScale: s });
                     }}
-                    className={`py-2 rounded-xl text-xs font-bold transition uppercase border ${
+                    className={`py-2 ${currentTheme.buttonRadius} text-xs font-bold transition uppercase border`}
+                    style={
                       (settings.taskbarIconScale || 'medium') === s
-                        ? 'bg-[#64D2FF] text-[#0A0A0E] border-[#64D2FF] shadow-sm'
-                        : 'bg-[#181824]/60 border-white/5 text-[#8E8E93] hover:text-white'
-                    }`}
+                        ? { backgroundColor: currentAccent.hex, color: '#090B10', borderColor: currentAccent.hex }
+                        : { backgroundColor: 'rgba(255,255,255,0.02)', borderColor: 'rgba(255,255,255,0.06)', color: '#8E8E93' }
+                    }
                   >
                     {s === 'xlarge' ? 'XL' : s.charAt(0)}
                   </button>
                 ))}
               </div>
             </div>
-
-            {/* Opacity Slider */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="font-semibold text-[#8E8E93]">Glassmorphism Opacity</span>
-                <span className="font-mono text-white font-bold">{settings.taskbarOpacity ?? 92}%</span>
-              </div>
-              <input
-                type="range"
-                min="40"
-                max="100"
-                step="2"
-                value={settings.taskbarOpacity ?? 92}
-                onChange={(e) => updateSettings({ taskbarOpacity: Number(e.target.value) })}
-                className="w-full h-1.5 bg-[#181824] rounded-lg appearance-none cursor-pointer accent-[#64D2FF]"
-              />
-            </div>
           </div>
         </div>
 
-        {/* SECTION 6: Nodus Ecosystem Modules */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-[#14141E]/80 border border-white/[0.08] backdrop-blur-xl shadow-sm space-y-3">
+        {/* SECTION 6: Remote PC Shortcuts & Executables Runner */}
+        <div className={`p-4 sm:p-5 ${currentTheme.cardRadius} ${currentTheme.classes.itemCard} shadow-sm space-y-3.5`}>
+          <div className="flex items-center justify-between pb-2 border-b border-white/5">
+            <div className="flex items-center gap-2 text-xs font-bold text-white tracking-wide uppercase">
+              <Radio size={15} style={{ color: currentAccent.hex }} />
+              <span>Remote PC Shortcuts & Executables</span>
+            </div>
+            <span
+              className={`text-[10px] font-mono font-bold px-2 py-0.5 ${currentTheme.buttonRadius} border`}
+              style={{ backgroundColor: currentAccent.badgeBg, color: currentAccent.hex, borderColor: currentAccent.badgeBorder }}
+            >
+              {(settings.remoteExecutables || []).length} Configured
+            </span>
+          </div>
+
+          {/* Quick Preset Creation Row */}
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-semibold text-[#8E8E93]">Quick Add Shortcut Presets</label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {[
+                { name: 'VS Code', cmd: 'code .', icon: 'Code', color: '#007ACC' },
+                { name: 'Windows Terminal', cmd: 'wt', icon: 'Terminal', color: '#4EC9B0' },
+                { name: 'Lock Workstation', cmd: 'rundll32.exe user32.dll,LockWorkStation', icon: 'Lock', color: '#F43F5E' },
+                { name: 'Task Manager', cmd: 'taskmgr.exe', icon: 'Activity', color: '#34C759' },
+              ].map((preset) => (
+                <button
+                  key={preset.name}
+                  type="button"
+                  onClick={() => {
+                    audio.playTap();
+                    const targetDev = (settings.trustedDevices || [])[0] || { id: 'pc-workstation', name: 'Windows PC' };
+                    const newExec = {
+                      name: preset.name,
+                      commandOrPackage: preset.cmd,
+                      category: 'tools' as const,
+                      deviceId: targetDev.id,
+                      deviceName: targetDev.name,
+                      deviceType: 'desktop' as const,
+                      deviceOs: 'windows' as const,
+                      execType: 'command' as const,
+                      iconName: preset.icon,
+                      iconColor: preset.color,
+                      enabled: true,
+                      pinnedToDrawer: true,
+                    };
+                    const existing = (settings.remoteExecutables || []).filter((e) => e.commandOrPackage !== preset.cmd);
+                    updateSettings({
+                      remoteExecutables: [
+                        { ...newExec, id: `exec-${Date.now()}` },
+                        ...existing,
+                      ],
+                    });
+                    showToast(`Added ${preset.name} to Remote Shortcuts`);
+                  }}
+                  className={`p-2.5 ${currentTheme.buttonRadius} bg-black/20 hover:bg-white/[0.06] border border-white/5 flex items-center justify-between text-left transition group active:scale-95`}
+                >
+                  <span className="text-xs font-semibold text-white group-hover:text-[#38BDF8] truncate">{preset.name}</span>
+                  <span className="text-[10px] font-mono text-[#64748B] group-hover:text-white">+ Add</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* List of Configured Remote Executables */}
+          {(settings.remoteExecutables || []).length > 0 && (
+            <div className="space-y-2 pt-2 border-t border-white/5">
+              <label className="text-[11px] font-semibold text-[#8E8E93]">Active Remote Shortcuts</label>
+              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1 scrollbar-thin">
+                {(settings.remoteExecutables || []).map((exec) => (
+                  <div
+                    key={exec.id}
+                    className="p-2.5 rounded-xl bg-black/30 border border-white/5 flex items-center justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div
+                        className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold text-white shrink-0"
+                        style={{ backgroundColor: exec.iconColor || currentAccent.hex }}
+                      >
+                        {exec.name.charAt(0)}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-white truncate">{exec.name}</div>
+                        <div className="text-[10px] font-mono text-[#94A3B8] truncate">{exec.commandOrPackage}</div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          audio.playTap();
+                          const filtered = (settings.remoteExecutables || []).filter((e) => e.id !== exec.id);
+                          updateSettings({ remoteExecutables: filtered });
+                          showToast(`Removed ${exec.name}`);
+                        }}
+                        className="p-1.5 rounded-lg text-[#F43F5E] hover:bg-[#F43F5E]/10 transition text-xs"
+                        title="Delete shortcut"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* SECTION 7: Nodus Ecosystem Modules */}
+        <div className={`p-4 sm:p-5 ${currentTheme.cardRadius} ${currentTheme.classes.itemCard} shadow-sm space-y-3`}>
           <div className="flex items-center gap-2 text-xs font-bold text-white tracking-wide uppercase pb-2 border-b border-white/5">
-            <Radio size={15} className="text-[#34C759]" />
+            <Radio size={15} style={{ color: currentAccent.hex }} />
             <span>Nodus Ecosystem Modules</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* Nodus Fleet Module */}
-            <div className="p-3 rounded-xl bg-[#181824]/60 border border-white/5 flex flex-col justify-between gap-2.5">
+            <div className={`p-3 ${currentTheme.cardRadius} bg-black/20 border border-white/5 flex flex-col justify-between gap-2.5`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${isFleetInstalled ? 'bg-[#34C759] shadow-sm shadow-[#34C759]' : 'bg-[#8E8E93]'}`} />
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: isFleetInstalled ? currentAccent.hex : '#8E8E93' }} />
                   <div>
                     <div className="text-xs font-bold text-white">Nodus Fleet</div>
                     <div className="text-[10px] text-[#8E8E93]">Cluster mesh & discovery</div>
                   </div>
                 </div>
-                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${
-                  isFleetInstalled
-                    ? 'bg-[#34C759]/20 text-[#34C759] border-[#34C759]/40'
-                    : 'bg-white/5 text-[#8E8E93] border-white/10'
-                }`}>
+                <span
+                  className={`text-[9px] font-bold px-2 py-0.5 ${currentTheme.buttonRadius} border`}
+                  style={
+                    isFleetInstalled
+                      ? { backgroundColor: currentAccent.badgeBg, color: currentAccent.hex, borderColor: currentAccent.badgeBorder }
+                      : { backgroundColor: 'rgba(255,255,255,0.05)', color: '#8E8E93', borderColor: 'rgba(255,255,255,0.1)' }
+                  }
+                >
                   {isFleetInstalled ? 'Installed' : 'Standalone'}
                 </span>
               </div>
@@ -413,32 +699,35 @@ export const SettingsApp: React.FC = () => {
                     updateSettings({ enableMultiDevice: !settings.enableMultiDevice });
                     showToast(settings.enableMultiDevice ? 'Multi-Device features disabled' : 'Multi-Device features enabled');
                   }}
-                  className={`px-3 py-1 rounded-lg text-[11px] font-bold transition border ${
+                  className={`px-3 py-1 ${currentTheme.buttonRadius} text-[11px] font-bold transition border`}
+                  style={
                     settings.enableMultiDevice
-                      ? 'bg-[#34C759] text-[#0A0A0E] border-[#34C759] shadow-sm'
-                      : 'bg-[#181824] text-[#8E8E93] border-white/10 hover:text-white'
-                  }`}
+                      ? { backgroundColor: currentAccent.hex, color: '#090B10', borderColor: currentAccent.hex }
+                      : { backgroundColor: 'rgba(255,255,255,0.02)', color: '#8E8E93', borderColor: 'rgba(255,255,255,0.1)' }
+                  }
                 >
                   {settings.enableMultiDevice ? 'Enabled' : 'Disabled'}
                 </button>
               </div>
             </div>
 
-            {/* Nodus Touch Module */}
-            <div className="p-3 rounded-xl bg-[#181824]/60 border border-white/5 flex flex-col justify-between gap-2.5">
+            <div className={`p-3 ${currentTheme.cardRadius} bg-black/20 border border-white/5 flex flex-col justify-between gap-2.5`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${isTouchInstalled ? 'bg-[#34C759] shadow-sm shadow-[#34C759]' : 'bg-[#8E8E93]'}`} />
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: isTouchInstalled ? currentAccent.hex : '#8E8E93' }} />
                   <div>
                     <div className="text-xs font-bold text-white">Nodus Touch</div>
                     <div className="text-[10px] text-[#8E8E93]">Floating assistive squircle</div>
                   </div>
                 </div>
-                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${
-                  isTouchInstalled
-                    ? 'bg-[#34C759]/20 text-[#34C759] border-[#34C759]/40'
-                    : 'bg-white/5 text-[#8E8E93] border-white/10'
-                }`}>
+                <span
+                  className={`text-[9px] font-bold px-2 py-0.5 ${currentTheme.buttonRadius} border`}
+                  style={
+                    isTouchInstalled
+                      ? { backgroundColor: currentAccent.badgeBg, color: currentAccent.hex, borderColor: currentAccent.badgeBorder }
+                      : { backgroundColor: 'rgba(255,255,255,0.05)', color: '#8E8E93', borderColor: 'rgba(255,255,255,0.1)' }
+                  }
+                >
                   {isTouchInstalled ? 'Installed' : 'Standalone'}
                 </span>
               </div>
@@ -452,11 +741,12 @@ export const SettingsApp: React.FC = () => {
                     updateSettings({ enableAssistiveTouch: !settings.enableAssistiveTouch });
                     showToast(settings.enableAssistiveTouch ? 'Assistive Touch disabled' : 'Assistive Touch enabled');
                   }}
-                  className={`px-3 py-1 rounded-lg text-[11px] font-bold transition border ${
+                  className={`px-3 py-1 ${currentTheme.buttonRadius} text-[11px] font-bold transition border`}
+                  style={
                     settings.enableAssistiveTouch
-                      ? 'bg-[#34C759] text-[#0A0A0E] border-[#34C759] shadow-sm'
-                      : 'bg-[#181824] text-[#8E8E93] border-white/10 hover:text-white'
-                  }`}
+                      ? { backgroundColor: currentAccent.hex, color: '#090B10', borderColor: currentAccent.hex }
+                      : { backgroundColor: 'rgba(255,255,255,0.02)', color: '#8E8E93', borderColor: 'rgba(255,255,255,0.1)' }
+                  }
                 >
                   {settings.enableAssistiveTouch ? 'Enabled' : 'Disabled'}
                 </button>
@@ -469,7 +759,7 @@ export const SettingsApp: React.FC = () => {
         <div className="pt-2 flex items-center justify-between">
           <button
             onClick={handleResetToDefaults}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#FF3B30]/10 hover:bg-[#FF3B30]/20 text-[#FF3B30] border border-[#FF3B30]/25 text-xs font-semibold transition hover:scale-105 active:scale-95"
+            className={`flex items-center gap-2 px-3.5 py-2 ${currentTheme.buttonRadius} bg-[#FF3B30]/10 hover:bg-[#FF3B30]/20 text-[#FF3B30] border border-[#FF3B30]/25 text-xs font-semibold transition hover:scale-105 active:scale-95`}
           >
             <RotateCcw size={13} />
             <span>Reset Defaults</span>
@@ -480,7 +770,8 @@ export const SettingsApp: React.FC = () => {
               audio.playTap();
               closeActiveApp();
             }}
-            className="px-4 py-2 rounded-xl bg-[#34C759] hover:bg-[#30D158] text-[#0A0A0E] font-bold text-xs transition hover:scale-105 active:scale-95 shadow-md shadow-[#34C759]/20"
+            className={`px-4 py-2 ${currentTheme.buttonRadius} font-bold text-xs transition hover:scale-105 active:scale-95 shadow-md`}
+            style={{ backgroundColor: currentAccent.hex, color: '#090B10' }}
           >
             Done
           </button>

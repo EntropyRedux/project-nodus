@@ -219,9 +219,11 @@ interface LauncherContextType {
 
 const DEFAULT_SETTINGS: LauncherSettings = {
   deviceFrame: false, // Default full desktop PC experience
+  theme: 'glassmorphism',
   themeMode: 'dark',
-  accentColor: '#34C759',
+  accentColor: 'sapphire',
   iconStyle: 'material-you',
+  iconShape: 'modern',
   iconSize: 'medium',
   drawerLayout: 'continuous',
   showLabels: true,
@@ -239,9 +241,9 @@ const DEFAULT_SETTINGS: LauncherSettings = {
   folderOpacity: 95,
   taskbarIconScale: 'medium',
 
-  // Multi-Device & Extensions Gating (Default: OFF)
-  enableMultiDevice: false,
-  enableClipboardPanel: false,
+  // Multi-Device & Extensions Gating (Default: ON)
+  enableMultiDevice: true,
+  enableClipboardPanel: true,
   taskbarMode: 'auto',
 
   // Multi-Device Server & Controller Configs
@@ -1056,8 +1058,8 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const executeRemoteApp = async (executable: RemoteExecutable): Promise<{ success: boolean; message: string }> => {
-    audio.playAppOpen();
-    const targetDev = devices.find((d) => d.id === executable.deviceId);
+    if (settings.soundEffects) audio.playAppOpen();
+    const targetDev = devices.find((d) => d.id === executable.deviceId) || devices.find((d) => d.type === 'desktop' || d.type === 'laptop' || d.os?.toLowerCase().includes('windows')) || activeDevice;
     
     updateRemoteExecutable(executable.id, { lastExecuted: 'Just now' });
 
@@ -1065,21 +1067,68 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       appId: 'terminal',
       appName: 'Remote Execution',
       title: `Triggered: ${executable.name}`,
-      message: `Sent ${executable.execType} (${executable.commandOrPackage}) to ${executable.deviceName}`,
+      message: `Sent ${executable.execType} (${executable.commandOrPackage}) to ${targetDev.name}`,
       iconName: executable.iconName,
       color: executable.iconColor,
     });
 
-    if (targetDev && targetDev.status === 'offline') {
-      return {
-        success: false,
-        message: `Device ${targetDev.name} is offline. Remote command buffered in queue.`,
-      };
+    const rawIp = targetDev.ipAddress || activeDevice.ipAddress;
+    if (rawIp && targetDev.id !== 'poco-pad') {
+      const cleanHost = rawIp.replace(/^https?:\/\//i, '').replace(/\/.*$/, '').trim();
+      const host = cleanHost.includes(':') ? cleanHost : `${cleanHost}:9120`;
+
+      showToast(`Launching ${executable.name} on ${targetDev.name}...`);
+      try {
+        const payload = {
+          command_or_path: executable.commandOrPackage,
+          command: executable.commandOrPackage,
+          args: executable.args || undefined,
+          working_dir: executable.workingDir || undefined,
+          run_as_admin: executable.runAsAdmin || false,
+        };
+
+        const res = await universalNetworkFetch(`http://${host}/api/exec`, {
+          method: 'POST',
+          body: payload,
+          timeoutMs: 4500,
+        });
+
+        if (res.ok) {
+          showToast(`✓ ${executable.name} launched on ${targetDev.name}`);
+          return {
+            success: true,
+            message: `Executed "${executable.commandOrPackage}" on ${targetDev.name} (RPC OK)`,
+          };
+        } else {
+          showToast(`Launch failed: ${res.error || `HTTP ${res.status}`}`);
+          return {
+            success: false,
+            message: `Failed to execute on ${targetDev.name}: HTTP ${res.status}`,
+          };
+        }
+      } catch (err: any) {
+        showToast(`Could not reach ${targetDev.name}`);
+        return {
+          success: false,
+          message: `Network error connecting to ${targetDev.name}: ${err?.message || 'timeout'}`,
+        };
+      }
     }
 
+    // Local tablet execution fallback if target is local Android package
+    if (executable.deviceId === 'poco-pad' || targetDev.id === 'poco-pad') {
+      const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
+      if (bridge?.launchApp && executable.commandOrPackage) {
+        bridge.launchApp(executable.commandOrPackage);
+        showToast(`Launched ${executable.name}`);
+        return { success: true, message: `Launched ${executable.name} locally` };
+      }
+    }
+
+    showToast(`Dispatched ${executable.name}`);
     return {
       success: true,
-      message: `Executed "${executable.commandOrPackage}" on ${executable.deviceName} (RPC OK)`,
+      message: `Dispatched "${executable.commandOrPackage}" (Local Simulation)`,
     };
   };
 
@@ -1115,6 +1164,9 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const selectDevice = (id: string) => {
     audio.playTap();
     setActiveDeviceId(id);
+    try {
+      localStorage.setItem('nova_launcher_active_device', id);
+    } catch (_) {}
   };
 
   const toggleSidebar = () => {
@@ -1562,9 +1614,30 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const launchApp = (appId: string, forceMode?: 'fullscreen' | 'floating') => {
     if (settings.soundEffects) audio.playAppOpen();
+
+    // 1. Intercept Remote Workstation Shortcuts (do NOT open local window modal)
+    if (appId.startsWith('remote_')) {
+      const rawId = appId.replace(/^remote_/, '');
+      const exec = (settings.remoteExecutables || []).find(
+        (e) => e.id === rawId || e.id === appId || `remote_${e.id}` === appId
+      );
+      if (exec) {
+        executeRemoteApp(exec);
+        return;
+      }
+    }
+
     const targetApp = apps.find((a) => a.id === appId);
 
-    // Track active foreground app
+    if (targetApp?.isRemote && targetApp.remoteExecutableId) {
+      const exec = (settings.remoteExecutables || []).find((e) => e.id === targetApp.remoteExecutableId);
+      if (exec) {
+        executeRemoteApp(exec);
+        return;
+      }
+    }
+
+    // Track active foreground app ONLY for local applications
     setActiveAppId(appId);
     setSearchOpen(false);
 

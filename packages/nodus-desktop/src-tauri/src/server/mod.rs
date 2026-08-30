@@ -12,8 +12,10 @@ use tiny_http::{Header, Method, Response, Server, StatusCode};
 use crate::commands::{
     clipboard::{get_clipboard_content, set_win32_clipboard, set_win32_clipboard_image},
     exec::execute_shortcut,
+    icon::extract_exe_icon,
     media::send_media_appcommand,
     process::get_processes,
+    shortcuts::{get_installed_windows_apps, get_shared_shortcuts, load_shared_config, save_shared_config, scan_shortcuts_folder, DiscoveredApp},
     system::get_system_stats,
 };
 
@@ -70,6 +72,16 @@ struct HotkeyHttpReq {
 #[derive(Debug, Deserialize)]
 struct TextHttpReq {
     text: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct IconExtractReq {
+    path: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct FolderScanReq {
+    path: String,
 }
 
 fn cors_headers() -> Vec<Header> {
@@ -373,6 +385,74 @@ pub fn start_server(port: u16) {
                         vec![]
                     };
                     (200, json!({ "status": "success", "devices": devices }))
+                }
+
+                // Extract Icon from Executable Path
+                (Method::Post, "/api/shortcuts/icon") => {
+                    let mut body_str = String::new();
+                    let _ = request.as_reader().read_to_string(&mut body_str);
+                    if let Ok(req) = serde_json::from_str::<IconExtractReq>(&body_str) {
+                        match extract_exe_icon(&req.path) {
+                            Ok(data_uri) => (200, json!({ "status": "success", "icon": data_uri })),
+                            Err(e) => (200, json!({ "status": "fallback", "icon": null, "message": e })),
+                        }
+                    } else {
+                        (400, json!({ "status": "error", "message": "Invalid icon extract payload. Expected { \"path\": \"C:\\\\...\\\\app.exe\" }" }))
+                    }
+                }
+
+                // Query Shared Shortcuts (for POCO Pad & Companion nodes)
+                (Method::Get, "/api/shortcuts") => {
+                    let shortcuts = get_shared_shortcuts();
+                    (200, json!({ "status": "success", "shortcuts": shortcuts }))
+                }
+
+                // Query All Discovered Windows Apps (Start Menu & PWAs)
+                (Method::Get, "/api/shortcuts/installed") => {
+                    match get_installed_windows_apps() {
+                        Ok(apps) => (200, json!({ "status": "success", "apps": apps })),
+                        Err(e) => (500, json!({ "status": "error", "message": e })),
+                    }
+                }
+
+                // Scan Directory / Watched Folder for Shortcuts (.lnk, .url, .exe, .bat, etc.)
+                (Method::Post, "/api/shortcuts/folder") => {
+                    let mut body_str = String::new();
+                    let _ = request.as_reader().read_to_string(&mut body_str);
+                    if let Ok(req) = serde_json::from_str::<FolderScanReq>(&body_str) {
+                        let path_str = req.path.trim();
+                        match scan_shortcuts_folder(path_str) {
+                            Ok(apps) => {
+                                let mut cfg = load_shared_config();
+                                if !path_str.is_empty() && !cfg.watched_folders.contains(&path_str.to_string()) {
+                                    cfg.watched_folders.push(path_str.to_string());
+                                    save_shared_config(&cfg);
+                                }
+                                (200, json!({ "status": "success", "apps": apps, "watched_folders": cfg.watched_folders }))
+                            }
+                            Err(e) => (400, json!({ "status": "error", "message": e })),
+                        }
+                    } else {
+                        (400, json!({ "status": "error", "message": "Invalid folder scan payload. Expected { \"path\": \"C:\\\\...\" }" }))
+                    }
+                }
+
+                // Query Watched Folders Config
+                (Method::Get, "/api/shortcuts/watched") => {
+                    let cfg = load_shared_config();
+                    (200, json!({ "status": "success", "watched_folders": cfg.watched_folders, "shortcuts": cfg.shortcuts }))
+                }
+
+                // Update / Toggle Shared Shortcuts
+                (Method::Post, "/api/shortcuts/sync") => {
+                    let mut body_str = String::new();
+                    let _ = request.as_reader().read_to_string(&mut body_str);
+                    if let Ok(val) = serde_json::from_str::<Vec<DiscoveredApp>>(&body_str) {
+                        crate::commands::shortcuts::set_shared_shortcuts(val);
+                        (200, json!({ "status": "success", "message": "Shortcuts updated" }))
+                    } else {
+                        (400, json!({ "status": "error", "message": "Invalid shortcuts array payload" }))
+                    }
                 }
 
                 _ => (404, json!({ "status": "not_found", "path": path })),

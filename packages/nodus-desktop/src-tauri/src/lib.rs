@@ -40,7 +40,6 @@ pub fn run() {
             // ─── 1. Configure / Create Main Window First ─────────────
             let window = match app.get_webview_window("main") {
                 Some(w) => {
-                    let _ = w.set_always_on_top(true);
                     let _ = w.show();
                     let _ = w.unminimize();
                     let _ = w.set_focus();
@@ -53,16 +52,15 @@ pub fn run() {
                         .min_inner_size(800.0, 550.0)
                         .center()
                         .resizable(true)
-                        .always_on_top(true)
+                        .always_on_top(false)
                         .visible(true)
                         .build()?
                 }
             };
-            let _ = window.set_always_on_top(true);
             let _ = window.show();
             let _ = window.unminimize();
             let _ = window.set_focus();
-            println!("[NodusDesktop] Main window ready, always on top, and focused.");
+            println!("[NodusDesktop] Main window ready and focused.");
 
             // ─── 2. System Tray Setup (Safe with Icon) ────────────────
             let quit_item = MenuItem::with_id(app, "quit", "Quit Nodus Desktop", true, None::<&str>)?;

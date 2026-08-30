@@ -31,13 +31,31 @@ const PALETTE = [
   '#FFCC00', // Yellow
 ];
 
-export function getDeviceColor(deviceId: string, type?: string, os?: string): string {
+export function getDeviceColor(deviceId: string, type?: string, os?: string, customColor?: string): string {
+  if (customColor) return customColor;
   if (DEVICE_COLORS[deviceId]) return DEVICE_COLORS[deviceId];
-  if (type === 'desktop' || type === 'laptop' || (os && os.toLowerCase().includes('windows'))) {
-    return '#34C759'; // Green for Windows PC nodes
+  const lowerId = (deviceId || '').toLowerCase();
+  if (
+    lowerId.includes('pc') ||
+    lowerId.includes('redux') ||
+    lowerId.includes('win') ||
+    lowerId.includes('desktop') ||
+    lowerId.includes('workstation') ||
+    type === 'desktop' ||
+    type === 'laptop' ||
+    (os && os.toLowerCase().includes('windows'))
+  ) {
+    return '#34C759'; // Vibrant Emerald Green for Windows PC Workstations
   }
-  if (type === 'tablet' || (os && os.toLowerCase().includes('hyperos')) || deviceId.toLowerCase().includes('poco')) {
-    return '#007AFF'; // Blue for POCO Pad / Android
+  if (
+    lowerId.includes('poco') ||
+    lowerId.includes('pad') ||
+    lowerId.includes('tablet') ||
+    type === 'tablet' ||
+    (os && os.toLowerCase().includes('hyperos')) ||
+    (os && os.toLowerCase().includes('android'))
+  ) {
+    return '#007AFF'; // Electric Blue for POCO Pad Android Tablet
   }
   // Deterministic consistent hash color for new dynamically added devices
   let hash = 0;

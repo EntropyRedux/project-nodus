@@ -25,6 +25,7 @@ import { audio } from '../../utils/audio';
 import { ClipboardItem, DeviceType } from '../../types/launcher';
 import { DEVICE_COLORS } from '../../utils/constants';
 import { universalNetworkFetch } from '../../services/FleetDirectClient';
+import { getSystemTheme, getAccentColor, getSurfaceRgba } from '../../utils/themes';
 
 interface ClipboardHistoryPanelProps {
   onClose?: () => void;
@@ -41,6 +42,9 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
     activeDeviceId,
     settings
   } = useLauncher();
+
+  const currentTheme = getSystemTheme(settings.theme);
+  const currentAccent = getAccentColor(settings.accentColor);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDevice, setFilterDevice] = useState<string>('all');
@@ -130,32 +134,43 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
 
   return (
     <div 
-      className="w-full h-full backdrop-blur-3xl border border-white/15 rounded-3xl p-3.5 shadow-2xl flex flex-col gap-3 select-none overflow-y-auto scrollbar-thin"
+      className={`w-full h-full backdrop-blur-3xl border border-white/10 ${currentTheme.cardRadius} p-3.5 shadow-2xl flex flex-col gap-3 select-none overflow-y-auto scrollbar-thin transition-colors duration-200`}
       style={{
-        backgroundColor: `rgba(18, 18, 21, ${clipboardPanelAlpha})`,
+        backgroundColor: getSurfaceRgba(settings.theme, settings.taskbarOpacity, 'panel'),
       }}
     >
       {/* 1. Compact Header Card */}
       <div 
-        className="p-3 sm:p-3.5 rounded-2xl border border-white/10 shadow-lg space-y-2.5"
-        style={{
-          backgroundColor: `rgba(28, 28, 34, ${Math.min(1, clipboardPanelAlpha * 1.05)})`,
-        }}
+        className={`p-3 sm:p-3.5 ${currentTheme.cardRadius} border border-white/10 shadow-lg space-y-2.5 bg-black/20`}
       >
         <div className="flex items-center justify-between border-b border-white/5 pb-2">
           <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-xl bg-[#34C759]/20 text-[#34C759] border border-[#34C759]/30">
+            <div 
+              className={`p-1.5 ${currentTheme.buttonRadius} border`}
+              style={{
+                backgroundColor: currentAccent.badgeBg,
+                color: currentAccent.hex,
+                borderColor: currentAccent.badgeBorder,
+              }}
+            >
               <Clipboard size={15} />
             </div>
             <div>
-              <h3 className="text-xs font-bold text-[#F0F0F2] tracking-wide">Clipboard History</h3>
-              <p className="text-[10px] text-[#8E8E93]">Shared across linked nodes</p>
+              <h3 className={`text-xs font-bold ${currentTheme.classes.textPrimary} tracking-wide`}>Clipboard History</h3>
+              <p className={`text-[10px] ${currentTheme.classes.textMuted}`}>Shared across linked nodes</p>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5">
-            <span className="text-[9px] font-mono font-semibold px-2 py-0.5 rounded-full bg-[#34C759]/15 text-[#34C759] flex items-center gap-1 border border-[#34C759]/20">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#34C759] animate-pulse" />
+            <span 
+              className={`text-[9px] font-mono font-semibold px-2 py-0.5 ${currentTheme.buttonRadius} flex items-center gap-1 border`}
+              style={{
+                backgroundColor: currentAccent.badgeBg,
+                color: currentAccent.hex,
+                borderColor: currentAccent.badgeBorder,
+              }}
+            >
+              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: currentAccent.hex }} />
               SYNC
             </span>
 

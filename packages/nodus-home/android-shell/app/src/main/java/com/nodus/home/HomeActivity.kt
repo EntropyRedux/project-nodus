@@ -265,16 +265,17 @@ class HomeActivity : AppCompatActivity() {
         fun isAssistiveInstalled(): Boolean = NodusModuleDetector.isAssistiveInstalled(context)
 
         @JavascriptInterface
-        fun httpFetch(urlStr: String, method: String, body: String?): String {
+        fun httpFetch(urlStr: String, method: String?, body: String?): String {
             return try {
                 val url = java.net.URL(urlStr)
                 val conn = url.openConnection() as java.net.HttpURLConnection
-                conn.requestMethod = method.uppercase()
+                val reqMethod = (method ?: "GET").uppercase()
+                conn.requestMethod = reqMethod
                 conn.connectTimeout = 3500
                 conn.readTimeout = 4000
                 conn.setRequestProperty("Content-Type", "application/json")
                 conn.setRequestProperty("Accept", "application/json")
-                if (method.equals("POST", ignoreCase = true) && !body.isNullOrEmpty()) {
+                if (reqMethod == "POST" && !body.isNullOrEmpty()) {
                     conn.doOutput = true
                     conn.outputStream.use { os ->
                         os.write(body.toByteArray(Charsets.UTF_8))
