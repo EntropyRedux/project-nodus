@@ -10,7 +10,7 @@ use std::thread;
 use tiny_http::{Header, Method, Response, Server, StatusCode};
 
 use crate::commands::{
-    clipboard::{get_win32_clipboard, set_win32_clipboard},
+    clipboard::{get_clipboard_content, set_win32_clipboard, set_win32_clipboard_image},
     exec::execute_shortcut,
     media::send_media_appcommand,
     process::get_processes,
@@ -41,7 +41,8 @@ struct KillProcReq {
 
 #[derive(Debug, Deserialize)]
 struct ClipboardReq {
-    text: String,
+    text: Option<String>,
+    image_data: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -215,8 +216,13 @@ pub fn start_server(port: u16) {
 
                 // Clipboard Get
                 (Method::Get, "/api/clipboard") => {
-                    match get_win32_clipboard() {
-                        Ok(text) => (200, json!({ "status": "success", "text": text })),
+                    match get_clipboard_content() {
+                        Ok(payload) => (200, json!({
+                            "status": "success",
+                            "type": payload.content_type,
+                            "text": payload.text.unwrap_or_default(),
+                            "imageData": payload.image_data,
+                        })),
                         Err(e) => (500, json!({ "status": "error", "message": e })),
                     }
                 }
@@ -226,9 +232,22 @@ pub fn start_server(port: u16) {
                     let mut body_str = String::new();
                     let _ = request.as_reader().read_to_string(&mut body_str);
                     if let Ok(req) = serde_json::from_str::<ClipboardReq>(&body_str) {
-                        match set_win32_clipboard(&req.text) {
-                            Ok(_) => (200, json!({ "status": "success", "updated": true })),
-                            Err(e) => (500, json!({ "status": "error", "message": e })),
+                        if let Some(img_data) = req.image_data {
+                            if !img_data.trim().is_empty() {
+                                match set_win32_clipboard_image(&img_data) {
+                                    Ok(_) => (200, json!({ "status": "success", "updated": true, "type": "image" })),
+                                    Err(e) => (500, json!({ "status": "error", "message": e })),
+                                }
+                            } else {
+                                (400, json!({ "status": "error", "message": "Empty image payload" }))
+                            }
+                        } else if let Some(txt) = req.text {
+                            match set_win32_clipboard(&txt) {
+                                Ok(_) => (200, json!({ "status": "success", "updated": true, "type": "text" })),
+                                Err(e) => (500, json!({ "status": "error", "message": e })),
+                            }
+                        } else {
+                            (400, json!({ "status": "error", "message": "Missing text or image payload" }))
                         }
                     } else {
                         (400, json!({ "status": "error", "message": "Invalid clipboard payload" }))

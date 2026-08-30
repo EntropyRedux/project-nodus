@@ -13,7 +13,8 @@ import {
   Sparkles,
   Link,
   Code,
-  FileText
+  FileText,
+  Image as ImageIcon
 } from 'lucide-react';
 import { useDesktop } from '../../context/DesktopContext';
 import { ClipboardItem } from '../../types/desktop';
@@ -41,9 +42,13 @@ export const ClipboardPanel: React.FC = () => {
 
   const handleCopy = async (item: ClipboardItem) => {
     try {
-      await TauriService.setClipboardText(item.text);
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(item.text);
+      if (item.type === 'image' && item.imageData) {
+        await TauriService.setClipboardImage(item.imageData);
+      } else {
+        await TauriService.setClipboardText(item.text);
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(item.text);
+        }
       }
     } catch (_) {}
     setCopiedId(item.id);
@@ -64,6 +69,7 @@ export const ClipboardPanel: React.FC = () => {
     switch (type) {
       case 'link': return <Link size={12} className="text-[#007AFF]" />;
       case 'code': return <Code size={12} className="text-[#34C759]" />;
+      case 'image': return <ImageIcon size={12} className="text-[#FF9500]" />;
       default: return <FileText size={12} className="text-[#8E8E93]" />;
     }
   };
@@ -165,9 +171,19 @@ export const ClipboardPanel: React.FC = () => {
               </div>
 
               {/* Clip Body */}
-              <p className="text-xs text-[#F0F0F2] line-clamp-3 font-mono break-all whitespace-pre-wrap select-text">
-                {item.text}
-              </p>
+              {item.type === 'image' && item.imageData ? (
+                <div className="relative rounded-xl overflow-hidden border border-white/10 bg-black/40 max-h-48 flex items-center justify-center p-1">
+                  <img
+                    src={item.imageData}
+                    alt="Clipboard clip"
+                    className="max-h-44 w-auto object-contain rounded-lg shadow-md"
+                  />
+                </div>
+              ) : (
+                <p className="text-xs text-[#F0F0F2] line-clamp-3 font-mono break-all whitespace-pre-wrap select-text">
+                  {item.text}
+                </p>
+              )}
 
               {/* Actions */}
               <div className="flex items-center justify-end gap-1.5 pt-1.5 border-t border-white/5">

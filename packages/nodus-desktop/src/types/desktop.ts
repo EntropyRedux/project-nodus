@@ -36,9 +36,10 @@ export interface ClipboardItem {
   deviceName: string;
   deviceType: DeviceType;
   deviceColor: string;
-  type: 'text' | 'link' | 'code' | 'snippet';
+  type: 'text' | 'link' | 'code' | 'snippet' | 'image';
   timestamp: string;
   pinned?: boolean;
+  imageData?: string; // base64 data URL e.g. "data:image/png;base64,..."
 }
 
 export interface RemoteExecutable {

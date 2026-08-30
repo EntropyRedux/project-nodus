@@ -722,6 +722,39 @@ class HomeActivity : AppCompatActivity() {
         }
 
         @JavascriptInterface
+        fun copyImageToClipboard(base64Data: String): Boolean {
+            return try {
+                val rawB64 = if (base64Data.contains("base64,")) {
+                    base64Data.substringAfter("base64,")
+                } else {
+                    base64Data
+                }
+                val imageBytes = android.util.Base64.decode(rawB64, android.util.Base64.DEFAULT)
+                
+                val clipboardDir = java.io.File(context.cacheDir, "clipboard")
+                if (!clipboardDir.exists()) {
+                    clipboardDir.mkdirs()
+                }
+                val imageFile = java.io.File(clipboardDir, "clip_${System.currentTimeMillis()}.png")
+                java.io.FileOutputStream(imageFile).use { it.write(imageBytes) }
+
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    "com.nodus.home.fileprovider",
+                    imageFile
+                )
+
+                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val clip = ClipData.newUri(context.contentResolver, "Nodus Image", uri)
+                cm.setPrimaryClip(clip)
+                true
+            } catch (e: Exception) {
+                android.util.Log.e("HomeActivity", "Failed to copy image to clipboard: ${e.message}")
+                false
+            }
+        }
+
+        @JavascriptInterface
         fun getNotificationBadges(): String {
             return NodusNotificationListenerService.getNotificationBadgesJson()
         }

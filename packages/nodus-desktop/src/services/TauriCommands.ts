@@ -108,6 +108,31 @@ export const TauriService = {
     }
   },
 
+  async getClipboardImage(): Promise<string | null> {
+    try {
+      return await invoke<string | null>('get_clipboard_image');
+    } catch (e) {
+      return null;
+    }
+  },
+
+  async setClipboardImage(base64Png: string): Promise<boolean> {
+    try {
+      return await invoke<boolean>('set_clipboard_image', { base64Png });
+    } catch (e) {
+      console.error('[TauriService] setClipboardImage error:', e);
+      return false;
+    }
+  },
+
+  async getClipboardContent(): Promise<{ content_type: string; text?: string; image_data?: string }> {
+    try {
+      return await invoke<{ content_type: string; text?: string; image_data?: string }>('get_clipboard_content');
+    } catch (e) {
+      return { content_type: 'text', text: '' };
+    }
+  },
+
   async executeLocalCommand(commandOrPath: string, args?: string, workingDir?: string): Promise<boolean> {
     try {
       return await invoke<boolean>('execute_local_command', {

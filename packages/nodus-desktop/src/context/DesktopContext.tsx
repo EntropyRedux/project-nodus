@@ -49,7 +49,7 @@ interface DesktopContextType {
 
   // Clipboard
   clipboardItems: ClipboardItem[];
-  addClipboardItem: (text: string, targetDeviceId?: string) => void;
+  addClipboardItem: (text: string, targetDeviceId?: string, imageData?: string) => void;
   removeClipboardItem: (id: string) => void;
   togglePinClipboardItem: (id: string) => void;
   clearClipboardHistory: () => void;
@@ -269,11 +269,19 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     const pollClipboard = async () => {
       try {
-        const currentText = await TauriService.getClipboardText();
-        const trimmed = currentText.trim();
-        if (trimmed && trimmed !== lastLocalClipRef.current) {
-          lastLocalClipRef.current = trimmed;
-          addClipboardItem(trimmed, 'this-pc');
+        const content = await TauriService.getClipboardContent();
+        if (content.content_type === 'image' && content.image_data) {
+          const imgKey = content.image_data.substring(0, 80); // unique signature of base64
+          if (imgKey && imgKey !== lastLocalClipRef.current) {
+            lastLocalClipRef.current = imgKey;
+            addClipboardItem(content.text || 'Image', 'this-pc', content.image_data);
+          }
+        } else if (content.text) {
+          const trimmed = content.text.trim();
+          if (trimmed && trimmed !== lastLocalClipRef.current) {
+            lastLocalClipRef.current = trimmed;
+            addClipboardItem(trimmed, 'this-pc');
+          }
         }
       } catch (_) {}
     };
@@ -433,8 +441,8 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
 
   // Clipboard operations
-  const addClipboardItem = useCallback((text: string, targetDeviceId = 'this-pc') => {
-    if (!text.trim()) return;
+  const addClipboardItem = useCallback((text: string, targetDeviceId = 'this-pc', imageData?: string) => {
+    if (!text.trim() && !imageData) return;
     const isUrl = /^https?:\/\//i.test(text.trim());
     const isCode = /[{};<>()=>]/.test(text) && text.includes('\n');
 
@@ -442,12 +450,13 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     const newItem: ClipboardItem = {
       id: `clip-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      text,
+      text: text || (imageData ? 'Image' : ''),
       deviceId: targetDeviceId,
       deviceName: isHost ? 'Windows PC' : 'POCO Pad',
       deviceType: isHost ? 'desktop' : 'tablet',
       deviceColor: isHost ? '#34C759' : '#007AFF', // Green for PC, Blue for POCO Pad
-      type: isUrl ? 'link' : isCode ? 'code' : 'text',
+      type: imageData ? 'image' : isUrl ? 'link' : isCode ? 'code' : 'text',
+      imageData,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       pinned: false,
     };

@@ -66,13 +66,17 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
   const handleCopy = (item: ClipboardItem, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     audio.playTap();
-    if (navigator.clipboard && navigator.clipboard.writeText) {
+    if (item.type !== 'image' && item.text && navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(item.text).catch(() => {});
     }
     try {
       const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
-      if (bridge && typeof bridge.copyToClipboard === 'function') {
-        bridge.copyToClipboard(item.text);
+      if (bridge) {
+        if (item.type === 'image' && item.imageData && typeof bridge.copyImageToClipboard === 'function') {
+          bridge.copyImageToClipboard(item.imageData);
+        } else if (item.text && typeof bridge.copyToClipboard === 'function') {
+          bridge.copyToClipboard(item.text);
+        }
       }
     } catch (_) {}
 
@@ -81,6 +85,7 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
       text: item.text,
       deviceId: 'poco-pad',
       type: item.type,
+      imageData: item.imageData,
     });
 
     setCopiedId(item.id);
@@ -426,7 +431,15 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
                 {/* Expanded Multi-Line Content Container */}
                 {isExpanded && (
                   <div className="pt-1 text-xs border-t border-white/5 animate-in fade-in zoom-in-95 duration-150">
-                    {isLink ? (
+                    {item.type === 'image' && item.imageData ? (
+                      <div className="relative rounded-xl overflow-hidden border border-white/10 bg-black/40 max-h-56 flex items-center justify-center p-1.5">
+                        <img
+                          src={item.imageData}
+                          alt="Clipboard clip"
+                          className="max-h-52 w-auto object-contain rounded-lg shadow-md"
+                        />
+                      </div>
+                    ) : isLink ? (
                       <div className="flex items-start gap-1.5 p-2 rounded-lg bg-[#0A0A0C] border border-white/5 text-[#007AFF] font-mono break-all leading-relaxed">
                         <ExternalLink size={12} className="shrink-0 mt-0.5" />
                         <span className="underline decoration-blue-500/40">{item.text}</span>

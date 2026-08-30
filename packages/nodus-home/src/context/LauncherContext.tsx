@@ -204,7 +204,7 @@ interface LauncherContextType {
 
   // Universal Clipboard History
   clipboardItems: ClipboardItem[];
-  addClipboardItem: (item: { text: string; deviceId?: string; type?: 'text' | 'link' | 'code' | 'snippet' }) => void;
+  addClipboardItem: (item: { text: string; deviceId?: string; type?: 'text' | 'link' | 'code' | 'snippet' | 'image'; imageData?: string }) => void;
   removeClipboardItem: (id: string) => void;
   togglePinClipboardItem: (id: string) => void;
   clearClipboardHistory: () => void;
@@ -897,30 +897,36 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               method: 'GET',
               timeoutMs: 2000,
             });
-            if (clipRes.ok && clipRes.data && typeof clipRes.data.text === 'string') {
-              const text = clipRes.data.text.trim();
-              if (text && text !== lastRemoteClipRef.current) {
-                lastRemoteClipRef.current = text;
+            if (clipRes.ok && clipRes.data) {
+              const isImage = clipRes.data.type === 'image' && typeof clipRes.data.imageData === 'string';
+              const text = (clipRes.data.text || '').trim();
+              const clipKey = isImage ? clipRes.data.imageData.substring(0, 80) : text;
 
-                let inferredType: 'text' | 'link' | 'code' | 'snippet' = 'text';
-                if (text.startsWith('http://') || text.startsWith('https://')) {
-                  inferredType = 'link';
-                } else if (text.includes(';') || text.includes('&&') || text.startsWith('adb') || text.startsWith('curl') || text.startsWith('git')) {
-                  inferredType = 'code';
-                } else if (text.length > 80) {
-                  inferredType = 'snippet';
+              if (clipKey && clipKey !== lastRemoteClipRef.current) {
+                lastRemoteClipRef.current = clipKey;
+
+                let inferredType: 'text' | 'link' | 'code' | 'snippet' | 'image' = isImage ? 'image' : 'text';
+                if (!isImage) {
+                  if (text.startsWith('http://') || text.startsWith('https://')) {
+                    inferredType = 'link';
+                  } else if (text.includes(';') || text.includes('&&') || text.startsWith('adb') || text.startsWith('curl') || text.startsWith('git')) {
+                    inferredType = 'code';
+                  } else if (text.length > 80) {
+                    inferredType = 'snippet';
+                  }
                 }
 
                 const devColor = getDeviceColor(dev.id, dev.type, dev.os);
 
                 const newItem: ClipboardItem = {
                   id: `clip-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-                  text,
+                  text: isImage ? 'Image' : text,
                   deviceId: dev.id,
                   deviceName: dev.name,
                   deviceType: dev.type,
                   deviceColor: devColor,
                   type: inferredType,
+                  imageData: isImage ? clipRes.data.imageData : undefined,
                   timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                   pinned: false,
                 };
@@ -1425,14 +1431,14 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   // Universal Cross-Device Clipboard functions
-  const addClipboardItem = (item: { text: string; deviceId?: string; type?: 'text' | 'link' | 'code' | 'snippet' }) => {
-    if (!item.text.trim()) return;
+  const addClipboardItem = (item: { text: string; deviceId?: string; type?: 'text' | 'link' | 'code' | 'snippet' | 'image'; imageData?: string }) => {
+    if (!item.text.trim() && !item.imageData) return;
     const devId = item.deviceId || activeDeviceId;
     const targetDev = devices.find((d) => d.id === devId) || activeDevice;
     const devColor = getDeviceColor(targetDev.id, targetDev.type, targetDev.os);
 
-    let inferredType: 'text' | 'link' | 'code' | 'snippet' = item.type || 'text';
-    if (!item.type) {
+    let inferredType: 'text' | 'link' | 'code' | 'snippet' | 'image' = item.type || (item.imageData ? 'image' : 'text');
+    if (!item.type && !item.imageData) {
       if (item.text.startsWith('http://') || item.text.startsWith('https://')) {
         inferredType = 'link';
       } else if (item.text.includes(';') || item.text.includes('&&') || item.text.startsWith('adb') || item.text.startsWith('curl') || item.text.startsWith('git')) {
@@ -1444,18 +1450,19 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     const newItem: ClipboardItem = {
       id: `clip-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      text: item.text.trim(),
+      text: item.text.trim() || (item.imageData ? 'Image' : ''),
       deviceId: devId,
       deviceName: targetDev.name,
       deviceType: targetDev.type,
       deviceColor: devColor,
       type: inferredType,
+      imageData: item.imageData,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       pinned: false,
     };
 
     // Mark as latest seen clip so the PC polling loop doesn't ingest it back as a duplicate green PC entry
-    lastRemoteClipRef.current = newItem.text;
+    lastRemoteClipRef.current = newItem.imageData ? newItem.imageData.substring(0, 80) : newItem.text;
 
     // Create a brand new distinct clipboard entry at the top, keeping prior historical entries intact
     setClipboardItems((prev) => [newItem, ...prev].slice(0, 100));
@@ -1463,17 +1470,24 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     // 1. If running on Android tablet native shell, also copy to Android OS primary clipboard
     try {
       const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
-      if (bridge && typeof bridge.copyToClipboard === 'function') {
-        bridge.copyToClipboard(newItem.text);
+      if (bridge) {
+        if (newItem.type === 'image' && newItem.imageData && typeof bridge.copyImageToClipboard === 'function') {
+          bridge.copyImageToClipboard(newItem.imageData);
+        } else if (newItem.text && typeof bridge.copyToClipboard === 'function') {
+          bridge.copyToClipboard(newItem.text);
+        }
       }
     } catch (_) {}
 
-    // 2. Broadcast clipboard text to connected Windows PC companion nodes
+    // 2. Broadcast clipboard text or image to connected Windows PC companion nodes
     for (const dev of devices) {
       if (dev.ipAddress && (dev.type === 'desktop' || dev.type === 'laptop' || dev.id === 'this-pc' || dev.id === 'tab-pc')) {
         universalNetworkFetch(`http://${dev.ipAddress}/api/clipboard`, {
           method: 'POST',
-          body: { text: newItem.text },
+          body: { 
+            text: newItem.text,
+            image_data: newItem.imageData,
+          },
           timeoutMs: 2500,
         }).catch(() => {});
       }
