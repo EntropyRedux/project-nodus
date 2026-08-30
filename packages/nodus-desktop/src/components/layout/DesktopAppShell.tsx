@@ -42,7 +42,7 @@ export const DesktopAppShell: React.FC = () => {
     badge?: number | string;
     accentColor: string;
   }> = [
-    { id: 'fleet', label: 'Fleet Mesh', icon: Radio, badge: devices.length, accentColor: '#34C759' },
+    { id: 'fleet', label: 'Fleet Mesh', icon: Radio, badge: devices.length || undefined, accentColor: '#34C759' },
     { id: 'remotedeck', label: 'Remote Deck & Touch', icon: MousePointer, accentColor: '#30D158' },
     { id: 'config', label: 'Bridge Config', icon: Settings, accentColor: '#34C759' },
     { id: 'clipboard', label: 'Clipboard Hub', icon: Clipboard, badge: clipboardItems.length || undefined, accentColor: '#007AFF' },

@@ -39,16 +39,24 @@ export const ClipboardPanel: React.FC = () => {
     return matchesSearch && matchesDevice;
   });
 
-  const handleCopy = (item: ClipboardItem) => {
-    navigator.clipboard.writeText(item.text);
+  const handleCopy = async (item: ClipboardItem) => {
+    try {
+      await TauriService.setClipboardText(item.text);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(item.text);
+      }
+    } catch (_) {}
     setCopiedId(item.id);
     setTimeout(() => setCopiedId(null), 1500);
   };
 
-  const handleBroadcast = (e: React.FormEvent) => {
+  const handleBroadcast = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputText.trim()) return;
-    addClipboardItem(inputText, 'this-pc');
+    const text = inputText.trim();
+    try {
+      await TauriService.setClipboardText(text);
+    } catch (_) {}
     setInputText('');
   };
 

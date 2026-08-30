@@ -25,6 +25,8 @@ export interface DeviceProcess {
   cpu?: number;
   memoryMb?: number;
   status?: 'running' | 'sleeping' | 'stopped' | 'zombie';
+  category?: 'user' | 'daemon' | 'system' | 'service';
+  description?: string;
 }
 
 export interface ClipboardItem {

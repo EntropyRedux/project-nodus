@@ -356,7 +356,7 @@ export const DeviceSidebar: React.FC = () => {
                     </div>
                     <div className="flex items-center gap-1">
                       <Cpu size={10} className="text-[#AF52DE]" />
-                      <span className="font-mono">CPU: {device.cpuLoad ?? 0}%</span>
+                      <span className="font-mono">CPU: {Number((device.cpuLoad ?? 0).toFixed(2))}%</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <Battery size={10} className="text-[#FF9500]" />

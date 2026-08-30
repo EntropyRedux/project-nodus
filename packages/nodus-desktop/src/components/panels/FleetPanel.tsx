@@ -31,12 +31,13 @@ export const FleetPanel: React.FC = () => {
     isDiscovering,
     startAutoDiscovery,
     serverConfig,
-    lockWorkstation
+    lockWorkstation,
+    systemStats
   } = useDesktop();
 
   // Manual Form State
-  const [manualName, setManualName] = useState('POCO Pad');
-  const [manualIp, setManualIp] = useState('192.168.1.118');
+  const [manualName, setManualName] = useState('');
+  const [manualIp, setManualIp] = useState('');
   const [manualPort, setManualPort] = useState('8890');
   const [manualType, setManualType] = useState<DeviceType>('tablet');
   const [manualSecret, setManualSecret] = useState('NODUS-FLEET-SECURE');
@@ -97,45 +98,59 @@ export const FleetPanel: React.FC = () => {
             <h3 className="text-xs font-bold uppercase tracking-wider text-[#8E8E93]">
               Active Nodes ({devices.length})
             </h3>
-            <span className="text-[11px] text-[#34C759] font-mono">Cluster Active</span>
+            <span className={`text-[11px] font-mono ${devices.length > 0 ? 'text-[#34C759]' : 'text-[#8E8E93]'}`}>
+              {devices.length > 0 ? 'Mesh Online' : 'No Remote Peers'}
+            </span>
           </div>
 
           <div className="space-y-2.5 overflow-y-auto pr-1">
-            {devices.map((device) => {
-              const isSelected = activeDeviceId === device.id;
-              return (
-                <div
-                  key={device.id}
-                  onClick={() => selectDevice(device.id)}
-                  className={`p-4 rounded-3xl border transition-all cursor-pointer flex flex-col gap-2.5 ${
-                    isSelected
-                      ? 'bg-[#181822] border-[#34C759] shadow-xl shadow-[#34C759]/10'
-                      : 'bg-[#121218] hover:bg-[#181822] border-white/5'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-9 h-9 rounded-2xl flex items-center justify-center text-white ${
-                          isSelected ? 'bg-[#34C759] text-black' : 'bg-white/5 text-[#8E8E93]'
-                        }`}
-                      >
-                        {getDeviceIcon(device.type)}
+            {devices.length === 0 ? (
+              <div className="p-6 rounded-3xl bg-[#121218] border border-white/5 flex flex-col items-center justify-center text-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-[#8E8E93]">
+                  <Radio size={22} />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white">No Remote Devices Connected</h4>
+                  <p className="text-xs text-[#8E8E93] max-w-xs mt-1 leading-relaxed">
+                    0 remote peers in cluster. Use Auto-Discover (LAN) to scan the network or connect a device manually.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              devices.map((device) => {
+                const isSelected = activeDeviceId === device.id;
+                return (
+                  <div
+                    key={device.id}
+                    onClick={() => selectDevice(device.id)}
+                    className={`p-4 rounded-3xl border transition-all cursor-pointer flex flex-col gap-2.5 ${
+                      isSelected
+                        ? 'bg-[#181822] border-[#34C759] shadow-xl shadow-[#34C759]/10'
+                        : 'bg-[#121218] hover:bg-[#181822] border-white/5'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-9 h-9 rounded-2xl flex items-center justify-center text-white ${
+                            isSelected ? 'bg-[#34C759] text-black' : 'bg-white/5 text-[#8E8E93]'
+                          }`}
+                        >
+                          {getDeviceIcon(device.type)}
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                            {device.name}
+                            {device.status === 'online' || device.status === 'connected' ? (
+                              <span className="w-2 h-2 rounded-full bg-[#34C759] shadow-[0_0_6px_#34C759]" />
+                            ) : (
+                              <span className="w-2 h-2 rounded-full bg-[#636366]" />
+                            )}
+                          </h4>
+                          <p className="text-[11px] font-mono text-[#8E8E93]">{device.ipAddress}</p>
+                        </div>
                       </div>
-                      <div>
-                        <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                          {device.name}
-                          {device.status === 'online' || device.status === 'connected' ? (
-                            <span className="w-2 h-2 rounded-full bg-[#34C759] shadow-[0_0_6px_#34C759]" />
-                          ) : (
-                            <span className="w-2 h-2 rounded-full bg-[#636366]" />
-                          )}
-                        </h4>
-                        <p className="text-[11px] font-mono text-[#8E8E93]">{device.ipAddress}</p>
-                      </div>
-                    </div>
 
-                    {device.id !== 'this-pc' && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -146,28 +161,28 @@ export const FleetPanel: React.FC = () => {
                       >
                         <Trash2 size={13} />
                       </button>
-                    )}
-                  </div>
+                    </div>
 
-                  {/* Micro Telemetry */}
-                  <div className="grid grid-cols-2 gap-2 pt-1 border-t border-white/5 text-[11px] font-mono text-[#8E8E93]">
-                    <div>
-                      CPU: <span className="text-white font-bold">{device.cpuLoad ?? 8}%</span>
-                    </div>
-                    <div>
-                      RAM: <span className="text-white font-bold">{device.ramUsage ?? '12.4 GB'}</span>
+                    {/* Micro Telemetry */}
+                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-white/5 text-[11px] font-mono text-[#8E8E93]">
+                      <div>
+                        CPU: <span className="text-white font-bold">{device.cpuLoad ?? 0}%</span>
+                      </div>
+                      <div>
+                        RAM: <span className="text-white font-bold">{device.ramUsage ?? '0 GB'}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </section>
 
         {/* ─── Right Column: Selected Node Details & Manual Pairing (7 cols) */}
         <section className="lg:col-span-7 flex flex-col gap-4">
-          {/* Detailed Selected Node Card */}
-          {activeDevice && (
+          {/* Detailed Selected Node Card (or Host Station when no peers) */}
+          {activeDevice ? (
             <div className="bg-[#121218] border border-white/10 rounded-3xl p-5 flex flex-col gap-4 shadow-xl">
               <div className="flex items-center justify-between pb-3 border-b border-white/10">
                 <div className="flex items-center gap-3">
@@ -179,7 +194,13 @@ export const FleetPanel: React.FC = () => {
                     <p className="text-xs text-[#8E8E93]">{activeDevice.os} • {activeDevice.ipAddress}</p>
                   </div>
                 </div>
-                <span className="px-3 py-1 rounded-full bg-[#34C759]/20 text-[#34C759] text-xs font-bold border border-[#34C759]/30 uppercase">
+                <span
+                  className={`px-3 py-1 rounded-full text-xs font-bold border uppercase ${
+                    activeDevice.status === 'connected' || activeDevice.status === 'online'
+                      ? 'bg-[#34C759]/20 text-[#34C759] border-[#34C759]/30'
+                      : 'bg-[#FF3B30]/20 text-[#FF3B30] border-[#FF3B30]/30'
+                  }`}
+                >
                   {activeDevice.status}
                 </span>
               </div>
@@ -191,11 +212,11 @@ export const FleetPanel: React.FC = () => {
                 </div>
                 <div className="p-3 rounded-2xl bg-[#181822] border border-white/5 flex flex-col gap-1">
                   <span className="text-[10.5px] uppercase font-bold text-[#8E8E93]">CPU Load</span>
-                  <span className="text-xs font-mono font-bold text-[#34C759]">{activeDevice.cpuLoad ?? 8}%</span>
+                  <span className="text-xs font-mono font-bold text-[#34C759]">{activeDevice.cpuLoad ?? 0}%</span>
                 </div>
                 <div className="p-3 rounded-2xl bg-[#181822] border border-white/5 flex flex-col gap-1">
                   <span className="text-[10.5px] uppercase font-bold text-[#8E8E93]">Memory Usage</span>
-                  <span className="text-xs font-mono font-bold text-[#007AFF]">{activeDevice.ramUsage ?? '12.4 GB'}</span>
+                  <span className="text-xs font-mono font-bold text-[#007AFF]">{activeDevice.ramUsage ?? '0 GB'}</span>
                 </div>
               </div>
 
@@ -224,6 +245,48 @@ export const FleetPanel: React.FC = () => {
                 </button>
               </div>
             </div>
+          ) : (
+            <div className="bg-[#121218] border border-white/10 rounded-3xl p-5 flex flex-col gap-4 shadow-xl">
+              <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-[#007AFF]/20 text-[#007AFF] flex items-center justify-center">
+                    <Monitor size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white">Host Workstation (This PC)</h3>
+                    <p className="text-xs text-[#8E8E93]">
+                      {systemStats?.hostname || 'Windows PC'} • 127.0.0.1:{serverConfig.port}
+                    </p>
+                  </div>
+                </div>
+                <span className="px-3 py-1 rounded-full bg-[#007AFF]/20 text-[#007AFF] text-xs font-bold border border-[#007AFF]/30 uppercase">
+                  Host Bridge
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-3 rounded-2xl bg-[#181822] border border-white/5 flex flex-col gap-1">
+                  <span className="text-[10.5px] uppercase font-bold text-[#8E8E93]">Screen</span>
+                  <span className="text-xs font-mono font-bold text-white">
+                    {typeof window !== 'undefined' ? `${window.screen.width} × ${window.screen.height}` : '1920 × 1080'}
+                  </span>
+                </div>
+                <div className="p-3 rounded-2xl bg-[#181822] border border-white/5 flex flex-col gap-1">
+                  <span className="text-[10.5px] uppercase font-bold text-[#8E8E93]">Host CPU Load</span>
+                  <span className="text-xs font-mono font-bold text-[#34C759]">
+                    {systemStats?.cpu_usage_pct ?? 0}%
+                  </span>
+                </div>
+                <div className="p-3 rounded-2xl bg-[#181822] border border-white/5 flex flex-col gap-1">
+                  <span className="text-[10.5px] uppercase font-bold text-[#8E8E93]">Host Memory</span>
+                  <span className="text-xs font-mono font-bold text-[#007AFF]">
+                    {systemStats
+                      ? `${(systemStats.ram_used_mb / 1024).toFixed(1)} / ${(systemStats.ram_total_mb / 1024).toFixed(1)} GB`
+                      : '0 GB'}
+                  </span>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Manual IP / Port Pair Box */}
@@ -248,6 +311,7 @@ export const FleetPanel: React.FC = () => {
                 </label>
                 <input
                   type="text"
+                  placeholder="e.g. POCO Pad"
                   value={manualName}
                   onChange={(e) => setManualName(e.target.value)}
                   className="w-full px-3 py-1.5 rounded-xl bg-black/40 border border-white/10 text-xs text-white outline-none focus:border-[#007AFF]"
@@ -276,6 +340,7 @@ export const FleetPanel: React.FC = () => {
                 </label>
                 <input
                   type="text"
+                  placeholder="e.g. 192.168.1.118"
                   value={manualIp}
                   onChange={(e) => setManualIp(e.target.value)}
                   className="w-full px-3 py-1.5 rounded-xl bg-black/40 border border-white/10 text-xs font-mono text-white outline-none focus:border-[#007AFF]"

@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 
 
-static HOTCORNERS_ENABLED: AtomicBool = AtomicBool::new(true);
+static HOTCORNERS_ENABLED: AtomicBool = AtomicBool::new(false);
 
 /// Corner identification
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

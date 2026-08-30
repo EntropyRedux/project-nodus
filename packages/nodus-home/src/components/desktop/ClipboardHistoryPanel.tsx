@@ -24,6 +24,7 @@ import { useLauncher } from '../../context/LauncherContext';
 import { audio } from '../../utils/audio';
 import { ClipboardItem, DeviceType } from '../../types/launcher';
 import { DEVICE_COLORS } from '../../utils/constants';
+import { universalNetworkFetch } from '../../services/FleetDirectClient';
 
 interface ClipboardHistoryPanelProps {
   onClose?: () => void;
@@ -68,6 +69,20 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(item.text).catch(() => {});
     }
+    try {
+      const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
+      if (bridge && typeof bridge.copyToClipboard === 'function') {
+        bridge.copyToClipboard(item.text);
+      }
+    } catch (_) {}
+
+    // Create a brand new clipboard history entry originating from this POCO Pad tablet (this also broadcasts to PC over LAN)
+    addClipboardItem({
+      text: item.text,
+      deviceId: 'poco-pad',
+      type: item.type,
+    });
+
     setCopiedId(item.id);
     setTimeout(() => {
       setCopiedId(null);

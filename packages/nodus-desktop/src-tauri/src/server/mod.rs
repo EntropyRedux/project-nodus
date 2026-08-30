@@ -3,7 +3,9 @@
 
 use serde::Deserialize;
 use serde_json::json;
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use std::thread;
 use tiny_http::{Header, Method, Response, Server, StatusCode};
 
@@ -16,6 +18,7 @@ use crate::commands::{
 };
 
 static SERVER_RUNNING: AtomicBool = AtomicBool::new(false);
+static REGISTERED_DEVICES: Mutex<Option<HashMap<String, serde_json::Value>>> = Mutex::new(None);
 
 #[derive(Debug, Deserialize)]
 struct MediaControlReq {
@@ -128,6 +131,7 @@ pub fn start_server(port: u16) {
                     let hostname = stats.as_ref().map(|s| s.hostname.clone()).unwrap_or_else(|| "Workstation (PC)".to_string());
                     let ram_used = stats.as_ref().map(|s| s.ram_used_mb).unwrap_or(0);
                     let ram_total = stats.as_ref().map(|s| s.ram_total_mb).unwrap_or(0);
+                    let cpu_load = stats.as_ref().map(|s| s.cpu_load_percent).unwrap_or(0.0);
 
                     (
                         200,
@@ -139,7 +143,7 @@ pub fn start_server(port: u16) {
                             "role": "desktop",
                             "os": "windows",
                             "port": port,
-                            "cpuLoad": 8,
+                            "cpuLoad": cpu_load,
                             "ramUsage": format!("{:.1} / {:.1} GB", ram_used as f64 / 1024.0, ram_total as f64 / 1024.0),
                             "uptime": stats.as_ref().map(|s| s.uptime_seconds).unwrap_or(0),
                         }),
@@ -324,6 +328,32 @@ pub fn start_server(port: u16) {
                     } else {
                         (400, json!({ "status": "error", "message": "Invalid text payload" }))
                     }
+                }
+
+                // Register Remote Peer (e.g. POCO Pad connecting)
+                (Method::Post, "/api/fleet/register") => {
+                    let mut body_str = String::new();
+                    let _ = request.as_reader().read_to_string(&mut body_str);
+                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&body_str) {
+                        let id = val.get("id").and_then(|v| v.as_str()).unwrap_or("poco-pad").to_string();
+                        if let Ok(mut lock) = REGISTERED_DEVICES.lock() {
+                            let map: &mut HashMap<String, serde_json::Value> = lock.get_or_insert_with(HashMap::new);
+                            map.insert(id.clone(), val.clone());
+                        }
+                        (200, json!({ "status": "success", "registered": id }))
+                    } else {
+                        (400, json!({ "status": "error", "message": "Invalid registration payload" }))
+                    }
+                }
+
+                // Query Registered Devices on PC
+                (Method::Get, "/api/fleet/devices") => {
+                    let devices: Vec<serde_json::Value> = if let Ok(lock) = REGISTERED_DEVICES.lock() {
+                        lock.as_ref().map(|m: &HashMap<String, serde_json::Value>| m.values().cloned().collect()).unwrap_or_default()
+                    } else {
+                        vec![]
+                    };
+                    (200, json!({ "status": "success", "devices": devices }))
                 }
 
                 _ => (404, json!({ "status": "not_found", "path": path })),

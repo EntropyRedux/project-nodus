@@ -48,55 +48,9 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const bridge = (window as any).NodusNativeBridge;
     if (!bridge) {
       // Browser mock fallback
-      setIsHomeInstalled(true);
-      setDevices([
-        {
-          id: 'poco-pad',
-          name: 'POCO Pad',
-          type: 'tablet',
-          os: 'android',
-          status: 'online',
-          ipAddress: '127.0.0.1',
-          resolution: '2560x1600',
-          battery: 85,
-          cpuLoad: 14,
-          ramUsage: '3.4 / 8.0 GB'
-        },
-        {
-          id: 'workstation-pc',
-          name: 'Workstation RTX',
-          type: 'desktop',
-          os: 'windows',
-          status: 'connected',
-          ipAddress: '192.168.1.100',
-          resolution: '3840x2160',
-          battery: 100,
-          cpuLoad: 24,
-          ramUsage: '14.2 / 32.0 GB'
-        }
-      ]);
-      setClipboardItems([
-        {
-          id: 'clip-1',
-          text: 'https://github.com/EntropyRedux/project-nodus',
-          deviceId: 'workstation-pc',
-          deviceName: 'Workstation RTX',
-          deviceType: 'desktop',
-          deviceColor: '#007AFF',
-          type: 'link',
-          timestamp: '12:45'
-        },
-        {
-          id: 'clip-2',
-          text: 'adb shell am start -n com.nodus.home/.HomeActivity',
-          deviceId: 'poco-pad',
-          deviceName: 'POCO Pad',
-          deviceType: 'tablet',
-          deviceColor: '#34C759',
-          type: 'text',
-          timestamp: '12:30'
-        }
-      ]);
+      setIsHomeInstalled(false);
+      setDevices([]);
+      setClipboardItems([]);
       return;
     }
 

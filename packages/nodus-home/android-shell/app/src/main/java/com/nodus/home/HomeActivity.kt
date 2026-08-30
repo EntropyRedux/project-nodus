@@ -86,11 +86,13 @@ class HomeActivity : AppCompatActivity() {
                 allowFileAccess = true
                 allowContentAccess = true
                 databaseEnabled = true
-                cacheMode = WebSettings.LOAD_DEFAULT
+                cacheMode = WebSettings.LOAD_NO_CACHE
+                mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                 mediaPlaybackRequiresUserGesture = false
                 useWideViewPort = true
                 loadWithOverviewMode = true
             }
+            clearCache(true)
 
             setBackgroundColor(0xFF0A0A0C.toInt())
 
@@ -261,6 +263,40 @@ class HomeActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun isAssistiveInstalled(): Boolean = NodusModuleDetector.isAssistiveInstalled(context)
+
+        @JavascriptInterface
+        fun httpFetch(urlStr: String, method: String, body: String?): String {
+            return try {
+                val url = java.net.URL(urlStr)
+                val conn = url.openConnection() as java.net.HttpURLConnection
+                conn.requestMethod = method.uppercase()
+                conn.connectTimeout = 3500
+                conn.readTimeout = 4000
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.setRequestProperty("Accept", "application/json")
+                if (method.equals("POST", ignoreCase = true) && !body.isNullOrEmpty()) {
+                    conn.doOutput = true
+                    conn.outputStream.use { os ->
+                        os.write(body.toByteArray(Charsets.UTF_8))
+                    }
+                }
+                val responseCode = conn.responseCode
+                val stream = if (responseCode in 200..299) conn.inputStream else conn.errorStream
+                val responseText = stream?.bufferedReader()?.use { it.readText() } ?: "{}"
+                JSONObject().apply {
+                    put("status", responseCode)
+                    put("ok", responseCode in 200..299)
+                    put("body", responseText)
+                }.toString()
+            } catch (e: Exception) {
+                Log.w(TAG, "httpFetch failed for $urlStr: ${e.message}")
+                JSONObject().apply {
+                    put("status", 0)
+                    put("ok", false)
+                    put("error", e.message ?: "Network error")
+                }.toString()
+            }
+        }
 
         @JavascriptInterface
         fun queryFleetDevices(): String {

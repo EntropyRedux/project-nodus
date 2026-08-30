@@ -86,7 +86,9 @@ export const WidgetArea: React.FC = () => {
                   className="p-3 bg-[#1C1C1E] backdrop-blur-md rounded-2xl border border-white/5 flex flex-col items-center shadow-lg hover:bg-[#2C2C2E] transition"
                 >
                   <Activity size={20} className="text-[#34C759]" />
-                  <span className="text-[10px] font-semibold text-[#8E8E93] mt-1 font-mono">{activeDevice.cpuLoad ?? 18}% CPU</span>
+                  <span className="text-[10px] font-semibold text-[#8E8E93] mt-1 font-mono">
+                    {Number((activeDevice.cpuLoad ?? 18).toFixed(2))}% CPU
+                  </span>
                 </button>
               </div>
               <RemoteCanvasWidget />

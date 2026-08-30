@@ -23,7 +23,8 @@ export const AmbientTaskbar: React.FC = () => {
     activeDevice, 
     setActiveTab, 
     clipboardItems, 
-    devices 
+    devices,
+    systemStats
   } = useDesktop();
 
   const [timeStr, setTimeStr] = useState('');
@@ -123,12 +124,17 @@ export const AmbientTaskbar: React.FC = () => {
             </button>
           </div>
 
-          {activeDevice && (
+          {activeDevice ? (
             <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-black/40 text-[11px] border border-white/5 font-mono">
               <span className="text-[#8E8E93]">{activeDevice.name}</span>
               <span className="text-[#34C759] font-bold">{activeDevice.cpuLoad ?? 0}% CPU</span>
             </div>
-          )}
+          ) : systemStats ? (
+            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-black/40 text-[11px] border border-white/5 font-mono">
+              <span className="text-[#8E8E93]">Host PC</span>
+              <span className="text-[#34C759] font-bold">{systemStats.cpu_usage_pct}% CPU</span>
+            </div>
+          ) : null}
 
           <div className="px-2.5 py-1 rounded-xl bg-white/5 text-xs font-mono font-semibold text-[#F0F0F2]">
             {timeStr}

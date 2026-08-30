@@ -20,7 +20,7 @@ interface DesktopContextType {
 
   // Devices & Fleet
   devices: DeviceInfo[];
-  activeDeviceId: string;
+  activeDeviceId: string | null;
   selectDevice: (id: string) => void;
   activeDevice: DeviceInfo | undefined;
   removeDevice: (id: string) => void;
@@ -81,7 +81,7 @@ const DEFAULT_SERVER_CONFIG: ServerConfig = {
 };
 
 const DEFAULT_HOTCORNER_CONFIG: HotCornerConfig = {
-  enabled: true,
+  enabled: false,
   dwellTimeMs: 180,
   marginPx: 8,
   disableInFullscreen: true,
@@ -93,50 +93,9 @@ const DEFAULT_HOTCORNER_CONFIG: HotCornerConfig = {
   },
 };
 
-const INITIAL_DEVICES: DeviceInfo[] = [
-  {
-    id: 'this-pc',
-    name: 'Workstation (This PC)',
-    type: 'desktop',
-    os: 'Windows 11 Pro',
-    status: 'connected',
-    ipAddress: '127.0.0.1:9120',
-    resolution: `${typeof window !== 'undefined' ? window.screen.width : 1920} × ${typeof window !== 'undefined' ? window.screen.height : 1080}`,
-    cpuLoad: 8,
-    ramUsage: '12.4 / 32.0 GB',
-    battery: undefined,
-  },
-  {
-    id: 'poco-pad',
-    name: 'POCO Pad',
-    type: 'tablet',
-    os: 'Xiaomi HyperOS (Android 14)',
-    status: 'online',
-    ipAddress: '192.168.1.118:8890',
-    resolution: '2560 × 1600 (12.1" 120Hz)',
-    battery: 92,
-    cpuLoad: 14,
-    ramUsage: '3.6 / 8.0 GB',
-  },
-];
+const INITIAL_DEVICES: DeviceInfo[] = [];
 
-const INITIAL_TRUSTED_DEVICES: TrustedDevice[] = [
-  {
-    id: 'poco-pad',
-    name: 'POCO Pad (Tablet)',
-    os: 'android',
-    ip: '192.168.1.118',
-    fingerprint: 'SHA256:19:FC:83:55:A2:11:66:3D',
-    isTrusted: true,
-    lastSeen: 'Active Now',
-    permissions: {
-      remoteExec: true,
-      clipboardSync: true,
-      processKill: true,
-      powerControl: true,
-    },
-  },
-];
+const INITIAL_TRUSTED_DEVICES: TrustedDevice[] = [];
 
 const INITIAL_SHORTCUTS: RemoteExecutable[] = [
   {
@@ -152,7 +111,7 @@ const INITIAL_SHORTCUTS: RemoteExecutable[] = [
     iconColor: '#007ACC',
     execType: 'command',
     commandOrPackage: 'code .',
-    workingDir: 'C:\\Workspaces',
+    workingDir: 'C:\\Projects',
     enabled: true,
     pinnedToDrawer: true,
     lastExecuted: '10m ago',
@@ -193,21 +152,21 @@ const INITIAL_SHORTCUTS: RemoteExecutable[] = [
     lastExecuted: 'Yesterday',
   },
   {
-    id: 'exec-tablet-camera',
-    deviceId: 'poco-pad',
-    deviceName: 'POCO Pad',
-    deviceType: 'tablet',
-    deviceOs: 'android',
-    name: 'Tablet Camera Shutter',
-    description: 'Trigger remote high-res photo capture',
-    category: 'tools',
-    iconName: 'Camera',
-    iconColor: '#007AFF',
-    execType: 'intent',
-    commandOrPackage: 'android.media.action.STILL_IMAGE_CAMERA',
+    id: 'exec-taskmgr',
+    deviceId: 'this-pc',
+    deviceName: 'This PC',
+    deviceType: 'desktop',
+    deviceOs: 'windows',
+    name: 'Task Manager',
+    description: 'Launch Windows Task Manager',
+    category: 'system',
+    iconName: 'Activity',
+    iconColor: '#FF9500',
+    execType: 'command',
+    commandOrPackage: 'taskmgr.exe',
     enabled: true,
     pinnedToDrawer: true,
-    lastExecuted: '1h ago',
+    lastExecuted: 'Just now',
   },
 ];
 
@@ -216,28 +175,24 @@ const DesktopContext = createContext<DesktopContextType | undefined>(undefined);
 export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('fleet');
   
-  // Devices & Fleet
+  // Devices & Fleet (Strictly active verified connections only)
   const [devices, setDevices] = useState<DeviceInfo[]>(() => {
+    // Clear legacy mock cache keys
     try {
-      const saved = localStorage.getItem('nodus_desktop_devices_v2');
-      if (saved) return JSON.parse(saved);
+      localStorage.removeItem('nodus_desktop_devices');
+      localStorage.removeItem('nodus_desktop_devices_v2');
+      localStorage.removeItem('nodus_desktop_trusted_devices');
     } catch (_) {}
     return INITIAL_DEVICES;
   });
-  const [activeDeviceId, setActiveDeviceId] = useState<string>('this-pc');
+  const [activeDeviceId, setActiveDeviceId] = useState<string | null>(null);
   
   // Processes & Telemetry
   const [processes, setProcesses] = useState<DeviceProcess[]>([]);
   const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
 
-  // Clipboard
-  const [clipboardItems, setClipboardItems] = useState<ClipboardItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('nodus_desktop_clipboard');
-      if (saved) return JSON.parse(saved);
-    } catch (_) {}
-    return [];
-  });
+  // Clipboard (Starts fresh on app restart)
+  const [clipboardItems, setClipboardItems] = useState<ClipboardItem[]>([]);
 
   // Remote Executables
   const [remoteExecutables, setRemoteExecutables] = useState<RemoteExecutable[]>(() => {
@@ -308,36 +263,71 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } catch (_) {}
   }, [remoteExecutables]);
 
+  // Real-time Windows Clipboard Watcher
+  const lastLocalClipRef = React.useRef<string>('');
+
   useEffect(() => {
-    try {
-      localStorage.setItem('nodus_desktop_clipboard', JSON.stringify(clipboardItems));
-    } catch (_) {}
-  }, [clipboardItems]);
+    const pollClipboard = async () => {
+      try {
+        const currentText = await TauriService.getClipboardText();
+        const trimmed = currentText.trim();
+        if (trimmed && trimmed !== lastLocalClipRef.current) {
+          lastLocalClipRef.current = trimmed;
+          addClipboardItem(trimmed, 'this-pc');
+        }
+      } catch (_) {}
+    };
+
+    pollClipboard();
+    const interval = setInterval(pollClipboard, 1500);
+    return () => clearInterval(interval);
+  }, []);
 
   const selectDevice = useCallback((id: string) => {
     setActiveDeviceId(id);
   }, []);
 
   const removeDevice = useCallback((id: string) => {
-    setDevices((prev) => prev.filter((d) => d.id !== id));
-    if (activeDeviceId === id) {
-      setActiveDeviceId('this-pc');
-    }
+    setDevices((prev) => {
+      const remaining = prev.filter((d) => d.id !== id);
+      if (activeDeviceId === id) {
+        setActiveDeviceId(remaining[0]?.id || null);
+      }
+      return remaining;
+    });
   }, [activeDeviceId]);
 
-  const connectDeviceManual = useCallback((newDev: { name: string; ip: string; port: number; type: DeviceType; os?: string }) => {
+  const connectDeviceManual = useCallback(async (newDev: { name: string; ip: string; port: number; type: DeviceType; os?: string }) => {
     const id = `node-${newDev.ip.replace(/\./g, '-')}`;
+    let isReachable = false;
+    let fetchedStats: any = null;
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      const res = await fetch(`http://${newDev.ip}:${newDev.port}/api/status`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        fetchedStats = await res.json();
+        isReachable = true;
+      }
+    } catch (_) {
+      isReachable = false;
+    }
+
     const device: DeviceInfo = {
       id,
-      name: newDev.name || `Node (${newDev.ip})`,
+      name: fetchedStats?.name || newDev.name || `Node (${newDev.ip})`,
       type: newDev.type,
-      os: newDev.os || (newDev.type === 'tablet' ? 'Android 14 (HyperOS)' : 'Unknown OS'),
-      status: 'connected',
+      os: fetchedStats?.os || newDev.os || (newDev.type === 'tablet' ? 'Android 14 (HyperOS)' : 'Remote Station'),
+      status: isReachable ? 'connected' : 'offline',
       ipAddress: `${newDev.ip}:${newDev.port}`,
-      resolution: newDev.type === 'tablet' ? '2560 × 1600' : '1920 × 1080',
-      battery: newDev.type === 'tablet' ? 92 : undefined,
-      cpuLoad: 10,
-      ramUsage: '3.5 / 8.0 GB',
+      resolution: fetchedStats?.resolution || (newDev.type === 'tablet' ? '2560 × 1600' : '1920 × 1080'),
+      battery: fetchedStats?.battery ?? (newDev.type === 'tablet' ? 90 : undefined),
+      cpuLoad: fetchedStats?.cpuLoad ?? 0,
+      ramUsage: fetchedStats?.ramUsage ?? '0 / 8.0 GB',
       isCustom: true,
     };
 
@@ -351,26 +341,49 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const startAutoDiscovery = useCallback(async () => {
     setIsDiscovering(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      const pocoNode: DeviceInfo = {
-        id: 'poco-pad-live',
-        name: 'POCO Pad (Discovered)',
-        type: 'tablet',
-        os: 'Xiaomi HyperOS (Android 14)',
-        status: 'online',
-        ipAddress: '192.168.1.118:8890',
-        resolution: '2560 × 1600 (12.1" 120Hz)',
-        battery: 94,
-        cpuLoad: 12,
-        ramUsage: '3.4 / 8.0 GB',
-      };
-      setDevices((prev) => {
-        const exists = prev.some((d) => d.id === 'poco-pad-live' || d.id === 'poco-pad');
-        if (exists) {
-          return prev.map((d) => (d.id === 'poco-pad' ? pocoNode : d));
-        }
-        return [...prev, pocoNode];
-      });
+      // Look for active Nodus nodes across standard ports (8890 tablet, 9120 companion, 8080)
+      const candidateEndpoints = [
+        { ip: '127.0.0.1', port: 8890, type: 'tablet' as DeviceType },
+      ];
+      
+      const discovered: DeviceInfo[] = [];
+
+      for (const cand of candidateEndpoints) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 1200);
+          const res = await fetch(`http://${cand.ip}:${cand.port}/api/status`, {
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.name) {
+              discovered.push({
+                id: `node-${cand.ip.replace(/\./g, '-')}-${cand.port}`,
+                name: data.name,
+                type: data.type || cand.type,
+                os: data.os || 'Android 14',
+                status: 'online',
+                ipAddress: `${cand.ip}:${cand.port}`,
+                resolution: data.resolution || '2560 × 1600',
+                battery: data.battery,
+                cpuLoad: data.cpuLoad ?? 10,
+                ramUsage: data.ramUsage ?? '3.5 / 8.0 GB',
+              });
+            }
+          }
+        } catch (_) {}
+      }
+
+      // Only add actually reachable nodes
+      if (discovered.length > 0) {
+        setDevices((prev) => {
+          const existingIds = new Set(prev.map((d) => d.id));
+          const toAdd = discovered.filter((d) => !existingIds.has(d.id));
+          return [...prev, ...toAdd];
+        });
+      }
     } finally {
       setIsDiscovering(false);
     }
@@ -402,7 +415,7 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setHotCornerConfig((prev) => ({ ...prev, ...partial }));
   }, []);
 
-  const activeDevice = devices.find((d) => d.id === activeDeviceId) || devices[0];
+  const activeDevice = devices.find((d) => d.id === activeDeviceId) || devices[0] || undefined;
 
   // Refresh processes
   const refreshProcesses = useCallback(async () => {
@@ -425,19 +438,22 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const isUrl = /^https?:\/\//i.test(text.trim());
     const isCode = /[{};<>()=>]/.test(text) && text.includes('\n');
 
+    const isHost = targetDeviceId === 'this-pc' || targetDeviceId === 'tab-pc' || targetDeviceId === 'main-pc';
+
     const newItem: ClipboardItem = {
       id: `clip-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       text,
       deviceId: targetDeviceId,
-      deviceName: targetDeviceId === 'this-pc' ? 'This PC' : 'POCO Pad',
-      deviceType: targetDeviceId === 'this-pc' ? 'desktop' : 'tablet',
-      deviceColor: targetDeviceId === 'this-pc' ? '#FF9500' : '#007AFF',
+      deviceName: isHost ? 'Windows PC' : 'POCO Pad',
+      deviceType: isHost ? 'desktop' : 'tablet',
+      deviceColor: isHost ? '#34C759' : '#007AFF', // Green for PC, Blue for POCO Pad
       type: isUrl ? 'link' : isCode ? 'code' : 'text',
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       pinned: false,
     };
 
-    setClipboardItems((prev) => [newItem, ...prev.filter((item) => item.text !== text)]);
+    // Create a brand new distinct clipboard entry at the top, keeping prior historical entries intact
+    setClipboardItems((prev) => [newItem, ...prev].slice(0, 100));
   }, []);
 
   const removeClipboardItem = useCallback((id: string) => {
@@ -501,6 +517,44 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     const interval = setInterval(updateStats, 5000);
 
+    // Poll locally registered peers from HTTP daemon
+    const fleetInterval = setInterval(async () => {
+      try {
+        const res = await fetch('http://127.0.0.1:9120/api/fleet/devices');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.devices) && data.devices.length > 0) {
+            setDevices((prev) => {
+              let updated = [...prev];
+              for (const dev of data.devices) {
+                const id = dev.id || `node-${(dev.ip || '').replace(/\./g, '-')}`;
+                const existingIndex = updated.findIndex((d) => d.id === id);
+                const nodeInfo: DeviceInfo = {
+                  id,
+                  name: dev.name || 'POCO Pad',
+                  type: (dev.type as DeviceType) || 'tablet',
+                  os: dev.os || 'Android 14 (HyperOS)',
+                  status: 'connected',
+                  ipAddress: `${dev.ip || '192.168.1.35'}:${dev.port || 8890}`,
+                  resolution: dev.resolution || '2560 × 1600',
+                  battery: dev.battery ?? 90,
+                  cpuLoad: dev.cpu_load ?? 12,
+                  ramUsage: dev.ram_usage || '3.5 / 8.0 GB',
+                  isCustom: true,
+                };
+                if (existingIndex >= 0) {
+                  updated[existingIndex] = { ...updated[existingIndex], ...nodeInfo, status: 'connected' };
+                } else {
+                  updated.push(nodeInfo);
+                }
+              }
+              return updated;
+            });
+          }
+        }
+      } catch (_) {}
+    }, 2500);
+
     // Watch host clipboard changes
     let lastClip = '';
     const clipInterval = setInterval(async () => {
@@ -559,6 +613,7 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     return () => {
       clearInterval(interval);
+      clearInterval(fleetInterval);
       clearInterval(clipInterval);
       if (unlistenCorner) unlistenCorner();
       if (unlistenPanel) unlistenPanel();

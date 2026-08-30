@@ -13,11 +13,40 @@ import {
 } from '../types/launcher';
 
 export const DEVICE_COLORS: Record<string, string> = {
-  'sm-t230nu': '#34C759', // Green (Host Controller)
-  'poco-pad': '#007AFF',  // Blue (Secondary Android)
-  'main-pc': '#FF9500',   // Orange (Windows 11 Workstation)
-  'tab-pc': '#BF5AF2',    // Purple (Windows Touch)
+  'poco-pad': '#007AFF',  // Blue (POCO Pad Android Tablet)
+  'this-pc': '#34C759',   // Green (Windows PC Host)
+  'tab-pc': '#34C759',    // Green (Windows Companion)
+  'main-pc': '#34C759',   // Green (Windows PC)
+  'sm-t230nu': '#AF52DE', // Purple (Secondary Android)
 };
+
+const PALETTE = [
+  '#007AFF', // Blue
+  '#34C759', // Green
+  '#FF9500', // Orange
+  '#AF52DE', // Purple
+  '#FF2D55', // Pink
+  '#5856D6', // Indigo
+  '#5AC8FA', // Teal
+  '#FFCC00', // Yellow
+];
+
+export function getDeviceColor(deviceId: string, type?: string, os?: string): string {
+  if (DEVICE_COLORS[deviceId]) return DEVICE_COLORS[deviceId];
+  if (type === 'desktop' || type === 'laptop' || (os && os.toLowerCase().includes('windows'))) {
+    return '#34C759'; // Green for Windows PC nodes
+  }
+  if (type === 'tablet' || (os && os.toLowerCase().includes('hyperos')) || deviceId.toLowerCase().includes('poco')) {
+    return '#007AFF'; // Blue for POCO Pad / Android
+  }
+  // Deterministic consistent hash color for new dynamically added devices
+  let hash = 0;
+  for (let i = 0; i < deviceId.length; i++) {
+    hash = (hash << 5) - hash + deviceId.charCodeAt(i);
+    hash |= 0;
+  }
+  return PALETTE[Math.abs(hash) % PALETTE.length];
+}
 
 export const INITIAL_CLIPBOARD_ITEMS: ClipboardItem[] = [];
 
@@ -55,41 +84,7 @@ export const INITIAL_APPS: AppItem[] = [
 
 export const DOCK_APP_IDS = ['settings'];
 
-export const INITIAL_NOTIFICATIONS: NotificationItem[] = [
-  {
-    id: 'notif-1',
-    appId: 'settings',
-    appName: 'Fleet Hub',
-    title: 'Cluster Server Active',
-    message: 'WebSocket Hub listening on 192.168.1.104:8890',
-    time: '2m ago',
-    read: false,
-    iconName: 'Server',
-    color: '#34C759',
-  },
-  {
-    id: 'notif-2',
-    appId: 'terminal',
-    appName: 'Remote Bridge',
-    title: 'Windows Agent Connected',
-    message: 'MAIN PC (192.168.1.150:9120) ready for remote execution',
-    time: '8m ago',
-    read: false,
-    iconName: 'Terminal',
-    color: '#007AFF',
-  },
-  {
-    id: 'notif-3',
-    appId: 'settings',
-    appName: 'Clipboard Sync',
-    title: 'Clipboard Linked',
-    message: '2-way clipboard sync active across 4 nodes',
-    time: '25m ago',
-    read: true,
-    iconName: 'Clipboard',
-    color: '#FF9500',
-  },
-];
+export const INITIAL_NOTIFICATIONS: NotificationItem[] = [];
 
 export const WALLPAPER_PRESETS = [
   {
@@ -192,7 +187,7 @@ export const INITIAL_SERVER_CONFIG: NetworkServerConfig = {
 };
 
 export const INITIAL_WINDOWS_BRIDGE: WindowsBridgeConfig = {
-  agentInstalled: true,
+  agentInstalled: false,
   bridgePort: 9120,
   authToken: 'win-bridge-sec-token-894',
   allowRemotePower: true,
@@ -200,7 +195,7 @@ export const INITIAL_WINDOWS_BRIDGE: WindowsBridgeConfig = {
   allowElevatedCommands: false,
   allowedExecutablesPath: 'C:\\Program Files;C:\\Tools;C:\\Windows\\System32',
   syncVolumeAndMedia: true,
-  connectedHost: '192.168.1.150',
+  connectedHost: '',
 };
 
 export const INITIAL_ANDROID_BRIDGE: AndroidBridgeConfig = {
@@ -223,206 +218,7 @@ export const INITIAL_CLIPBOARD_SYNC_CONFIG: ClipboardSyncConfig = {
   autoClearSensitiveMinutes: 15,
 };
 
-export const INITIAL_TRUSTED_DEVICES: TrustedDevice[] = [
-  {
-    id: 'sm-t230nu',
-    name: 'SM-T230NU (Host Controller)',
-    os: 'android',
-    ip: '192.168.1.104',
-    fingerprint: 'SHA256:7B:3A:99:C1:20:FE:44:88',
-    isTrusted: true,
-    lastSeen: 'Active Now',
-    permissions: {
-      remoteExec: true,
-      clipboardSync: true,
-      processKill: true,
-      powerControl: true,
-    },
-  },
-  {
-    id: 'main-pc',
-    name: 'MAIN PC (Windows 11)',
-    os: 'windows',
-    ip: '192.168.1.150',
-    fingerprint: 'SHA256:4C:82:11:A9:90:3E:AA:12',
-    isTrusted: true,
-    lastSeen: '1m ago',
-    permissions: {
-      remoteExec: true,
-      clipboardSync: true,
-      processKill: true,
-      powerControl: true,
-    },
-  },
-  {
-    id: 'poco-pad',
-    name: 'POCO-PAD (HyperOS)',
-    os: 'android',
-    ip: '192.168.1.118',
-    fingerprint: 'SHA256:19:FC:83:55:A2:11:66:3D',
-    isTrusted: true,
-    lastSeen: '3m ago',
-    permissions: {
-      remoteExec: true,
-      clipboardSync: true,
-      processKill: true,
-      powerControl: false,
-    },
-  },
-  {
-    id: 'tab-pc',
-    name: 'TAB PC (Windows Touch)',
-    os: 'windows',
-    ip: '192.168.1.172',
-    fingerprint: 'SHA256:E0:44:77:99:01:BC:48:9A',
-    isTrusted: true,
-    lastSeen: '12m ago',
-    permissions: {
-      remoteExec: true,
-      clipboardSync: true,
-      processKill: false,
-      powerControl: true,
-    },
-  },
-];
+export const INITIAL_TRUSTED_DEVICES: TrustedDevice[] = [];
 
-export const INITIAL_REMOTE_EXECUTABLES: RemoteExecutable[] = [
-  // Windows PC Remote Executables
-  {
-    id: 'win-exec-1',
-    deviceId: 'main-pc',
-    deviceName: 'MAIN PC',
-    deviceType: 'desktop',
-    deviceOs: 'windows',
-    name: 'Visual Studio Code',
-    description: 'Launch VS Code workspace on Windows Desktop',
-    category: 'productivity',
-    iconName: 'Code',
-    iconColor: '#007ACC',
-    execType: 'command',
-    commandOrPackage: 'code .',
-    workingDir: 'C:\\Projects',
-    runAsAdmin: false,
-    enabled: true,
-    pinnedToDrawer: true,
-    lastExecuted: '20m ago',
-  },
-  {
-    id: 'win-exec-2',
-    deviceId: 'main-pc',
-    deviceName: 'MAIN PC',
-    deviceType: 'desktop',
-    deviceOs: 'windows',
-    name: 'Windows Terminal (Admin)',
-    description: 'Elevated PowerShell CLI prompt',
-    category: 'tools',
-    iconName: 'Terminal',
-    iconColor: '#4E75F8',
-    execType: 'command',
-    commandOrPackage: 'wt.exe -p "PowerShell"',
-    runAsAdmin: true,
-    enabled: true,
-    pinnedToDrawer: true,
-    lastExecuted: '1h ago',
-  },
-  {
-    id: 'win-exec-3',
-    deviceId: 'main-pc',
-    deviceName: 'MAIN PC',
-    deviceType: 'desktop',
-    deviceOs: 'windows',
-    name: 'Steam Big Picture',
-    description: 'Launch Steam client in Controller Gaming UI',
-    category: 'games',
-    iconName: 'Gamepad2',
-    iconColor: '#1B2838',
-    execType: 'url_protocol',
-    commandOrPackage: 'steam://open/bigpicture',
-    enabled: true,
-    pinnedToDrawer: true,
-    lastExecuted: 'Yesterday',
-  },
-  {
-    id: 'win-exec-4',
-    deviceId: 'main-pc',
-    deviceName: 'MAIN PC',
-    deviceType: 'desktop',
-    deviceOs: 'windows',
-    name: 'Lock Windows Workstation',
-    description: 'Instant Lock Workstation Screen (rundll32.exe)',
-    category: 'system',
-    iconName: 'Lock',
-    iconColor: '#FF9500',
-    execType: 'command',
-    commandOrPackage: 'rundll32.exe user32.dll,LockWorkStation',
-    enabled: true,
-    pinnedToDrawer: false,
-  },
-  {
-    id: 'win-exec-5',
-    deviceId: 'main-pc',
-    deviceName: 'MAIN PC',
-    deviceType: 'desktop',
-    deviceOs: 'windows',
-    name: 'Spotify Desktop Player',
-    description: 'Start Spotify desktop background service',
-    category: 'media',
-    iconName: 'Music',
-    iconColor: '#1DB954',
-    execType: 'url_protocol',
-    commandOrPackage: 'spotify:',
-    enabled: true,
-    pinnedToDrawer: true,
-  },
+export const INITIAL_REMOTE_EXECUTABLES: RemoteExecutable[] = [];
 
-  // Remote Android Executables (POCO-PAD)
-  {
-    id: 'and-exec-1',
-    deviceId: 'poco-pad',
-    deviceName: 'POCO-PAD',
-    deviceType: 'tablet',
-    deviceOs: 'android',
-    name: 'Remote Camera Shutter',
-    description: 'Trigger rear sensor high-res photo capture',
-    category: 'tools',
-    iconName: 'Camera',
-    iconColor: '#007AFF',
-    execType: 'intent',
-    commandOrPackage: 'android.media.action.STILL_IMAGE_CAMERA',
-    enabled: true,
-    pinnedToDrawer: true,
-    lastExecuted: '45m ago',
-  },
-  {
-    id: 'and-exec-2',
-    deviceId: 'poco-pad',
-    deviceName: 'POCO-PAD',
-    deviceType: 'tablet',
-    deviceOs: 'android',
-    name: 'YouTube Kids / Player',
-    description: 'Launch YouTube app intent on tablet display',
-    category: 'media',
-    iconName: 'PlaySquare',
-    iconColor: '#FF0000',
-    execType: 'native_app',
-    commandOrPackage: 'com.google.android.youtube',
-    enabled: true,
-    pinnedToDrawer: true,
-  },
-  {
-    id: 'and-exec-3',
-    deviceId: 'poco-pad',
-    deviceName: 'POCO-PAD',
-    deviceType: 'tablet',
-    deviceOs: 'android',
-    name: 'Toggle Portable WiFi Hotspot',
-    description: 'Enable / Disable tethered 5G hotspot broadcast',
-    category: 'system',
-    iconName: 'Wifi',
-    iconColor: '#34C759',
-    execType: 'intent',
-    commandOrPackage: 'nova.intent.action.TOGGLE_TETHERING',
-    enabled: true,
-    pinnedToDrawer: false,
-  },
-];

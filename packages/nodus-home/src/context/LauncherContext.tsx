@@ -24,6 +24,7 @@ import {
   INITIAL_DEVICE_PROCESSES,
   INITIAL_CLIPBOARD_ITEMS,
   DEVICE_COLORS,
+  getDeviceColor,
   INITIAL_SERVER_CONFIG,
   INITIAL_WINDOWS_BRIDGE,
   INITIAL_ANDROID_BRIDGE,
@@ -33,6 +34,7 @@ import {
 } from '../utils/constants';
 import { audio } from '../utils/audio';
 import { simulateBridgeRpc } from '../utils/bridgeProtocol';
+import { universalNetworkFetch } from '../services/FleetDirectClient';
 
 interface QuickSettingsState {
   wifi: boolean;
@@ -58,6 +60,7 @@ interface LauncherContextType {
   removeDevice: (id: string) => void;
   updateDevice: (id: string, partial: Partial<DeviceInfo>) => void;
   updateDeviceAvatar: (id: string, avatarUrl: string) => void;
+  fetchDeviceProcesses: (deviceId: string) => Promise<void>;
   isSidebarCollapsed: boolean;
   setSidebarCollapsed: (val: boolean) => void;
   toggleSidebar: () => void;
@@ -270,26 +273,23 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [devices, setDevices] = useState<DeviceInfo[]>(() => {
     if (typeof window !== 'undefined') {
       try {
+        localStorage.removeItem('nova_launcher_devices');
+        localStorage.removeItem('nodus_launcher_devices');
+      } catch (_) {}
+
+      try {
         const bridge = (window as any).NodusNativeBridge;
         if (bridge?.queryFleetDevices) {
           const raw = bridge.queryFleetDevices();
           if (raw && typeof raw === 'string' && raw.startsWith('[')) {
             const list = JSON.parse(raw);
-            if (Array.isArray(list) && list.length > 0) return list;
+            if (Array.isArray(list) && list.length > 0) {
+              const valid = list.filter((d: any) => !['tab-pc', 'sm-t230nu', 'main-pc'].includes(d.id));
+              if (valid.length > 0) return valid;
+            }
           }
         }
       } catch (_) {}
-
-      const saved = localStorage.getItem('nova_launcher_devices');
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            const valid = parsed.filter((d: any) => !['tab-pc', 'sm-t230nu', 'main-pc'].includes(d.id));
-            if (valid.length > 0) return valid;
-          }
-        } catch (e) {}
-      }
     }
     return INITIAL_DEVICES;
   });
@@ -427,9 +427,26 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
+        const legacyMockIds = ['tab-pc', 'sm-t230nu', 'main-pc'];
+        const cleanTrusted = Array.isArray(parsed.trustedDevices)
+          ? parsed.trustedDevices.filter((d: any) => !legacyMockIds.includes(d.id))
+          : INITIAL_TRUSTED_DEVICES;
+        const cleanExecs = Array.isArray(parsed.remoteExecutables)
+          ? parsed.remoteExecutables.filter((e: any) => !legacyMockIds.includes(e.deviceId))
+          : INITIAL_REMOTE_EXECUTABLES;
+        const cleanWinBridge = parsed.windowsBridge
+          ? {
+              ...parsed.windowsBridge,
+              connectedHost: parsed.windowsBridge.connectedHost === '192.168.1.150' ? '' : (parsed.windowsBridge.connectedHost || ''),
+            }
+          : DEFAULT_SETTINGS.windowsBridge;
+
         return {
           ...DEFAULT_SETTINGS,
           ...parsed,
+          trustedDevices: cleanTrusted,
+          remoteExecutables: cleanExecs,
+          windowsBridge: cleanWinBridge,
           deviceFrame: false,
           wallpaper: parsed.wallpaper || 'alpine-horizon',
         };
@@ -448,11 +465,8 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const [processModalDeviceId, setProcessModalDeviceId] = useState<string | null>(null);
 
-  // Universal Cross-Device Clipboard History
-  const [clipboardItems, setClipboardItems] = useState<ClipboardItem[]>(() => {
-    const saved = localStorage.getItem('nova_launcher_clipboard');
-    return saved ? JSON.parse(saved) : INITIAL_CLIPBOARD_ITEMS;
-  });
+  // Universal Cross-Device Clipboard History (Starts fresh on app restart)
+  const [clipboardItems, setClipboardItems] = useState<ClipboardItem[]>([]);
 
   const [isClipboardOpen, setClipboardOpen] = useState<boolean>(() => {
     const saved = localStorage.getItem('nova_launcher_clipboard_open');
@@ -817,10 +831,12 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [syncFleetState]);
 
   // Dynamic Hardware Node Health & Connection Polling
+  const lastRemoteClipRef = React.useRef<string>('');
+
   useEffect(() => {
     const checkNodes = async () => {
       for (const dev of devices) {
-        if (dev.id === 'tab-pc') continue;
+        if (dev.id === 'tab-pc' || dev.ipAddress || dev.isCustom) continue;
         try {
           const res = await simulateBridgeRpc('GET_TELEMETRY', dev.id);
           const isConnected = res.response.status === 'OK';
@@ -832,10 +848,12 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                   return {
                     ...d,
                     status: d.id === activeDeviceId ? 'connected' : 'online',
-                    cpuLoad: typeof tel.cpuLoadPercent === 'number' ? tel.cpuLoadPercent : d.cpuLoad,
+                    battery: tel.battery ?? d.battery,
+                    cpuLoad: typeof tel.cpuLoad === 'number' ? Number(tel.cpuLoad.toFixed(2)) : (typeof d.cpuLoad === 'number' ? Number(d.cpuLoad.toFixed(2)) : d.cpuLoad),
+                    ramUsage: tel.ramUsage ?? d.ramUsage,
                   };
                 }
-                return d;
+                return { ...d, status: isConnected ? 'online' : 'offline' };
               }
               return d;
             })
@@ -870,12 +888,54 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           // Keep active hardware reachable status intact
         }
       }
+
+      // Check remote Windows PC clipboard updates
+      for (const dev of devices) {
+        if (dev.ipAddress && (dev.type === 'desktop' || dev.type === 'laptop' || dev.id === 'this-pc' || dev.id === 'tab-pc')) {
+          try {
+            const clipRes = await universalNetworkFetch(`http://${dev.ipAddress}/api/clipboard`, {
+              method: 'GET',
+              timeoutMs: 2000,
+            });
+            if (clipRes.ok && clipRes.data && typeof clipRes.data.text === 'string') {
+              const text = clipRes.data.text.trim();
+              if (text && text !== lastRemoteClipRef.current) {
+                lastRemoteClipRef.current = text;
+
+                let inferredType: 'text' | 'link' | 'code' | 'snippet' = 'text';
+                if (text.startsWith('http://') || text.startsWith('https://')) {
+                  inferredType = 'link';
+                } else if (text.includes(';') || text.includes('&&') || text.startsWith('adb') || text.startsWith('curl') || text.startsWith('git')) {
+                  inferredType = 'code';
+                } else if (text.length > 80) {
+                  inferredType = 'snippet';
+                }
+
+                const devColor = getDeviceColor(dev.id, dev.type, dev.os);
+
+                const newItem: ClipboardItem = {
+                  id: `clip-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                  text,
+                  deviceId: dev.id,
+                  deviceName: dev.name,
+                  deviceType: dev.type,
+                  deviceColor: devColor,
+                  type: inferredType,
+                  timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                  pinned: false,
+                };
+                setClipboardItems((prev) => [newItem, ...prev].slice(0, 100));
+              }
+            }
+          } catch (_) {}
+        }
+      }
     };
 
     checkNodes();
-    const timer = setInterval(checkNodes, 6000);
+    const timer = setInterval(checkNodes, 1500);
     return () => clearInterval(timer);
-  }, [activeDeviceId]);
+  }, [activeDeviceId, devices]);
 
   useEffect(() => {
     localStorage.setItem('nova_launcher_active_device', activeDeviceId);
@@ -1091,27 +1151,17 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       ...deviceData,
       id: newId,
       isCustom: true,
-      cpuLoad: Math.floor(Math.random() * 25 + 10),
-      ramUsage: '2.4 / 8.0 GB',
-      storage: '45 / 128 GB',
     };
-    setDevices((prev) => [...prev, newDevice]);
-
-    setDeviceProcesses((prev) => ({
-      ...prev,
-      [newId]: [
-        { pid: 101, name: 'system_server', user: 'system', cpu: 2.1, memoryMb: 140, status: 'running', category: 'system', description: 'Core Services' },
-        { pid: 214, name: 'surfaceflinger', user: 'system', cpu: 3.4, memoryMb: 80, status: 'running', category: 'system', description: 'Display Compositor' },
-        { pid: 512, name: 'com.android.systemui', user: 'user', cpu: 1.8, memoryMb: 95, status: 'running', category: 'system', description: 'System UI' },
-        { pid: 1040, name: 'com.android.launcher', user: 'user', cpu: 0.9, memoryMb: 70, status: 'running', category: 'user', description: 'Cluster Launcher' },
-      ],
-    }));
+    setDevices((prev) => {
+      const filtered = prev.filter((d) => d.ipAddress !== newDevice.ipAddress);
+      return [...filtered, newDevice];
+    });
 
     addNotification({
       appId: 'settings',
       appName: 'Fleet Manager',
-      title: `Device Connected: ${newDevice.name}`,
-      message: `Node ${newDevice.ipAddress} (${newDevice.os}) was added to cluster.`,
+      title: `Node Linked: ${newDevice.name}`,
+      message: `${newDevice.name} (${newDevice.ipAddress}) connected to mesh.`,
       iconName: 'Smartphone',
       color: '#34C759',
     });
@@ -1134,7 +1184,7 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     );
   };
 
-  const fetchDeviceProcesses = useCallback((deviceId: string) => {
+  const fetchDeviceProcesses = useCallback(async (deviceId: string) => {
     try {
       const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
       if (deviceId === 'poco-pad' && bridge?.getRunningProcesses) {
@@ -1148,19 +1198,75 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             }));
           }
         }
+        return;
+      }
+
+      // Live Windows Companion Process Inspection
+      const targetDev = devices.find((d) => d.id === deviceId);
+      if (targetDev && targetDev.ipAddress) {
+        const res = await universalNetworkFetch(`http://${targetDev.ipAddress}/api/processes`);
+        if (res.ok && res.data && Array.isArray(res.data.processes)) {
+          const mapped: DeviceProcess[] = res.data.processes.map((p: any) => ({
+            pid: p.pid,
+            name: p.name,
+            user: p.user || 'User',
+            cpu: typeof p.cpu === 'number' ? p.cpu : 0.0,
+            memoryMb: Math.round((p.memory_kb || 0) / 1024),
+            status: 'running',
+            category: (p.category as any) || 'user',
+            description: p.name,
+          }));
+          setDeviceProcesses((prev) => ({
+            ...prev,
+            [deviceId]: mapped,
+          }));
+        }
       }
     } catch (err) {
       console.warn('[Nodus] Failed to fetch device processes:', err);
     }
-  }, []);
+  }, [devices]);
 
-  // Continuous auto-refresh when process modal is open
+  // Power-efficient periodic telemetry poller for connected nodes (every 5 seconds)
+  useEffect(() => {
+    const pollRemoteStats = async () => {
+      for (const dev of devices) {
+        if (dev.id !== 'poco-pad' && dev.ipAddress) {
+          try {
+            const res = await universalNetworkFetch(`http://${dev.ipAddress}/api/status`, { timeoutMs: 2500 });
+            if (res.ok && res.data) {
+              const data = res.data;
+              setDevices((prev) =>
+                prev.map((d) =>
+                  d.id === dev.id
+                    ? {
+                        ...d,
+                        status: 'connected',
+                        cpuLoad: typeof data.cpuLoad === 'number' ? data.cpuLoad : d.cpuLoad,
+                        ramUsage: data.ramUsage || d.ramUsage,
+                        storage: data.storage || d.storage,
+                      }
+                    : d
+                )
+              );
+            }
+          } catch (_) {}
+        }
+      }
+    };
+
+    pollRemoteStats();
+    const interval = setInterval(pollRemoteStats, 5000);
+    return () => clearInterval(interval);
+  }, [devices.length]);
+
+  // Continuous auto-refresh when process modal is open (every 4 seconds for low battery draw)
   useEffect(() => {
     if (!processModalDeviceId) return;
     fetchDeviceProcesses(processModalDeviceId);
     const interval = setInterval(() => {
       fetchDeviceProcesses(processModalDeviceId);
-    }, 2500);
+    }, 4000);
     return () => clearInterval(interval);
   }, [processModalDeviceId, fetchDeviceProcesses]);
 
@@ -1184,7 +1290,7 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setProcessModalDeviceId(null);
   };
 
-  const killProcess = (deviceId: string, pid: number) => {
+  const killProcess = async (deviceId: string, pid: number) => {
     audio.playTap();
     const targetDev = devices.find((d) => d.id === deviceId);
     const targetProcs = deviceProcesses[deviceId] || [];
@@ -1193,6 +1299,13 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
     if (deviceId === 'poco-pad' && bridge?.killLocalProcess) {
       bridge.killLocalProcess(pid, procToKill?.description);
+    } else if (targetDev && targetDev.ipAddress) {
+      universalNetworkFetch(`http://${targetDev.ipAddress}/api/process/kill`, {
+        method: 'POST',
+        body: { pid },
+      }).catch((e) => {
+        console.warn('[Nodus] Failed to kill remote process:', e);
+      });
     }
 
     setDeviceProcesses((prev) => {
@@ -1234,16 +1347,7 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     });
 
     if (targetDev) {
-      showToast(`Cleared background tasks on ${targetDev.name}`);
-
-      addNotification({
-        appId: 'settings',
-        appName: 'Process Guard',
-        title: `Background Tasks Cleared`,
-        message: `Terminated non-system background tasks on ${targetDev.name}.`,
-        iconName: 'Activity',
-        color: '#34C759',
-      });
+      showToast(`Terminated all user processes on ${targetDev.name}`);
     }
 
     setTimeout(() => fetchDeviceProcesses(deviceId), 600);
@@ -1307,6 +1411,12 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const lockDevice = (deviceId?: string) => {
     audio.playTap();
+    const targetDev = devices.find((d) => d.id === deviceId) || activeDevice;
+    if (targetDev && targetDev.id !== 'poco-pad' && targetDev.ipAddress) {
+      fetch(`http://${targetDev.ipAddress}/api/lock`, { method: 'POST' }).catch(() => {});
+      showToast(`Locked ${targetDev.name}`);
+      return;
+    }
     const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
     if (bridge?.lockScreen) {
       bridge.lockScreen();
@@ -1319,7 +1429,7 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (!item.text.trim()) return;
     const devId = item.deviceId || activeDeviceId;
     const targetDev = devices.find((d) => d.id === devId) || activeDevice;
-    const devColor = DEVICE_COLORS[devId] || '#34C759';
+    const devColor = getDeviceColor(targetDev.id, targetDev.type, targetDev.os);
 
     let inferredType: 'text' | 'link' | 'code' | 'snippet' = item.type || 'text';
     if (!item.type) {
@@ -1333,21 +1443,41 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     const newItem: ClipboardItem = {
-      id: `clip-${Date.now()}`,
+      id: `clip-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       text: item.text.trim(),
       deviceId: devId,
       deviceName: targetDev.name,
       deviceType: targetDev.type,
       deviceColor: devColor,
       type: inferredType,
-      timestamp: 'Just now',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       pinned: false,
     };
 
-    setClipboardItems((prev) => {
-      const filtered = prev.filter((c) => c.text !== newItem.text);
-      return [newItem, ...filtered].slice(0, 100);
-    });
+    // Mark as latest seen clip so the PC polling loop doesn't ingest it back as a duplicate green PC entry
+    lastRemoteClipRef.current = newItem.text;
+
+    // Create a brand new distinct clipboard entry at the top, keeping prior historical entries intact
+    setClipboardItems((prev) => [newItem, ...prev].slice(0, 100));
+
+    // 1. If running on Android tablet native shell, also copy to Android OS primary clipboard
+    try {
+      const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
+      if (bridge && typeof bridge.copyToClipboard === 'function') {
+        bridge.copyToClipboard(newItem.text);
+      }
+    } catch (_) {}
+
+    // 2. Broadcast clipboard text to connected Windows PC companion nodes
+    for (const dev of devices) {
+      if (dev.ipAddress && (dev.type === 'desktop' || dev.type === 'laptop' || dev.id === 'this-pc' || dev.id === 'tab-pc')) {
+        universalNetworkFetch(`http://${dev.ipAddress}/api/clipboard`, {
+          method: 'POST',
+          body: { text: newItem.text },
+          timeoutMs: 2500,
+        }).catch(() => {});
+      }
+    }
 
     addNotification({
       appId: 'settings',
@@ -1936,6 +2066,7 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         processModalDeviceId,
         openProcessManager,
         closeProcessManager,
+        fetchDeviceProcesses,
         killProcess,
         killAllUserProcesses,
         rebootDevice,

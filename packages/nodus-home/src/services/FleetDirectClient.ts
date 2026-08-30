@@ -19,6 +19,63 @@ export interface RemoteProcessItem {
   memory_kb: number;
 }
 
+export async function universalNetworkFetch(
+  url: string,
+  options: { method?: string; body?: any; timeoutMs?: number } = {}
+): Promise<{ ok: boolean; status: number; data?: any; error?: string }> {
+  const method = options.method || 'GET';
+  const bodyStr = options.body
+    ? (typeof options.body === 'string' ? options.body : JSON.stringify(options.body))
+    : null;
+
+  // 1. Try Native Android Bridge first if running inside APK
+  if (typeof window !== 'undefined') {
+    const bridge = (window as any).NodusNativeBridge;
+    if (bridge && typeof bridge.httpFetch === 'function') {
+      try {
+        const raw = bridge.httpFetch(url, method, bodyStr);
+        if (raw && typeof raw === 'string') {
+          const parsed = JSON.parse(raw);
+          let data = null;
+          try {
+            data = parsed.body ? JSON.parse(parsed.body) : null;
+          } catch (_) {
+            data = parsed.body;
+          }
+          return {
+            ok: !!parsed.ok,
+            status: parsed.status || 0,
+            data,
+            error: parsed.error,
+          };
+        }
+      } catch (err: any) {
+        console.warn('[universalNetworkFetch] Native bridge error:', err);
+      }
+    }
+  }
+
+  // 2. Standard Web fetch fallback
+  try {
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), options.timeoutMs || 3500);
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: bodyStr || undefined,
+      signal: controller.signal,
+    });
+    clearTimeout(tid);
+    let data = null;
+    try {
+      data = await res.json();
+    } catch (_) {}
+    return { ok: res.ok, status: res.status, data };
+  } catch (err: any) {
+    return { ok: false, status: 0, error: err?.message || 'Network request failed' };
+  }
+}
+
 export class FleetDirectClient {
   private baseUrl: string;
 
@@ -28,53 +85,32 @@ export class FleetDirectClient {
 
   /** Fetch live workstation status (CPU, RAM, OS) */
   async getStatus(): Promise<SystemStatusResponse | null> {
-    try {
-      const res = await fetch(`${this.baseUrl}/api/status`, { method: 'GET' });
-      if (!res.ok) return null;
-      return await res.json();
-    } catch (e) {
-      console.warn(`[FleetDirectClient] Failed to reach node at ${this.baseUrl}:`, e);
-      return null;
-    }
+    const res = await universalNetworkFetch(`${this.baseUrl}/api/status`);
+    return res.ok ? (res.data as SystemStatusResponse) : null;
   }
 
   /** Control PC media & master volume */
   async controlMedia(action: 'volume_up' | 'volume_down' | 'volume_mute' | 'play_pause' | 'next' | 'prev'): Promise<boolean> {
-    try {
-      const res = await fetch(`${this.baseUrl}/api/media/control`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
-      });
-      return res.ok;
-    } catch (e) {
-      console.warn('[FleetDirectClient] Failed to send media command:', e);
-      return false;
-    }
+    const res = await universalNetworkFetch(`${this.baseUrl}/api/media/control`, {
+      method: 'POST',
+      body: { action },
+    });
+    return res.ok;
   }
 
   /** Lock the Windows workstation */
   async lockWorkstation(): Promise<boolean> {
-    try {
-      const res = await fetch(`${this.baseUrl}/api/lock`, { method: 'POST' });
-      return res.ok;
-    } catch (e) {
-      console.warn('[FleetDirectClient] Failed to lock workstation:', e);
-      return false;
-    }
+    const res = await universalNetworkFetch(`${this.baseUrl}/api/lock`, { method: 'POST' });
+    return res.ok;
   }
 
   /** Fetch active processes */
   async getProcesses(): Promise<RemoteProcessItem[]> {
-    try {
-      const res = await fetch(`${this.baseUrl}/api/processes`, { method: 'GET' });
-      if (!res.ok) return [];
-      const data = await res.json();
-      return data.processes || [];
-    } catch (e) {
-      console.warn('[FleetDirectClient] Failed to query processes:', e);
-      return [];
+    const res = await universalNetworkFetch(`${this.baseUrl}/api/processes`);
+    if (res.ok && res.data && Array.isArray(res.data.processes)) {
+      return res.data.processes;
     }
+    return [];
   }
 
   /** Terminate a remote process */

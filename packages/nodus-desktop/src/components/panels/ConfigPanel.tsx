@@ -265,7 +265,12 @@ export const ConfigPanel: React.FC = () => {
         </div>
 
         <div className="space-y-2.5">
-          {trustedDevices.map((device) => (
+          {trustedDevices.length === 0 ? (
+            <div className="p-4 rounded-2xl bg-[#181822]/60 border border-white/5 text-center text-xs text-[#8E8E93]">
+              No authenticated remote nodes in allowlist. Discovered peers paired with your pairing secret will appear here.
+            </div>
+          ) : (
+            trustedDevices.map((device) => (
             <div
               key={device.id}
               className="p-4 rounded-2xl bg-[#181822] border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-3"
@@ -353,7 +358,7 @@ export const ConfigPanel: React.FC = () => {
                 </button>
               </div>
             </div>
-          ))}
+          )))}
         </div>
       </section>
     </div>

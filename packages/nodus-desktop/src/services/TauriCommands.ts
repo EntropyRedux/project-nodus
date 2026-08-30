@@ -12,11 +12,14 @@ export interface HotCornerConfig {
 export const TauriService = {
   async getProcesses(): Promise<DeviceProcess[]> {
     try {
-      const raw = await invoke<{ pid: number; name: string; memory_kb: number }[]>('get_processes');
+      const raw = await invoke<{ pid: number; name: string; memory_kb: number; category?: string; user?: string; cpu?: number }[]>('get_processes');
       return raw.map((p) => ({
         pid: p.pid,
         name: p.name,
         memoryMb: Math.round(p.memory_kb / 1024),
+        category: (p.category as any) || 'user',
+        user: p.user || 'User',
+        cpu: p.cpu || 0,
         status: 'running' as const,
       }));
     } catch (e) {
