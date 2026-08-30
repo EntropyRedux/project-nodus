@@ -17,6 +17,7 @@ import {
 
 const CORNER_ACTION_OPTIONS = [
   { id: 'fleet', label: 'Open Fleet Mesh', icon: Radio, color: '#34C759' },
+  { id: 'remotedeck', label: 'Open Remote Deck & Touch', icon: MousePointer, color: '#30D158' },
   { id: 'clipboard', label: 'Show Clipboard Hub', icon: Clipboard, color: '#007AFF' },
   { id: 'shortcuts', label: 'Remote Shortcuts', icon: Zap, color: '#BF5AF2' },
   { id: 'processes', label: 'Process Manager', icon: Crosshair, color: '#FF9500' },

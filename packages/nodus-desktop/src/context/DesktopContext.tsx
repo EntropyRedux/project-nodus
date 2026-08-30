@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { listen } from '@tauri-apps/api/event';
 import { 
   DeviceInfo, 
   ClipboardItem, 
@@ -510,11 +511,59 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
     }, 2000);
 
+    // Tauri Event Listeners (Hot Corners & System Tray Panel Openers)
+    let unlistenCorner: (() => void) | undefined;
+    let unlistenPanel: (() => void) | undefined;
+
+    const setupEventListeners = async () => {
+      try {
+        unlistenCorner = await listen<{ corner: string; timestamp: number }>('corner_triggered', (event) => {
+          const corner = event.payload.corner;
+          let action = 'none';
+          if (corner === 'top-left') action = hotCornerConfig.corners.topLeft;
+          else if (corner === 'top-right') action = hotCornerConfig.corners.topRight;
+          else if (corner === 'bottom-left') action = hotCornerConfig.corners.bottomLeft;
+          else if (corner === 'bottom-right') action = hotCornerConfig.corners.bottomRight;
+
+          if (
+            action === 'fleet' ||
+            action === 'clipboard' ||
+            action === 'shortcuts' ||
+            action === 'remotedeck' ||
+            action === 'processes'
+          ) {
+            setActiveTab(action as ActiveTab);
+          } else if (action === 'lock') {
+            lockWorkstation();
+          }
+        });
+
+        unlistenPanel = await listen<string>('open_panel', (event) => {
+          const panel = event.payload;
+          if (
+            panel === 'fleet' ||
+            panel === 'clipboard' ||
+            panel === 'shortcuts' ||
+            panel === 'remotedeck' ||
+            panel === 'processes'
+          ) {
+            setActiveTab(panel as ActiveTab);
+          }
+        });
+      } catch (err) {
+        console.warn('[DesktopContext] Tauri event listening not available in web preview mode:', err);
+      }
+    };
+
+    setupEventListeners();
+
     return () => {
       clearInterval(interval);
       clearInterval(clipInterval);
+      if (unlistenCorner) unlistenCorner();
+      if (unlistenPanel) unlistenPanel();
     };
-  }, [refreshProcesses, addClipboardItem]);
+  }, [refreshProcesses, addClipboardItem, hotCornerConfig, lockWorkstation]);
 
   return (
     <DesktopContext.Provider
