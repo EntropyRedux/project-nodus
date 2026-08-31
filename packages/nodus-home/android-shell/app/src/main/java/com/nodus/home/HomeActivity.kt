@@ -391,16 +391,29 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun tryRebindNotificationListener() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            val comp = ComponentName(this, NodusNotificationListenerService::class.java)
-            try {
-                if (NodusNotificationListenerService.isPermissionGranted(this)) {
+        val comp = ComponentName(this, NodusNotificationListenerService::class.java)
+        try {
+            if (NodusNotificationListenerService.isPermissionGranted(this)) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                     NotificationListenerService.requestRebind(comp)
-                    Log.d(TAG, "Requested rebind for NodusNotificationListenerService")
                 }
-            } catch (e: Exception) {
-                Log.w(TAG, "Could not requestRebind: ${e.message}")
+                // Toggle component state to force Android/HyperOS NotificationManager to reconnect binder if dropped
+                if (NodusNotificationListenerService.instance == null) {
+                    packageManager.setComponentEnabledSetting(
+                        comp,
+                        android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                        android.content.pm.PackageManager.DONT_KILL_APP
+                    )
+                    packageManager.setComponentEnabledSetting(
+                        comp,
+                        android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                        android.content.pm.PackageManager.DONT_KILL_APP
+                    )
+                }
+                Log.d(TAG, "Requested rebind & refreshed component for NodusNotificationListenerService")
             }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not requestRebind: ${e.message}")
         }
     }
 

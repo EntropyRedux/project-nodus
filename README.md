@@ -2,7 +2,7 @@
 
 > **Cross-Platform Distributed Command Plane & Multi-Device Control Mesh**
 >
-> **Version:** `1.1.0`  
+> **Version:** `1.1.1`  
 > **GitHub Repository:** [https://github.com/EntropyRedux/project-nodus](https://github.com/EntropyRedux/project-nodus)
 
 ---
