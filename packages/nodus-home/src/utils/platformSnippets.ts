@@ -26,7 +26,7 @@ export interface BridgeConfigOptions {
 
 export const DEFAULT_BRIDGE_CONFIG: BridgeConfigOptions = {
   hostIp: '192.168.1.104',
-  hostPort: 8890,
+  hostPort: 9120,
   bridgePort: 9120,
   authToken: 'win-bridge-sec-token-894',
   packageName: 'com.novalauncher.cluster',

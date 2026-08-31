@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import * as Icons from 'lucide-react';
+import { getRegisteredIcon } from '@nodus/common';
 
 interface DynamicIconProps {
   name: string;
@@ -14,8 +14,7 @@ export const DynamicIcon: React.FC<DynamicIconProps> = memo(({
   size = 24,
   strokeWidth = 2,
 }) => {
-  // Try direct match or fallback
-  const IconComponent = (Icons as unknown as Record<string, React.ElementType>)[name] || Icons.HelpCircle;
+  const IconComponent = getRegisteredIcon(name);
 
   return <IconComponent className={className} size={size} strokeWidth={strokeWidth} />;
 });

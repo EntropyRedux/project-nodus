@@ -9,7 +9,8 @@
     "sync:assets": "powershell -Command \"if (Test-Path android-shell/app/src/main/assets/frontend) { Remove-Item -Recurse -Force android-shell/app/src/main/assets/frontend/* } else { New-Item -ItemType Directory -Path android-shell/app/src/main/assets/frontend -Force }; Copy-Item -Recurse dist/* android-shell/app/src/main/assets/frontend/\"",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -24,10 +25,13 @@
     "vite": "^6.2.3"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.2.0",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
+    "jsdom": "^26.0.0",
     "tailwindcss": "^4.1.14",
-    "typescript": "~5.8.2"
+    "typescript": "~5.8.2",
+    "vitest": "^4.1.11"
   }
 }

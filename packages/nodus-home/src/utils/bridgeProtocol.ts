@@ -94,9 +94,9 @@ export class NodusBridgeClient {
   }
 
   /**
-   * Initializes and connects to a Nodus Go Agent over Tailnet
+   * Initializes and connects to a Nodus Go Agent / Companion over Tailnet
    */
-  static async connect(tailnetHost: string, rawKeyHex: string, port = 8890): Promise<NodusBridgeClient> {
+  static async connect(tailnetHost: string, rawKeyHex: string, port = 9120): Promise<NodusBridgeClient> {
     const keyBytes = new Uint8Array(rawKeyHex.match(/.{2}/g)!.map((b) => parseInt(b, 16)));
     const hmacKey = await crypto.subtle.importKey(
       'raw',
@@ -225,13 +225,13 @@ export async function sendBridgeRpc(
       };
     }
   } else {
-    // Attempt HTTP fallback to local agent on port 8890
+    // Attempt HTTP fallback to local agent on port 9120
     try {
       const configuredHost = localStorage.getItem('nodus_host_server');
       const host = configuredHost && configuredHost.trim()
         ? configuredHost.trim()
         : (window.location.hostname === 'appassets.androidplatform.net' ? '127.0.0.1' : window.location.hostname);
-      const res = await fetch(`http://${host}:8890/api/rpc`, {
+      const res = await fetch(`http://${host}:9120/api/rpc`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(request),

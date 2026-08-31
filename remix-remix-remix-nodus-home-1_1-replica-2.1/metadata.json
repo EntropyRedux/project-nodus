@@ -1,0 +1,8 @@
+{
+  "name": "Remix Remix Remix Nodus Home 1:1 Replica 2.1",
+  "description": "Pixel-perfect Obsidian Glass desktop launcher replica with multitasking taskbar, multi-device node mesh, live process inspector, and cross-device clipboard sync.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

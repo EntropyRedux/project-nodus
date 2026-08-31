@@ -140,11 +140,12 @@ pub fn run_detector(app: AppHandle) {
     let mut last_trigger: Option<Instant> = None;
 
     loop {
-        std::thread::sleep(POLL_INTERVAL);
-
         if !HOTCORNERS_ENABLED.load(Ordering::Relaxed) {
+            std::thread::sleep(Duration::from_millis(500));
             continue;
         }
+
+        std::thread::sleep(POLL_INTERVAL);
 
         // Skip if a fullscreen app is active (game mode)
         if is_fullscreen_foreground() {

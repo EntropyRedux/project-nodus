@@ -22,6 +22,10 @@
     "dev:desktop": "npm run --prefix packages/nodus-desktop tauri dev",
     "build:desktop": "npm run --prefix packages/nodus-desktop tauri build",
     "build:all": "npm run build --workspaces --if-present",
+    "test:common": "npm run --prefix packages/nodus-common test",
+    "test:home": "npm run --prefix packages/nodus-home test",
+    "test:desktop": "cargo test --manifest-path packages/nodus-desktop/src-tauri/Cargo.toml",
+    "test": "npm run test:common && npm run test:home && npm run test:desktop",
     "clean": "npm run clean --workspaces --if-present"
   },
   "keywords": [

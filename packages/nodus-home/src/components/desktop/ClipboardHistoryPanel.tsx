@@ -38,6 +38,7 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
     removeClipboardItem, 
     togglePinClipboardItem, 
     clearClipboardHistory,
+    copyClipboardItem,
     devices,
     activeDeviceId,
     settings
@@ -70,36 +71,15 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
   const handleCopy = (item: ClipboardItem, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     audio.playTap();
-    if (item.type !== 'image' && item.text && navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(item.text).catch(() => {});
-    }
-    try {
-      const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
-      if (bridge) {
-        if (item.type === 'image' && item.imageData && typeof bridge.copyImageToClipboard === 'function') {
-          bridge.copyImageToClipboard(item.imageData);
-        } else if (item.text && typeof bridge.copyToClipboard === 'function') {
-          bridge.copyToClipboard(item.text);
-        }
-      }
-    } catch (_) {}
-
-    // Create a brand new clipboard history entry originating from this POCO Pad tablet (this also broadcasts to PC over LAN)
-    addClipboardItem({
-      text: item.text,
-      deviceId: 'poco-pad',
-      type: item.type,
-      imageData: item.imageData,
-    });
-
+    copyClipboardItem(item);
     setCopiedId(item.id);
     setTimeout(() => {
       setCopiedId(null);
     }, 1800);
   };
 
-  const toggleExpand = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const toggleExpand = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     audio.playTap();
     setExpandedIds((prev) => ({ ...prev, [id]: !prev[id] }));
   };
@@ -344,7 +324,7 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
             return (
               <div
                 key={item.id}
-                onClick={() => handleCopy(item)}
+                onClick={(e) => toggleExpand(item.id, e)}
                 className="group relative p-2.5 rounded-xl border border-white/10 hover:border-white/20 transition-all duration-150 shadow-sm flex flex-col gap-1.5 cursor-pointer"
                 style={{
                   backgroundColor: `rgba(28, 28, 34, ${Math.min(1, clipboardPanelAlpha * 1.05)})`,

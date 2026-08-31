@@ -43,6 +43,10 @@ export const ProcessManagerPanel: React.FC = () => {
   // Expanded application instances (chevron toggle per application)
   const [expandedApps, setExpandedApps] = useState<Record<string, boolean>>({});
 
+  React.useEffect(() => {
+    refreshProcesses();
+  }, [refreshProcesses]);
+
   const toggleCategory = (catKey: string) => {
     setCollapsedCategories(prev => ({ ...prev, [catKey]: !prev[catKey] }));
   };

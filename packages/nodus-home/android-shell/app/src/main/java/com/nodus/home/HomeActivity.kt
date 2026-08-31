@@ -120,6 +120,14 @@ class HomeActivity : AppCompatActivity() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
                     Log.i(TAG, "Nodus Home WebView finished loading: $url")
+
+                    val deviceInfoJson = JSONObject().apply {
+                        put("model", Build.MODEL)
+                        put("manufacturer", Build.MANUFACTURER)
+                        put("osVersion", "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
+                        put("deviceType", "tablet")
+                    }
+                    view?.evaluateJavascript("window.__NODUS_DEVICE_INFO__ = $deviceInfoJson;", null)
                 }
 
                 override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
@@ -135,6 +143,7 @@ class HomeActivity : AppCompatActivity() {
 
         loadFrontend()
         setupNotificationObserver()
+        setupClipboardListener()
     }
 
     private fun loadFrontend() {
@@ -162,10 +171,66 @@ class HomeActivity : AppCompatActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 
+    private var clipboardListener: ClipboardManager.OnPrimaryClipChangedListener? = null
+
+    private fun setupClipboardListener() {
+        try {
+            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
+            clipboardListener = ClipboardManager.OnPrimaryClipChangedListener {
+                dispatchPrimaryClipboardToWeb()
+            }
+            cm.addPrimaryClipChangedListener(clipboardListener)
+        } catch (e: Exception) {
+            Log.w(TAG, "Error setting up clipboard listener: ${e.message}")
+        }
+    }
+
+    private fun dispatchPrimaryClipboardToWeb() {
+        try {
+            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
+            val clip = cm.primaryClip
+            if (clip != null && clip.itemCount > 0) {
+                val item = clip.getItemAt(0)
+                val uri = item.uri
+                if (uri != null) {
+                    val mime = contentResolver.getType(uri) ?: "image/png"
+                    if (mime.startsWith("image/")) {
+                        contentResolver.openInputStream(uri)?.use { inputStream ->
+                            val bytes = inputStream.readBytes()
+                            val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                            val json = JSONObject().apply {
+                                put("type", "image")
+                                put("text", "Image")
+                                put("imageData", "data:$mime;base64,$b64")
+                            }
+                            runOnUiThread {
+                                webView?.evaluateJavascript("if(window.__nodusOnNativeClipboardChange) { window.__nodusOnNativeClipboardChange(${json.toString()}); }", null)
+                            }
+                            return
+                        }
+                    }
+                }
+                val text = item.text?.toString() ?: item.coerceToText(this)?.toString()
+                if (!text.isNullOrEmpty()) {
+                    val json = JSONObject().apply {
+                        put("type", "text")
+                        put("text", text)
+                    }
+                    runOnUiThread {
+                        webView?.evaluateJavascript("if(window.__nodusOnNativeClipboardChange) { window.__nodusOnNativeClipboardChange(${json.toString()}); }", null)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error in dispatchPrimaryClipboardToWeb: ${e.message}")
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         applyImmersiveFullscreen()
         tryRebindNotificationListener()
+        dispatchPrimaryClipboardToWeb()
 
         fleetReceiver = FleetStateReceiver()
         val filter = IntentFilter().apply {
@@ -188,6 +253,14 @@ class HomeActivity : AppCompatActivity() {
         )
     }
 
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            applyImmersiveFullscreen()
+            dispatchPrimaryClipboardToWeb()
+        }
+    }
+
     override fun onPause() {
         super.onPause()
         fleetReceiver?.let {
@@ -202,6 +275,11 @@ class HomeActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        clipboardListener?.let {
+            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            cm?.removePrimaryClipChangedListener(it)
+        }
+        clipboardListener = null
         NodusNotificationListenerService.onNotificationChangeListener = null
         webView?.destroy()
         webView = null
@@ -263,6 +341,16 @@ class HomeActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun isAssistiveInstalled(): Boolean = NodusModuleDetector.isAssistiveInstalled(context)
+
+        @JavascriptInterface
+        fun getDeviceInfo(): String {
+            return JSONObject().apply {
+                put("model", Build.MODEL)
+                put("manufacturer", Build.MANUFACTURER)
+                put("osVersion", "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
+                put("deviceType", "tablet")
+            }.toString()
+        }
 
         @JavascriptInterface
         fun httpFetch(urlStr: String, method: String?, body: String?): String {
@@ -328,6 +416,101 @@ class HomeActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Log.w(TAG, "Error querying fleet clipboard: ${e.message}")
                 "[]"
+            }
+        }
+
+        @JavascriptInterface
+        fun copyToClipboard(text: String): Boolean {
+            return try {
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val clip = ClipData.newPlainText("text", text)
+                clipboard.setPrimaryClip(clip)
+                true
+            } catch (e: Exception) {
+                Log.e(TAG, "Error copying text to clipboard", e)
+                false
+            }
+        }
+
+        @JavascriptInterface
+        fun copyImageToClipboard(base64Image: String): Boolean {
+            return try {
+                val cleanB64 = if (base64Image.contains("base64,")) {
+                    base64Image.substring(base64Image.lastIndexOf("base64,") + 7)
+                } else {
+                    base64Image
+                }
+                val imageBytes = Base64.decode(cleanB64.trim(), Base64.DEFAULT)
+                val bitmap = android.graphics.BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+                val cacheDir = java.io.File(context.cacheDir, "clipboard")
+                if (!cacheDir.exists()) cacheDir.mkdirs()
+                val imageFile = java.io.File(cacheDir, "clip_image.png")
+
+                if (bitmap != null) {
+                    java.io.FileOutputStream(imageFile).use { out ->
+                        bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+                    }
+                } else {
+                    imageFile.writeBytes(imageBytes)
+                }
+
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    imageFile
+                )
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val item = ClipData.Item(uri)
+                val clip = ClipData(
+                    android.content.ClipDescription("Image", arrayOf("image/png", "image/*")),
+                    item
+                )
+                clipboard.setPrimaryClip(clip)
+                true
+            } catch (e: Exception) {
+                Log.e(TAG, "Error copying image to clipboard", e)
+                false
+            }
+        }
+
+        @JavascriptInterface
+        fun getPrimaryClipboard(): String {
+            return try {
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val clip = clipboard.primaryClip
+                if (clip != null && clip.itemCount > 0) {
+                    val item = clip.getItemAt(0)
+                    val uri = item.uri
+                    if (uri != null) {
+                        val mime = context.contentResolver.getType(uri) ?: "image/png"
+                        if (mime.startsWith("image/")) {
+                            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                                val bytes = inputStream.readBytes()
+                                val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                                return JSONObject().apply {
+                                    put("type", "image")
+                                    put("text", "Image")
+                                    put("imageData", "data:$mime;base64,$b64")
+                                }.toString()
+                            }
+                        }
+                    }
+                    val text = item.text?.toString() ?: item.coerceToText(context)?.toString()
+                    if (!text.isNullOrEmpty()) {
+                        return JSONObject().apply {
+                            put("type", "text")
+                            put("text", text)
+                        }.toString()
+                    }
+                }
+                JSONObject().apply {
+                    put("type", "empty")
+                }.toString()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error getting primary clipboard", e)
+                JSONObject().apply {
+                    put("type", "empty")
+                }.toString()
             }
         }
 
@@ -712,46 +895,6 @@ class HomeActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load icon pack icons for $iconPackPackage", e)
                 "{}"
-            }
-        }
-
-        @JavascriptInterface
-        fun copyToClipboard(text: String) {
-            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            val clip = ClipData.newPlainText("Nodus Clipboard", text)
-            cm.setPrimaryClip(clip)
-        }
-
-        @JavascriptInterface
-        fun copyImageToClipboard(base64Data: String): Boolean {
-            return try {
-                val rawB64 = if (base64Data.contains("base64,")) {
-                    base64Data.substringAfter("base64,")
-                } else {
-                    base64Data
-                }
-                val imageBytes = android.util.Base64.decode(rawB64, android.util.Base64.DEFAULT)
-                
-                val clipboardDir = java.io.File(context.cacheDir, "clipboard")
-                if (!clipboardDir.exists()) {
-                    clipboardDir.mkdirs()
-                }
-                val imageFile = java.io.File(clipboardDir, "clip_${System.currentTimeMillis()}.png")
-                java.io.FileOutputStream(imageFile).use { it.write(imageBytes) }
-
-                val uri = androidx.core.content.FileProvider.getUriForFile(
-                    context,
-                    "com.nodus.home.fileprovider",
-                    imageFile
-                )
-
-                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val clip = ClipData.newUri(context.contentResolver, "Nodus Image", uri)
-                cm.setPrimaryClip(clip)
-                true
-            } catch (e: Exception) {
-                android.util.Log.e("HomeActivity", "Failed to copy image to clipboard: ${e.message}")
-                false
             }
         }
 

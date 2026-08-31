@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useDesktop } from '../../context/DesktopContext';
 import { ClipboardItem } from '../../types/desktop';
+import { TauriService } from '../../services/TauriCommands';
 
 export const ClipboardPanel: React.FC = () => {
   const { 
@@ -26,7 +27,7 @@ export const ClipboardPanel: React.FC = () => {
     removeClipboardItem, 
     togglePinClipboardItem, 
     clearClipboardHistory, 
-    closePanel 
+    setActiveTab 
   } = useDesktop();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -91,7 +92,7 @@ export const ClipboardPanel: React.FC = () => {
           </div>
         </div>
         <button
-          onClick={closePanel}
+          onClick={() => setActiveTab('fleet')}
           className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 text-[#8E8E93] hover:text-white flex items-center justify-center transition-colors"
         >
           <X size={15} />

@@ -22,17 +22,13 @@ export const AddDeviceModal: React.FC<AddDeviceModalProps> = ({ isOpen, onClose,
 
   const handleTypeChange = (newType: DeviceType) => {
     setType(newType);
-    if (newType === 'desktop' || newType === 'laptop') {
-      setPort('9120');
-    } else {
-      setPort('8890');
-    }
+    setPort('9120');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const targetIp = ipAddress.trim();
-    const targetPort = parseInt(port.trim(), 10) || (type === 'desktop' ? 9120 : 8890);
+    const targetPort = parseInt(port.trim(), 10) || 9120;
 
     if (!targetIp) {
       setErrorMsg('Please enter a target IP address');
@@ -62,7 +58,7 @@ export const AddDeviceModal: React.FC<AddDeviceModalProps> = ({ isOpen, onClose,
           type: 'tablet',
           os: 'Android 14 (HyperOS)',
           ip: '192.168.1.35',
-          port: 8890,
+          port: 9120,
           resolution: '2560 × 1600',
           status: 'online',
         },

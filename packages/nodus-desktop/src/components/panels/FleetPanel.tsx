@@ -38,7 +38,7 @@ export const FleetPanel: React.FC = () => {
   // Manual Form State
   const [manualName, setManualName] = useState('');
   const [manualIp, setManualIp] = useState('');
-  const [manualPort, setManualPort] = useState('8890');
+  const [manualPort, setManualPort] = useState('9120');
   const [manualType, setManualType] = useState<DeviceType>('tablet');
   const [manualSecret, setManualSecret] = useState('NODUS-FLEET-SECURE');
   const [pairSuccess, setPairSuccess] = useState(false);
@@ -59,7 +59,7 @@ export const FleetPanel: React.FC = () => {
     connectDeviceManual({
       name: manualName.trim() || 'Remote Node',
       ip: manualIp.trim(),
-      port: parseInt(manualPort, 10) || 8890,
+      port: parseInt(manualPort, 10) || 9120,
       type: manualType,
     });
 

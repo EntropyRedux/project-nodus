@@ -349,9 +349,9 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const startAutoDiscovery = useCallback(async () => {
     setIsDiscovering(true);
     try {
-      // Look for active Nodus nodes across standard ports (8890 tablet, 9120 companion, 8080)
+      // Look for active Nodus nodes across standard ports (9120, 8080)
       const candidateEndpoints = [
-        { ip: '127.0.0.1', port: 8890, type: 'tablet' as DeviceType },
+        { ip: '127.0.0.1', port: 9120, type: 'tablet' as DeviceType },
       ];
       
       const discovered: DeviceInfo[] = [];
@@ -517,12 +517,17 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Initial stats, process polling & background clipboard watcher
   useEffect(() => {
     const updateStats = async () => {
-      const stats = await TauriService.getSystemStats();
-      if (stats) setSystemStats(stats);
+      try {
+        const stats = await TauriService.getSystemStats();
+        if (stats) setSystemStats(stats);
+      } catch (_) {}
     };
 
-    updateStats();
-    refreshProcesses();
+    // Non-blocking deferred initial calls
+    const initialStatsTimer = setTimeout(updateStats, 100);
+    const initialProcsTimer = setTimeout(() => {
+      refreshProcesses().catch(() => {});
+    }, 500);
 
     const interval = setInterval(updateStats, 5000);
 
@@ -544,7 +549,7 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
                   type: (dev.type as DeviceType) || 'tablet',
                   os: dev.os || 'Android 14 (HyperOS)',
                   status: 'connected',
-                  ipAddress: `${dev.ip || '192.168.1.35'}:${dev.port || 8890}`,
+                  ipAddress: `${dev.ip || '192.168.1.35'}:${dev.port || 9120}`,
                   resolution: dev.resolution || '2560 × 1600',
                   battery: dev.battery ?? 90,
                   cpuLoad: dev.cpu_load ?? 12,
@@ -563,16 +568,6 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
       } catch (_) {}
     }, 2500);
-
-    // Watch host clipboard changes
-    let lastClip = '';
-    const clipInterval = setInterval(async () => {
-      const current = await TauriService.getClipboardText();
-      if (current && current !== lastClip && current.trim().length > 0) {
-        lastClip = current;
-        addClipboardItem(current, 'this-pc');
-      }
-    }, 2000);
 
     // Tauri Event Listeners (Hot Corners & System Tray Panel Openers)
     let unlistenCorner: (() => void) | undefined;
@@ -621,9 +616,10 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setupEventListeners();
 
     return () => {
+      clearTimeout(initialStatsTimer);
+      clearTimeout(initialProcsTimer);
       clearInterval(interval);
       clearInterval(fleetInterval);
-      clearInterval(clipInterval);
       if (unlistenCorner) unlistenCorner();
       if (unlistenPanel) unlistenPanel();
     };

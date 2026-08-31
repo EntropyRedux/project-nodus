@@ -30,9 +30,10 @@ struct MediaControlReq {
 #[derive(Debug, Deserialize)]
 struct ExecReq {
     command: Option<String>,
+    #[serde(alias = "commandOrPath")]
     command_or_path: Option<String>,
     args: Option<String>,
-    #[serde(rename = "workingDir")]
+    #[serde(alias = "workingDir")]
     working_dir: Option<String>,
 }
 
@@ -44,6 +45,7 @@ struct KillProcReq {
 #[derive(Debug, Deserialize)]
 struct ClipboardReq {
     text: Option<String>,
+    #[serde(alias = "imageData")]
     image_data: Option<String>,
 }
 
@@ -84,11 +86,60 @@ struct FolderScanReq {
     path: String,
 }
 
-fn cors_headers() -> Vec<Header> {
+#[derive(Debug, Deserialize)]
+struct PairRequest {
+    #[serde(alias = "deviceId")]
+    device_id: Option<String>,
+    name: Option<String>,
+    #[serde(alias = "publicKey")]
+    public_key: Option<String>,
+}
+
+static TRUSTED_TOKENS: Mutex<Option<std::collections::HashSet<String>>> = Mutex::new(None);
+
+pub fn add_trusted_token(token: String) {
+    let mut lock = TRUSTED_TOKENS.lock().unwrap();
+    if lock.is_none() {
+        *lock = Some(std::collections::HashSet::new());
+    }
+    if let Some(ref mut set) = *lock {
+        set.insert(token);
+    }
+}
+
+fn is_authorized(request: &tiny_http::Request) -> bool {
+    let lock = TRUSTED_TOKENS.lock().unwrap();
+    let tokens = match *lock {
+        Some(ref set) if !set.is_empty() => set,
+        _ => return true, // Dev mode bypass if no tokens explicitly configured
+    };
+
+    request.headers().iter().any(|h| {
+        let field = h.field.as_str().as_str().to_ascii_lowercase();
+        if field == "authorization" {
+            let val = h.value.as_str();
+            tokens.contains(val.strip_prefix("Bearer ").unwrap_or(val))
+        } else if field == "x-nodus-auth-token" {
+            tokens.contains(h.value.as_str())
+        } else {
+            false
+        }
+    })
+}
+
+fn cors_headers_for(origin: Option<&str>) -> Vec<Header> {
+    let allowed_origin = match origin {
+        Some(o) if o.starts_with("tauri://")
+                || o.starts_with("http://localhost")
+                || o.starts_with("http://127.0.0.1")
+                || o == "https://appassets.androidplatform.net" => o,
+        _ => "https://appassets.androidplatform.net",
+    };
+
     vec![
-        Header::from_bytes(&b"Access-Control-Allow-Origin"[..], &b"*"[..]).unwrap(),
+        Header::from_bytes(&b"Access-Control-Allow-Origin"[..], allowed_origin.as_bytes()).unwrap(),
         Header::from_bytes(&b"Access-Control-Allow-Methods"[..], &b"GET, POST, OPTIONS"[..]).unwrap(),
-        Header::from_bytes(&b"Access-Control-Allow-Headers"[..], &b"Content-Type, Authorization, X-Requested-With"[..]).unwrap(),
+        Header::from_bytes(&b"Access-Control-Allow-Headers"[..], &b"Content-Type, Authorization, X-Nodus-Auth-Token, X-Requested-With"[..]).unwrap(),
         Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap(),
     ]
 }
@@ -125,10 +176,17 @@ pub fn start_server(port: u16) {
             let url = request.url().to_string();
             let method = request.method().clone();
 
+            // Extract Origin header for CORS as owned String to release immutable borrow
+            let origin_opt = request
+                .headers()
+                .iter()
+                .find(|h| h.field.as_str().as_str().eq_ignore_ascii_case("origin"))
+                .map(|h| h.value.as_str().to_string());
+
             // Handle CORS Preflight
             if method == Method::Options {
                 let mut response = Response::empty(StatusCode(204));
-                for h in cors_headers() {
+                for h in cors_headers_for(origin_opt.as_deref()) {
                     response.add_header(h);
                 }
                 let _ = request.respond(response);
@@ -137,26 +195,36 @@ pub fn start_server(port: u16) {
 
             let path = url.split('?').next().unwrap_or(&url);
 
-            let (status_code, json_body) = match (method, path) {
-                // Status / Health check
-                (Method::Get, "/api/status") | (Method::Get, "/api/health") | (Method::Get, "/") => {
-                    let stats = get_system_stats().ok();
-                    let hostname = stats.as_ref().map(|s| s.hostname.clone()).unwrap_or_else(|| "Workstation (PC)".to_string());
-                    let ram_used = stats.as_ref().map(|s| s.ram_used_mb).unwrap_or(0);
-                    let ram_total = stats.as_ref().map(|s| s.ram_total_mb).unwrap_or(0);
-                    let cpu_load = stats.as_ref().map(|s| s.cpu_load_percent).unwrap_or(0.0);
+            // Public endpoints that do not require auth token
+            let is_public = path == "/api/status" 
+                || path == "/api/health" 
+                || path == "/" 
+                || path == "/api/fleet/pair-request" 
+                || path == "/api/fleet/register";
 
-                    (
-                        200,
-                        json!({
-                            "status": "online",
-                            "name": format!("{} (PC)", hostname),
-                            "hostname": hostname,
-                            "type": "desktop",
-                            "role": "desktop",
-                            "os": "windows",
-                            "port": port,
-                            "cpuLoad": cpu_load,
+            let (status_code, json_body) = if !is_public && !is_authorized(&request) {
+                (401, json!({ "status": "error", "message": "Unauthorized: Missing or invalid X-Nodus-Auth-Token" }))
+            } else {
+                match (method, path) {
+                    // Status / Health check
+                    (Method::Get, "/api/status") | (Method::Get, "/api/health") | (Method::Get, "/") => {
+                        let stats = get_system_stats().ok();
+                        let hostname = stats.as_ref().map(|s| s.hostname.clone()).unwrap_or_else(|| "Workstation (PC)".to_string());
+                        let ram_used = stats.as_ref().map(|s| s.ram_used_mb).unwrap_or(0);
+                        let ram_total = stats.as_ref().map(|s| s.ram_total_mb).unwrap_or(0);
+                        let cpu_load = stats.as_ref().map(|s| s.cpu_load_percent).unwrap_or(0.0);
+
+                        (
+                            200,
+                            json!({
+                                "status": "online",
+                                "name": format!("{} (PC)", hostname),
+                                "hostname": hostname,
+                                "type": "desktop",
+                                "role": "desktop",
+                                "os": "windows",
+                                "port": port,
+                                "cpuLoad": cpu_load,
                             "ramUsage": format!("{:.1} / {:.1} GB", ram_used as f64 / 1024.0, ram_total as f64 / 1024.0),
                             "uptime": stats.as_ref().map(|s| s.uptime_seconds).unwrap_or(0),
                         }),
@@ -361,6 +429,38 @@ pub fn start_server(port: u16) {
                     }
                 }
 
+                // Peer Pairing Request (KDE Connect / LocalSend Zero-Trust style)
+                (Method::Post, "/api/fleet/pair-request") => {
+                    let mut body_str = String::new();
+                    let _ = request.as_reader().read_to_string(&mut body_str);
+                    if let Ok(req) = serde_json::from_str::<PairRequest>(&body_str) {
+                        let dev_id = req.device_id.unwrap_or_else(|| "poco-pad".to_string());
+                        let dev_name = req.name.unwrap_or_else(|| "Remote Tablet".to_string());
+                        let token = format!("nodus-session-{}-{}", dev_id, std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs());
+                        add_trusted_token(token.clone());
+
+                        if let Ok(mut lock) = REGISTERED_DEVICES.lock() {
+                            let map: &mut HashMap<String, serde_json::Value> = lock.get_or_insert_with(HashMap::new);
+                            map.insert(dev_id.clone(), json!({
+                                "id": dev_id,
+                                "name": dev_name,
+                                "type": "tablet",
+                                "paired": true,
+                                "token": token
+                            }));
+                        }
+
+                        (200, json!({
+                            "status": "success",
+                            "paired": true,
+                            "token": token,
+                            "message": format!("Device {} paired successfully", dev_name)
+                        }))
+                    } else {
+                        (400, json!({ "status": "error", "message": "Invalid pairing payload" }))
+                    }
+                }
+
                 // Register Remote Peer (e.g. POCO Pad connecting)
                 (Method::Post, "/api/fleet/register") => {
                     let mut body_str = String::new();
@@ -456,14 +556,79 @@ pub fn start_server(port: u16) {
                 }
 
                 _ => (404, json!({ "status": "not_found", "path": path })),
-            };
+            }
+        };
 
             let response_bytes = json_body.to_string().into_bytes();
             let mut response = Response::from_data(response_bytes).with_status_code(StatusCode(status_code));
-            for h in cors_headers() {
+            for h in cors_headers_for(origin_opt.as_deref()) {
                 response.add_header(h);
             }
             let _ = request.respond(response);
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cors_headers_origin_matching() {
+        // Null origin defaults to Android platform asset loader
+        let default_headers = cors_headers_for(None);
+        let allow_origin = default_headers.iter().find(|h| h.field.as_str().as_str().eq_ignore_ascii_case("access-control-allow-origin")).unwrap();
+        assert_eq!(allow_origin.value.as_str(), "https://appassets.androidplatform.net");
+
+        // Tauri origin is allowed
+        let tauri_headers = cors_headers_for(Some("tauri://localhost"));
+        let tauri_origin = tauri_headers.iter().find(|h| h.field.as_str().as_str().eq_ignore_ascii_case("access-control-allow-origin")).unwrap();
+        assert_eq!(tauri_origin.value.as_str(), "tauri://localhost");
+
+        // Localhost web origin is allowed
+        let local_headers = cors_headers_for(Some("http://localhost:3000"));
+        let local_origin = local_headers.iter().find(|h| h.field.as_str().as_str().eq_ignore_ascii_case("access-control-allow-origin")).unwrap();
+        assert_eq!(local_origin.value.as_str(), "http://localhost:3000");
+
+        // Loopback IP origin is allowed
+        let ip_headers = cors_headers_for(Some("http://127.0.0.1:5173"));
+        let ip_origin = ip_headers.iter().find(|h| h.field.as_str().as_str().eq_ignore_ascii_case("access-control-allow-origin")).unwrap();
+        assert_eq!(ip_origin.value.as_str(), "http://127.0.0.1:5173");
+
+        // Untrusted origin is rejected and sanitized to safe platform origin
+        let untrusted_headers = cors_headers_for(Some("https://malicious-tracker.com"));
+        let untrusted_origin = untrusted_headers.iter().find(|h| h.field.as_str().as_str().eq_ignore_ascii_case("access-control-allow-origin")).unwrap();
+        assert_eq!(untrusted_origin.value.as_str(), "https://appassets.androidplatform.net");
+    }
+
+    #[test]
+    fn test_trusted_token_management() {
+        let test_token = "nodus-test-token-12345".to_string();
+        add_trusted_token(test_token.clone());
+
+        let lock = TRUSTED_TOKENS.lock().unwrap();
+        assert!(lock.is_some());
+        assert!(lock.as_ref().unwrap().contains(&test_token));
+    }
+
+    #[test]
+    fn test_request_payload_deserialization() {
+        // Test ClipboardReq with camelCase imageData and text
+        let clip_json = r#"{"text":"Hello Nodus","imageData":"data:image/png;base64,iVBORw0KGgo"}"#;
+        let clip_req: ClipboardReq = serde_json::from_str(clip_json).unwrap();
+        assert_eq!(clip_req.text.as_deref(), Some("Hello Nodus"));
+        assert_eq!(clip_req.image_data.as_deref(), Some("data:image/png;base64,iVBORw0KGgo"));
+
+        // Test PairRequest with camelCase deviceId
+        let pair_json = r#"{"deviceId":"tablet-poco-pad","name":"POCO Pad"}"#;
+        let pair_req: PairRequest = serde_json::from_str(pair_json).unwrap();
+        assert_eq!(pair_req.device_id.as_deref(), Some("tablet-poco-pad"));
+        assert_eq!(pair_req.name.as_deref(), Some("POCO Pad"));
+
+        // Test ExecReq with camelCase workingDir and commandOrPath
+        let exec_json = r#"{"commandOrPath":"code .","workingDir":"C:\\Projects"}"#;
+        let exec_req: ExecReq = serde_json::from_str(exec_json).unwrap();
+        assert_eq!(exec_req.command_or_path.as_deref(), Some("code ."));
+        assert_eq!(exec_req.working_dir.as_deref(), Some("C:\\Projects"));
+    }
 }

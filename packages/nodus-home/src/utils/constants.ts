@@ -193,7 +193,7 @@ export const WALLPAPER_PRESETS = [
 
 export const INITIAL_SERVER_CONFIG: NetworkServerConfig = {
   role: 'host',
-  serverPort: 8890,
+  serverPort: 9120,
   serverHost: '192.168.1.104',
   autoDiscover: true,
   heartbeatIntervalMs: 5000,

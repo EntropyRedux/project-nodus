@@ -9,6 +9,17 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(async () => ({
   plugins: [react(), tailwindcss()],
 
+  optimizeDeps: {
+    include: [
+      "react",
+      "react-dom",
+      "lucide-react",
+      "@tauri-apps/api",
+      "@tauri-apps/api/event",
+      "@tauri-apps/api/core",
+      "@tauri-apps/plugin-opener"
+    ],
+  },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
@@ -19,6 +30,9 @@ export default defineConfig(async () => ({
     port: 1420,
     strictPort: true,
     host: host || false,
+    warmup: {
+      clientFiles: ["./src/main.tsx", "./src/App.tsx", "./src/context/DesktopContext.tsx"],
+    },
     hmr: host
       ? {
           protocol: "ws",
