@@ -119,7 +119,12 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
           const parsed = JSON.parse(saved);
           if (Array.isArray(parsed) && parsed.length > 0) {
             const OBSOLETE_APP_IDS = new Set(['studio', 'terminal', 'monitor', 'files', 'network', 'clipboard']);
-            const cleaned = parsed.filter((a: any) => !OBSOLETE_APP_IDS.has(a.id));
+            const cleaned = parsed
+              .filter((a: any) => !OBSOLETE_APP_IDS.has(a.id))
+              .map((a: any) => {
+                const { badgeCount: _unused, ...rest } = a;
+                return rest;
+              });
             const existingIds = new Set(cleaned.map((a: any) => a.id));
             const missing = INITIAL_APPS.filter((a) => !existingIds.has(a.id));
             if (missing.length > 0) {

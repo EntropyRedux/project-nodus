@@ -798,33 +798,32 @@ export const SettingsApp: React.FC = () => {
                     </div>
                   </div>
 
-                  <select
+                  <ThemedSelect
                     value={settings.secondaryTimezone || ''}
-                    onChange={(e) => {
-                      audio.playTap();
-                      const tz = e.target.value;
-                      updateSettings({ secondaryTimezone: tz });
+                    onChange={(tz) => {
+                      updateSettings({ secondaryTimezone: tz || undefined });
                       showToast(tz ? `Secondary clock set to ${tz.split('/').pop()?.replace(/_/g, ' ')}` : 'Secondary clock disabled');
                     }}
-                    className={`px-2.5 py-1 text-[10px] font-semibold ${currentTheme.classes.inputField} focus:outline-none shrink-0 w-full sm:w-auto`}
-                  >
-                    <option value="">None (Disabled)</option>
-                    <option value="UTC">UTC (Universal Time Coordinated)</option>
-                    <option value="America/New_York">New York (EST / EDT)</option>
-                    <option value="America/Chicago">Chicago (CST / CDT)</option>
-                    <option value="America/Denver">Denver (MST / MDT)</option>
-                    <option value="America/Los_Angeles">Los Angeles (PST / PDT)</option>
-                    <option value="Europe/London">London (GMT / BST)</option>
-                    <option value="Europe/Paris">Paris / Berlin (CET / CEST)</option>
-                    <option value="Asia/Dubai">Dubai (GST)</option>
-                    <option value="Asia/Kolkata">India (IST)</option>
-                    <option value="Asia/Bangkok">Bangkok (ICT)</option>
-                    <option value="Asia/Singapore">Singapore (SGT)</option>
-                    <option value="Asia/Manila">Manila (PHT)</option>
-                    <option value="Asia/Tokyo">Tokyo / Seoul (JST / KST)</option>
-                    <option value="Australia/Sydney">Sydney (AEST / AEDT)</option>
-                    <option value="Pacific/Auckland">Auckland (NZST / NZDT)</option>
-                  </select>
+                    options={[
+                      { value: '', label: 'None (Disabled)' },
+                      { value: 'UTC', label: 'UTC (Universal Coordinated)', sublabel: 'UTC+0' },
+                      { value: 'America/New_York', label: 'New York (EST / EDT)', sublabel: 'UTC-5 / UTC-4' },
+                      { value: 'America/Chicago', label: 'Chicago (CST / CDT)', sublabel: 'UTC-6 / UTC-5' },
+                      { value: 'America/Denver', label: 'Denver (MST / MDT)', sublabel: 'UTC-7 / UTC-6' },
+                      { value: 'America/Los_Angeles', label: 'Los Angeles (PST / PDT)', sublabel: 'UTC-8 / UTC-7' },
+                      { value: 'Europe/London', label: 'London (GMT / BST)', sublabel: 'UTC+0 / UTC+1' },
+                      { value: 'Europe/Paris', label: 'Paris / Berlin (CET / CEST)', sublabel: 'UTC+1 / UTC+2' },
+                      { value: 'Asia/Dubai', label: 'Dubai (GST)', sublabel: 'UTC+4' },
+                      { value: 'Asia/Kolkata', label: 'India (IST)', sublabel: 'UTC+5:30' },
+                      { value: 'Asia/Bangkok', label: 'Bangkok (ICT)', sublabel: 'UTC+7' },
+                      { value: 'Asia/Singapore', label: 'Singapore (SGT)', sublabel: 'UTC+8' },
+                      { value: 'Asia/Manila', label: 'Manila (PHT)', sublabel: 'UTC+8' },
+                      { value: 'Asia/Tokyo', label: 'Tokyo / Seoul (JST / KST)', sublabel: 'UTC+9' },
+                      { value: 'Australia/Sydney', label: 'Sydney (AEST / AEDT)', sublabel: 'UTC+10 / UTC+11' },
+                      { value: 'Pacific/Auckland', label: 'Auckland (NZST / NZDT)', sublabel: 'UTC+12 / UTC+13' },
+                    ]}
+                    className="w-full sm:w-64 shrink-0"
+                  />
                 </div>
               </div>
             </div>

@@ -110,6 +110,7 @@ class NodusNotificationListenerService : NotificationListenerService() {
                     val notifObj = JSONObject().apply {
                         put("id", sbn.key ?: sbn.id.toString())
                         put("appId", pkg)
+                        put("packageName", pkg)
                         put("appName", appName)
                         put("title", title.ifBlank { appName })
                         put("message", text)
@@ -180,9 +181,7 @@ class NodusNotificationListenerService : NotificationListenerService() {
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
-        if (sbn == null) return
-        val pkg = sbn.packageName ?: return
-        if (sbn.isOngoing) return
+        if (sbn == null || sbn.isOngoing) return
         refreshActiveNotifications()
     }
 

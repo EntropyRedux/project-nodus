@@ -92,7 +92,7 @@ export const INITIAL_DEVICE_PROCESSES: Record<string, DeviceProcess[]> = {
 export const INITIAL_APPS: AppItem[] = [
   // Core Operational Launcher Settings & Hub
   { id: 'settings', name: 'Settings & Hub', iconName: 'Settings', color: '#34C759', category: 'system', pageIndex: 0, order: 0 },
-  { id: 'notes', name: 'Sticky Notes', iconName: 'StickyNote', color: '#F59E0B', category: 'productivity', pageIndex: 0, order: 1, badgeCount: 2 },
+  { id: 'notes', name: 'Sticky Notes', iconName: 'StickyNote', color: '#F59E0B', category: 'productivity', pageIndex: 0, order: 1 },
 
   // Real Queryable 3rd Party Packages on Device
   { id: 'app-calculator', name: 'Calculator', iconName: 'Calculator', color: '#FF9500', category: 'system', pageIndex: 0, order: 2, packageName: 'com.miui.calculator' },
