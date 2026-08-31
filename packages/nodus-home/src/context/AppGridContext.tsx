@@ -350,8 +350,13 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
     }
 
-    setActiveAppId(appId);
     setSearchOpen(false);
+
+    if (!targetApp?.packageName) {
+      setActiveAppId(appId);
+    } else {
+      setActiveAppId(null);
+    }
 
     setRunningApps((prev) => {
       if (!prev.includes(appId)) return [appId, ...prev.slice(0, 11)];
@@ -552,6 +557,9 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const targetApp = apps.find((a) => a.id === appId);
     if (!targetApp) return;
 
+    if (activeAppId === appId) setActiveAppId(null);
+    setRunningApps((prev) => prev.filter((id) => id !== appId));
+
     if (targetApp.packageName) {
       const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
       if (bridge?.uninstallApp) {
@@ -563,11 +571,9 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setTimeout(syncNativeInstalledApps, 4500);
     } else {
       setApps((prev) => prev.filter((app) => app.id !== appId));
-      setRunningApps((prev) => prev.filter((id) => id !== appId));
       setFolders((prev) =>
         prev.map((f) => ({ ...f, appIds: f.appIds.filter((id) => id !== appId) }))
       );
-      if (activeAppId === appId) setActiveAppId(null);
       showToast(`Removed ${targetApp.name}`);
     }
   }, [settings.soundEffects, apps, showToast, syncNativeInstalledApps, activeAppId]);

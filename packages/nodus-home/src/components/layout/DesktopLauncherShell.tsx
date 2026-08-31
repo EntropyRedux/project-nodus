@@ -260,7 +260,7 @@ export const DesktopLauncherShell: React.FC = () => {
   }, [settings.wallpaper, settings.customWallpaperUrl, currentWp.style]);
 
   const activeApp = apps.find((a) => a.id === activeAppId);
-  const isInternalApp = Boolean(activeAppId && !activeApp?.packageName && !activeAppId.startsWith('remote_'));
+  const isInternalApp = Boolean(activeAppId && (activeAppId === 'settings' || activeAppId === 'notes' || (activeApp && !activeApp.packageName && !activeApp.isRemote && !activeAppId.startsWith('remote_'))));
 
   const renderActiveApp = () => {
     if (!isInternalApp) return null;

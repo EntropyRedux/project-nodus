@@ -17,7 +17,7 @@ export const DesktopAppWindow: React.FC<DesktopAppWindowProps> = ({ appId, child
 
   const currentApp = apps.find((a) => a.id === appId) || {
     id: appId,
-    name: 'Preferences',
+    name: appId === 'settings' ? 'Settings' : appId === 'notes' ? 'Notes & Agenda' : 'Application',
     color: currentAccent.hex,
   };
 

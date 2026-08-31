@@ -35,7 +35,7 @@ export const PhoneFrame: React.FC = () => {
       : currentWp.style;
 
   const activeApp = apps.find((a) => a.id === activeAppId);
-  const isInternalApp = Boolean(activeAppId && !activeApp?.packageName);
+  const isInternalApp = Boolean(activeAppId && (activeAppId === 'settings' || activeAppId === 'notes' || (activeApp && !activeApp.packageName && !activeApp.isRemote)));
 
   const renderActiveApp = () => {
     if (!isInternalApp) return null;
