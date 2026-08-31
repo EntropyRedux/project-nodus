@@ -274,7 +274,7 @@ export const FleetPanel: React.FC = () => {
                 <div className="p-3 rounded-2xl bg-[#181822] border border-white/5 flex flex-col gap-1">
                   <span className="text-[10.5px] uppercase font-bold text-[#8E8E93]">Host CPU Load</span>
                   <span className="text-xs font-mono font-bold text-[#34C759]">
-                    {systemStats?.cpu_usage_pct ?? 0}%
+                    {systemStats?.cpu_load_percent ? Math.round(systemStats.cpu_load_percent) : 0}%
                   </span>
                 </div>
                 <div className="p-3 rounded-2xl bg-[#181822] border border-white/5 flex flex-col gap-1">

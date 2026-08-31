@@ -42,7 +42,7 @@ export interface AppGridContextType {
   isEditing: boolean;
   setIsEditing: (val: boolean) => void;
   uninstallApp: (appId: string) => void;
-  createFolder: (name: string, appIds: string[], pageIndex: number) => void;
+  createFolder: (name: string, appIdsOrPageIndex?: string[] | number, maybePageIndex?: number) => void;
   createFolderFromApps: (sourceAppId: string, targetAppId: string, customName?: string) => void;
   addAppToFolder: (folderId: string, appId: string) => void;
   removeAppFromFolder: (folderId: string, appId: string) => void;
@@ -59,6 +59,8 @@ export interface AppGridContextType {
   setDragPosition: (pos: { x: number; y: number } | null) => void;
   hoverTargetAppId: string | null;
   setHoverTargetAppId: (id: string | null) => void;
+  folderCombineArmedId: string | null;
+  setFolderCombineArmedId: (id: string | null) => void;
 
   // Search & Drawer Categories
   isSearchOpen: boolean;
@@ -165,7 +167,10 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [draggedAppId, setDraggedAppId] = useState<string | null>(null);
   const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
   const [hoverTargetAppId, setHoverTargetAppId] = useState<string | null>(null);
+  const [folderCombineArmedId, setFolderCombineArmedId] = useState<string | null>(null);
   const [isSearchOpen, setSearchOpen] = useState<boolean>(false);
+
+  const SYSTEM_TAB_NAMES = ['all', 'recents', 'running', 'productivity', 'media', 'tools', 'social', 'games', 'system'];
 
   const [drawerTabs, setDrawerTabs] = useState<string[]>(() => {
     if (typeof window !== 'undefined') {
@@ -173,11 +178,13 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          if (Array.isArray(parsed)) {
+            return parsed.filter((t: string) => typeof t === 'string' && !SYSTEM_TAB_NAMES.includes(t.toLowerCase()));
+          }
         } catch (_) {}
       }
     }
-    return ['all', 'recents', 'running', 'productivity', 'media', 'tools', 'system'];
+    return [];
   });
 
   const [customTabAppMap, setCustomTabAppMap] = useState<Record<string, string[]>>(() => {
@@ -447,6 +454,10 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (settings.soundEffects) audio.playTap();
     const clean = name.trim().toLowerCase();
     if (!clean) return;
+    if (SYSTEM_TAB_NAMES.includes(clean)) {
+      showToast(`"${clean}" is already a system tab`);
+      return;
+    }
     if (!drawerTabs.includes(clean)) {
       const next = [...drawerTabs, clean];
       setDrawerTabs(next);
@@ -561,7 +572,18 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, [settings.soundEffects, apps, showToast, syncNativeInstalledApps, activeAppId]);
 
-  const createFolder = useCallback((name: string, appIds: string[], pageIndex: number) => {
+  const createFolder = useCallback((name: string, appIdsOrPageIndex?: string[] | number, maybePageIndex?: number) => {
+    let appIds: string[] = [];
+    let pageIndex = 0;
+
+    if (Array.isArray(appIdsOrPageIndex)) {
+      appIds = appIdsOrPageIndex;
+      pageIndex = typeof maybePageIndex === 'number' ? maybePageIndex : 0;
+    } else if (typeof appIdsOrPageIndex === 'number') {
+      pageIndex = appIdsOrPageIndex;
+      appIds = [];
+    }
+
     const newFolder: FolderItem = {
       id: `folder-${Date.now()}`,
       name: name || 'Folder',
@@ -571,12 +593,16 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
       appIds,
     };
     setFolders((prev) => [...prev, newFolder]);
-    setApps((prev) =>
-      prev.map((app) =>
-        appIds.includes(app.id) ? { ...app, folderId: newFolder.id } : app
-      )
-    );
-  }, [folders]);
+    if (appIds.length > 0) {
+      setApps((prev) =>
+        prev.map((app) =>
+          appIds.includes(app.id) ? { ...app, folderId: newFolder.id } : app
+        )
+      );
+    }
+    if (settings.soundEffects) audio.playTap();
+    showToast(`Created folder "${newFolder.name}"`);
+  }, [folders, settings.soundEffects, showToast]);
 
   const createFolderFromApps = useCallback((sourceAppId: string, targetAppId: string, customName?: string) => {
     if (sourceAppId === targetAppId) return;
@@ -745,6 +771,8 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setDragPosition,
         hoverTargetAppId,
         setHoverTargetAppId,
+        folderCombineArmedId,
+        setFolderCombineArmedId,
         isSearchOpen,
         setSearchOpen,
         drawerTabs,

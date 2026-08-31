@@ -36,6 +36,12 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
+import android.Manifest
+import android.provider.CalendarContract
+import android.app.AlarmManager
+import android.provider.AlarmClock
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.appcompat.app.AppCompatActivity
 import androidx.webkit.WebViewAssetLoader
 import com.nodus.common.NodusIpcContract
@@ -52,6 +58,8 @@ import android.app.ActivityOptions
 import android.graphics.Rect
 import android.util.Xml
 import org.xmlpull.v1.XmlPullParser
+import android.webkit.ValueCallback
+import androidx.activity.result.contract.ActivityResultContracts
 
 class HomeActivity : AppCompatActivity() {
 
@@ -69,6 +77,28 @@ class HomeActivity : AppCompatActivity() {
     private lateinit var assetLoader: WebViewAssetLoader
     private var fleetReceiver: FleetStateReceiver? = null
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var filePathCallback: ValueCallback<Array<Uri>>? = null
+
+    private val fileChooserLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val uris: Array<Uri>? = if (result.resultCode == RESULT_OK && result.data != null) {
+            val data = result.data
+            if (data?.clipData != null) {
+                val count = data.clipData!!.itemCount
+                val uriList = ArrayList<Uri>()
+                for (i in 0 until count) {
+                    uriList.add(data.clipData!!.getItemAt(i).uri)
+                }
+                uriList.toTypedArray()
+            } else if (data?.data != null) {
+                arrayOf(data.data!!)
+            } else null
+        } else null
+
+        filePathCallback?.onReceiveValue(uris)
+        filePathCallback = null
+    }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -103,9 +133,56 @@ class HomeActivity : AppCompatActivity() {
                     }
                     return true
                 }
+
+                override fun onShowFileChooser(
+                    webView: WebView?,
+                    filePathCallback: ValueCallback<Array<Uri>>?,
+                    fileChooserParams: FileChooserParams?
+                ): Boolean {
+                    this@HomeActivity.filePathCallback?.onReceiveValue(null)
+                    this@HomeActivity.filePathCallback = filePathCallback
+
+                    val intent = fileChooserParams?.createIntent() ?: Intent(Intent.ACTION_GET_CONTENT).apply {
+                        type = "image/*"
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                    }
+
+                    return try {
+                        fileChooserLauncher.launch(intent)
+                        true
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to launch file chooser", e)
+                        this@HomeActivity.filePathCallback = null
+                        false
+                    }
+                }
             }
 
             webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(
+                    view: WebView?,
+                    request: WebResourceRequest?
+                ): Boolean {
+                    val uri = request?.url ?: return false
+                    val url = uri.toString()
+                    if (url.startsWith("https://appassets.androidplatform.net/") ||
+                        url.startsWith("file://") ||
+                        url.startsWith("about:blank")
+                    ) {
+                        return false
+                    }
+                    return try {
+                        val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        startActivity(intent)
+                        true
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to launch external browser/app for URL: $url", e)
+                        true
+                    }
+                }
+
                 override fun shouldInterceptRequest(
                     view: WebView?,
                     request: WebResourceRequest?
@@ -511,6 +588,114 @@ class HomeActivity : AppCompatActivity() {
                 JSONObject().apply {
                     put("type", "empty")
                 }.toString()
+            }
+        }
+
+        @JavascriptInterface
+        fun hasCalendarPermission(): Boolean {
+            return ContextCompat.checkSelfPermission(
+                this@HomeActivity,
+                Manifest.permission.READ_CALENDAR
+            ) == PackageManager.PERMISSION_GRANTED
+        }
+
+        @JavascriptInterface
+        fun requestCalendarPermission(): Boolean {
+            return try {
+                ActivityCompat.requestPermissions(
+                    this@HomeActivity,
+                    arrayOf(Manifest.permission.READ_CALENDAR),
+                    1002
+                )
+                true
+            } catch (e: Exception) {
+                Log.e(TAG, "Error requesting calendar permission", e)
+                false
+            }
+        }
+
+        @JavascriptInterface
+        fun getCalendarEvents(daysAhead: Int): String {
+            if (!hasCalendarPermission()) {
+                return "[]"
+            }
+            return try {
+                val now = System.currentTimeMillis()
+                val effectiveDays = if (daysAhead <= 0) 7 else daysAhead
+                val endLimit = now + (effectiveDays * 86400000L)
+
+                val builder = CalendarContract.Instances.CONTENT_URI.buildUpon()
+                android.content.ContentUris.appendId(builder, now - 1800000L) // Include events started in last 30 min
+                android.content.ContentUris.appendId(builder, endLimit)
+
+                val projection = arrayOf(
+                    CalendarContract.Instances.EVENT_ID,
+                    CalendarContract.Instances.TITLE,
+                    CalendarContract.Instances.DESCRIPTION,
+                    CalendarContract.Instances.BEGIN,
+                    CalendarContract.Instances.END,
+                    CalendarContract.Instances.ALL_DAY,
+                    CalendarContract.Instances.EVENT_LOCATION,
+                    CalendarContract.Instances.DISPLAY_COLOR
+                )
+
+                val cursor = contentResolver.query(
+                    builder.build(),
+                    projection,
+                    null,
+                    null,
+                    "${CalendarContract.Instances.BEGIN} ASC"
+                )
+
+                val jsonArray = JSONArray()
+                cursor?.use {
+                    val idIdx = it.getColumnIndex(CalendarContract.Instances.EVENT_ID)
+                    val titleIdx = it.getColumnIndex(CalendarContract.Instances.TITLE)
+                    val descIdx = it.getColumnIndex(CalendarContract.Instances.DESCRIPTION)
+                    val beginIdx = it.getColumnIndex(CalendarContract.Instances.BEGIN)
+                    val endIdx = it.getColumnIndex(CalendarContract.Instances.END)
+                    val allDayIdx = it.getColumnIndex(CalendarContract.Instances.ALL_DAY)
+                    val locIdx = it.getColumnIndex(CalendarContract.Instances.EVENT_LOCATION)
+                    val colorIdx = it.getColumnIndex(CalendarContract.Instances.DISPLAY_COLOR)
+
+                    while (it.moveToNext()) {
+                        val eventObj = JSONObject()
+                        val id = if (idIdx >= 0) it.getLong(idIdx).toString() else ""
+                        val title = if (titleIdx >= 0) it.getString(titleIdx) ?: "Untitled Event" else "Untitled Event"
+                        val desc = if (descIdx >= 0) it.getString(descIdx) ?: "" else ""
+                        val begin = if (beginIdx >= 0) it.getLong(beginIdx) else 0L
+                        val end = if (endIdx >= 0) it.getLong(endIdx) else 0L
+                        val allDay = if (allDayIdx >= 0) it.getInt(allDayIdx) == 1 else false
+                        val loc = if (locIdx >= 0) it.getString(locIdx) ?: "" else ""
+                        val color = if (colorIdx >= 0 && !it.isNull(colorIdx)) {
+                            String.format("#%06X", 0xFFFFFF and it.getInt(colorIdx))
+                        } else null
+
+                        // Extract Meet / Zoom / Teams video links if in description or location
+                        var meetLink: String? = null
+                        val combinedText = "$loc $desc"
+                        val match = Regex("""https?://(meet\.google\.com|zoom\.us/j|teams\.microsoft\.com)/[^\s<>]+""").find(combinedText)
+                        if (match != null) {
+                            meetLink = match.value
+                        }
+
+                        eventObj.put("id", id)
+                        eventObj.put("title", title)
+                        eventObj.put("description", desc)
+                        eventObj.put("startTime", begin)
+                        eventObj.put("endTime", end)
+                        eventObj.put("allDay", allDay)
+                        eventObj.put("location", loc)
+                        if (meetLink != null) eventObj.put("meetLink", meetLink)
+                        if (color != null) eventObj.put("color", color)
+
+                        jsonArray.put(eventObj)
+                    }
+                }
+                jsonArray.toString()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error fetching calendar events", e)
+                "[]"
             }
         }
 
@@ -1038,6 +1223,89 @@ class HomeActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Log.w(TAG, "Error killing user processes", e)
                 false
+            }
+        }
+
+        @JavascriptInterface
+        fun openExternalUrl(url: String): Boolean {
+            return try {
+                if (url.isBlank()) return false
+                val formattedUrl = if (!url.startsWith("http://") && !url.startsWith("https://")) "https://$url" else url
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(formattedUrl)).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+                true
+            } catch (e: Exception) {
+                Log.e(TAG, "Error opening external URL: $url", e)
+                false
+            }
+        }
+
+        @JavascriptInterface
+        fun openClockApp(): Boolean {
+            return try {
+                Log.d(TAG, "openClockApp requested from web bridge")
+                // 1. Try direct package launch first (AOSP / HyperOS / Google DeskClock)
+                val clockPackages = listOf(
+                    "com.android.deskclock",
+                    "com.google.android.deskclock",
+                    "com.miui.deskclock",
+                    "com.sec.android.app.clockpackage"
+                )
+                for (pkg in clockPackages) {
+                    val launchIntent = context.packageManager.getLaunchIntentForPackage(pkg)
+                    if (launchIntent != null) {
+                        launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(launchIntent)
+                        Log.d(TAG, "Successfully launched clock app package: $pkg")
+                        return true
+                    }
+                }
+                // 2. Try standard Alarm Clock intent
+                val alarmIntent = Intent(AlarmClock.ACTION_SHOW_ALARMS).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                if (alarmIntent.resolveActivity(context.packageManager) != null) {
+                    context.startActivity(alarmIntent)
+                    Log.d(TAG, "Successfully launched AlarmClock.ACTION_SHOW_ALARMS")
+                    return true
+                }
+                // 3. Try CATEGORY_APP_CLOCK
+                val categoryIntent = Intent(Intent.ACTION_MAIN).apply {
+                    addCategory("android.intent.category.APP_CLOCK")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                if (categoryIntent.resolveActivity(context.packageManager) != null) {
+                    context.startActivity(categoryIntent)
+                    Log.d(TAG, "Successfully launched category APP_CLOCK")
+                    return true
+                }
+                Log.w(TAG, "No clock app activity found")
+                false
+            } catch (e: Exception) {
+                Log.e(TAG, "Error opening clock app", e)
+                false
+            }
+        }
+
+        @JavascriptInterface
+        fun getNextAlarm(): String {
+            return try {
+                val am = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+                val alarmClockInfo = am?.nextAlarmClock
+                if (alarmClockInfo != null) {
+                    val triggerTime = alarmClockInfo.triggerTime
+                    val json = JSONObject().apply {
+                        put("triggerTime", triggerTime)
+                    }
+                    json.toString()
+                } else {
+                    ""
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error querying next alarm", e)
+                ""
             }
         }
 

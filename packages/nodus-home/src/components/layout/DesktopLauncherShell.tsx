@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { useLauncher } from '../../context/LauncherContext';
 import { DeviceSidebar } from './DeviceSidebar';
 import { DeviceProcessSidePanel } from './DeviceProcessSidePanel';
@@ -6,16 +6,18 @@ import { ClipboardHistoryPanel } from '../desktop/ClipboardHistoryPanel';
 import { SmartAppTaskbar } from './SmartAppTaskbar';
 import { DesktopAppWindow } from '../desktop/DesktopAppWindow';
 import { FolderModal } from '../home/FolderModal';
-import { UniversalSearchModal } from '../home/UniversalSearchModal';
 import { ToastNotification } from '../common/ToastNotification';
 import { ConfirmModal } from '../common/ConfirmModal';
 import { AppContextMenu } from '../home/AppContextMenu';
 import { AppIcon } from '../home/AppIcon';
 import { TopWidgetRow } from '../home/TopWidgetRow';
+import { NotesWidgetModal } from '../home/NotesWidgetModal';
+import { SingleNoteModal } from '../home/SingleNoteModal';
 import { DynamicIcon } from '../common/DynamicIcon';
 import { WALLPAPER_PRESETS, DEVICE_COLORS } from '../../utils/constants';
 import { getSystemTheme, getAccentColor, getSurfaceRgba } from '../../utils/themes';
 import { SettingsApp } from '../apps/SettingsApp';
+import { NotesApp } from '../apps/NotesApp';
 import { audio } from '../../utils/audio';
 import { fetchRemoteShortcuts, inferLucideIcon } from '../../services/RemoteShortcutsService';
 import { Monitor, RefreshCw } from 'lucide-react';
@@ -31,12 +33,15 @@ export const DesktopLauncherShell: React.FC = () => {
     isEditing,
     setActiveFolderId,
     addAppToFolder,
+    createFolderFromApps,
     moveApp,
     draggedAppId,
     setDraggedAppId,
     dragPosition,
     setDragPosition,
     setHoverTargetAppId,
+    folderCombineArmedId,
+    setFolderCombineArmedId,
     devices,
     activeDeviceId,
     isSidebarCollapsed,
@@ -125,6 +130,7 @@ export const DesktopLauncherShell: React.FC = () => {
   }, [isSidebarCollapsed, toggleSidebar, setClipboardOpen, setTaskbarOpen, setSearchOpen]);
 
   const [hoveredFolderId, setHoveredFolderId] = useState<string | null>(null);
+  const folderDwellTimerRef = useRef<number | null>(null);
 
   const draggedApp = useMemo(() => {
     return apps.find((a) => a.id === draggedAppId);
@@ -132,7 +138,14 @@ export const DesktopLauncherShell: React.FC = () => {
 
   // Global Pointer Tracker for Drag-to-Reorder & Folder Drop
   useEffect(() => {
-    if (!draggedAppId) return;
+    if (!draggedAppId) {
+      if (folderDwellTimerRef.current) {
+        clearTimeout(folderDwellTimerRef.current);
+        folderDwellTimerRef.current = null;
+      }
+      setFolderCombineArmedId(null);
+      return;
+    }
 
     const handleGlobalPointerMove = (e: PointerEvent) => {
       setDragPosition({ x: e.clientX, y: e.clientY });
@@ -146,8 +159,20 @@ export const DesktopLauncherShell: React.FC = () => {
 
       if (targetId && targetId !== draggedAppId) {
         setHoverTargetAppId(targetId);
+        // If hovered over an app, arm folder combine if stationary for 450ms
+        if (folderCombineArmedId !== targetId && !folderDwellTimerRef.current) {
+          folderDwellTimerRef.current = window.setTimeout(() => {
+            setFolderCombineArmedId(targetId);
+            folderDwellTimerRef.current = null;
+          }, 450);
+        }
       } else {
         setHoverTargetAppId(null);
+        if (folderDwellTimerRef.current) {
+          clearTimeout(folderDwellTimerRef.current);
+          folderDwellTimerRef.current = null;
+        }
+        setFolderCombineArmedId(null);
       }
 
       if (folderId) {
@@ -158,6 +183,11 @@ export const DesktopLauncherShell: React.FC = () => {
     };
 
     const handleGlobalPointerUp = (e: PointerEvent) => {
+      if (folderDwellTimerRef.current) {
+        clearTimeout(folderDwellTimerRef.current);
+        folderDwellTimerRef.current = null;
+      }
+
       const targetElem = document.elementFromPoint(e.clientX, e.clientY);
       const targetAppCard = targetElem?.closest('[data-app-id]');
       const targetFolderCard = targetElem?.closest('[data-folder-id]');
@@ -170,20 +200,30 @@ export const DesktopLauncherShell: React.FC = () => {
         addAppToFolder(folderId, draggedAppId);
       } else if (targetId && targetId !== draggedAppId) {
         audio.playTap();
-        moveApp(draggedAppId, targetId);
+        if (folderCombineArmedId === targetId) {
+          createFolderFromApps(draggedAppId, targetId);
+        } else {
+          moveApp(draggedAppId, targetId);
+        }
       }
 
       setDraggedAppId(null);
       setDragPosition(null);
       setHoverTargetAppId(null);
       setHoveredFolderId(null);
+      setFolderCombineArmedId(null);
     };
 
     const handleGlobalPointerCancel = () => {
+      if (folderDwellTimerRef.current) {
+        clearTimeout(folderDwellTimerRef.current);
+        folderDwellTimerRef.current = null;
+      }
       setDraggedAppId(null);
       setDragPosition(null);
       setHoverTargetAppId(null);
       setHoveredFolderId(null);
+      setFolderCombineArmedId(null);
     };
 
     window.addEventListener('pointermove', handleGlobalPointerMove, { passive: true });
@@ -191,11 +231,15 @@ export const DesktopLauncherShell: React.FC = () => {
     window.addEventListener('pointercancel', handleGlobalPointerCancel, { passive: true });
 
     return () => {
+      if (folderDwellTimerRef.current) {
+        clearTimeout(folderDwellTimerRef.current);
+        folderDwellTimerRef.current = null;
+      }
       window.removeEventListener('pointermove', handleGlobalPointerMove);
       window.removeEventListener('pointerup', handleGlobalPointerUp);
       window.removeEventListener('pointercancel', handleGlobalPointerCancel);
     };
-  }, [draggedAppId, moveApp, addAppToFolder, setDraggedAppId, setDragPosition, setHoverTargetAppId]);
+  }, [draggedAppId, folderCombineArmedId, moveApp, addAppToFolder, createFolderFromApps, setDraggedAppId, setDragPosition, setHoverTargetAppId]);
 
   const currentTheme = getSystemTheme(settings.theme);
   const currentAccent = getAccentColor(settings.accentColor);
@@ -222,6 +266,9 @@ export const DesktopLauncherShell: React.FC = () => {
     if (!isInternalApp) return null;
     if (activeAppId === 'settings') {
       return <SettingsApp />;
+    }
+    if (activeAppId === 'notes') {
+      return <NotesApp />;
     }
     return (
       <div className="h-full w-full flex flex-col items-center justify-center p-6 text-center space-y-4 font-sans">
@@ -305,14 +352,16 @@ export const DesktopLauncherShell: React.FC = () => {
     hud: 'rounded-none bg-black/80 hover:bg-black/95 border border-white/[0.16] shadow-[0_0_12px_rgba(0,0,0,0.8)]',
     brutalist: 'rounded-lg bg-[#181C26] hover:bg-[#202534] border-2 border-black shadow-[3px_3px_0px_#000000]',
     minimal: 'rounded-none bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.08]',
-  }[currentTheme.archetype];
+    material: 'rounded-3xl bg-[#FFFFFF] hover:bg-[#F8FAFD] border border-[#E2E8F0] shadow-sm text-[#0F172A]',
+  }[currentTheme.archetype] || 'rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] backdrop-blur-md border border-white/[0.08]';
 
   const windowModalClass = {
     glass: 'rounded-2xl border border-white/[0.12] shadow-[0_30px_70px_-15px_rgba(0,0,0,0.95)]',
     hud: 'rounded-none border border-cyan-500/40 shadow-[0_0_35px_rgba(0,240,255,0.15)]',
     brutalist: 'rounded-xl border-2 border-black shadow-[8px_8px_0px_#000000]',
     minimal: 'rounded-none border border-white/[0.14] shadow-none',
-  }[currentTheme.archetype];
+    material: 'rounded-3xl border border-[#E2E8F0] shadow-[0_20px_50px_rgba(0,0,0,0.12)]',
+  }[currentTheme.archetype] || 'rounded-2xl border border-white/[0.12] shadow-[0_30px_70px_-15px_rgba(0,0,0,0.95)]';
 
   return (
     <div
@@ -486,8 +535,7 @@ export const DesktopLauncherShell: React.FC = () => {
               }}
             >
               <div 
-                className={`w-full max-w-4xl h-[85vh] max-h-[820px] flex flex-col overflow-hidden ${windowModalClass} animate-in zoom-in-95 duration-200 backdrop-blur-3xl transition-colors duration-200`}
-                style={{ contain: 'layout paint', backgroundColor: getSurfaceRgba(settings.theme, settings.taskbarOpacity, 'window') }}
+                className="w-full max-w-4xl h-[85vh] max-h-[820px] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 bg-transparent"
               >
                 <DesktopAppWindow appId={activeAppId!}>
                   {renderActiveApp()}
@@ -511,7 +559,8 @@ export const DesktopLauncherShell: React.FC = () => {
 
       <SmartAppTaskbar />
       <FolderModal />
-      <UniversalSearchModal />
+      <NotesWidgetModal />
+      <SingleNoteModal />
       <ConfirmModal />
       <ToastNotification />
       <AppContextMenu />

@@ -12,6 +12,10 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "strict": true,
+    "paths": {
+      "@nodus/common": ["../nodus-common/src/index.ts"],
+      "@nodus/common/*": ["../nodus-common/src/*"]
+    },
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true

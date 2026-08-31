@@ -36,7 +36,8 @@ class HttpRpcClient {
         onSuccess: (JSONObject) -> Unit,
         onError: (Exception) -> Unit = {}
     ) {
-        val url = "http://$ip:$port/api/stats"
+        val cleanIp = ip.removePrefix("http://").removePrefix("https://").substringBefore(":")
+        val url = "http://$cleanIp:$port/api/status"
         val request = Request.Builder()
             .url(url)
             .get()
@@ -71,7 +72,8 @@ class HttpRpcClient {
         onSuccess: (JSONArray) -> Unit,
         onError: (Exception) -> Unit = {}
     ) {
-        val url = "http://$ip:$port/api/processes"
+        val cleanIp = ip.removePrefix("http://").removePrefix("https://").substringBefore(":")
+        val url = "http://$cleanIp:$port/api/processes"
         val request = Request.Builder()
             .url(url)
             .get()
@@ -112,7 +114,8 @@ class HttpRpcClient {
         onSuccess: () -> Unit,
         onError: (Exception) -> Unit = {}
     ) {
-        val url = "http://$ip:$port/api/processes/kill"
+        val cleanIp = ip.removePrefix("http://").removePrefix("https://").substringBefore(":")
+        val url = "http://$cleanIp:$port/api/process/kill"
         val payload = JSONObject().apply {
             put("pid", pid)
         }.toString()
@@ -146,7 +149,8 @@ class HttpRpcClient {
         onSuccess: () -> Unit,
         onError: (Exception) -> Unit = {}
     ) {
-        val url = "http://$ip:$port/api/shortcuts/execute"
+        val cleanIp = ip.removePrefix("http://").removePrefix("https://").substringBefore(":")
+        val url = "http://$cleanIp:$port/api/exec"
         val payload = JSONObject().apply {
             put("id", commandOrId)
             put("command", commandOrId)
@@ -181,7 +185,12 @@ class HttpRpcClient {
         onSuccess: () -> Unit,
         onError: (Exception) -> Unit = {}
     ) {
-        val url = "http://$ip:$port/api/system/control"
+        val cleanIp = ip.removePrefix("http://").removePrefix("https://").substringBefore(":")
+        val url = if (action.equals("lock", ignoreCase = true)) {
+            "http://$cleanIp:$port/api/lock"
+        } else {
+            "http://$cleanIp:$port/api/system/control"
+        }
         val payload = JSONObject().apply {
             put("action", action)
         }.toString()

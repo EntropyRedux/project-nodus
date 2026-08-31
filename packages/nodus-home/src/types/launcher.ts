@@ -1,8 +1,8 @@
 export type IconStyle = 'material-you' | 'monochrome' | 'outline' | 'minimal-text' | 'squircle-color' | 'neon';
 
-export type AccentColorId = 'sapphire' | 'amber' | 'ruby' | 'garnet' | 'emerald';
+export type AccentColorId = 'sapphire' | 'amber' | 'ruby' | 'garnet' | 'emerald' | 'amethyst';
 
-export type ThemeId = 'glassmorphism' | 'cyberpunk-hud' | 'neobrutalism' | 'nordic-minimal';
+export type ThemeId = 'glassmorphism' | 'cyberpunk-hud' | 'neobrutalism' | 'nordic-minimal' | 'material-light';
 
 export type IconShape = 'modern' | 'frosted' | 'minimal' | 'glass' | 'squircle-color';
 
@@ -11,14 +11,10 @@ export type WallpaperId =
   | 'material-fluid'
   | 'sunset-dune'
   | 'forest-mist'
-  | 'cyber-grid'
   | 'nordic-aurora'
+  | 'cyber-grid'
   | 'geometric-pastel'
   | 'amoled-black'
-  | 'alpine'
-  | 'aurora'
-  | 'cyberpunk'
-  | 'slate'
   | 'custom';
 
 export type DeviceType = 'tablet' | 'desktop' | 'phone' | 'laptop';
@@ -95,6 +91,7 @@ export interface FolderItem {
 export interface NotificationItem {
   id: string;
   appId: string;
+  packageName?: string;
   appName: string;
   title: string;
   message: string;
@@ -215,6 +212,11 @@ export interface LauncherSettings {
   notificationBadges: boolean;
   atAGlanceWidget: boolean;
   clockWidgetStyle: 'digital-bold' | 'minimal-pill' | 'analog' | 'material-stack';
+  enableClockWidget?: boolean;
+  secondaryTimezone?: string;
+  enableDeviceNameWidget?: boolean;
+  enableBatteryWidget?: boolean;
+  enableNotesWidget?: boolean;
   minimalistMode: boolean; // list-based text launcher vs icon grid
   leftPanelOpacity?: number;
   taskbarOpacity?: number;
@@ -226,6 +228,7 @@ export interface LauncherSettings {
   // Multi-Device & Extensions Gating
   enableMultiDevice: boolean; // Left device sidebar & multi-device switcher
   enableClipboardPanel: boolean; // Right universal clipboard history panel
+  enableAssistiveTouch?: boolean;
   taskbarMode?: 'static' | 'assistive_only' | 'auto';
 
   // Multi-Device Network Controller & Server Settings
@@ -238,3 +241,38 @@ export interface LauncherSettings {
   showRemoteAppsInMainDrawer: boolean; // Show whitelisted remote shortcuts in main launcher
   showOnlyLocalInDrawer: boolean; // Filter strictly to local apps
 }
+
+export type NoteCategory = 'todo' | 'note' | 'calendar' | 'checklist';
+export type NoteColor = 'amber' | 'emerald' | 'sapphire' | 'purple' | 'rose';
+
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  completed: boolean;
+}
+
+export interface NoteItem {
+  id: string;
+  title?: string;
+  text: string;
+  completed: boolean;
+  type: NoteCategory;
+  color?: NoteColor;
+  createdAt: number;
+  dueDate?: string;
+  pinned?: boolean;
+  checklist?: ChecklistItem[];
+}
+
+export interface CalendarEventItem {
+  id: string;
+  title: string;
+  description?: string;
+  startTime: number;
+  endTime: number;
+  allDay: boolean;
+  location?: string;
+  meetLink?: string;
+  color?: string;
+}
+

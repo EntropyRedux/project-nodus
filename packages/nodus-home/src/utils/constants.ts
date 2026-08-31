@@ -9,7 +9,8 @@ import {
   AndroidBridgeConfig,
   ClipboardSyncConfig,
   RemoteExecutable,
-  TrustedDevice
+  TrustedDevice,
+  NoteItem
 } from '../types/launcher';
 
 export const DEVICE_COLORS: Record<string, string> = {
@@ -91,16 +92,17 @@ export const INITIAL_DEVICE_PROCESSES: Record<string, DeviceProcess[]> = {
 export const INITIAL_APPS: AppItem[] = [
   // Core Operational Launcher Settings & Hub
   { id: 'settings', name: 'Settings & Hub', iconName: 'Settings', color: '#34C759', category: 'system', pageIndex: 0, order: 0 },
+  { id: 'notes', name: 'Sticky Notes', iconName: 'StickyNote', color: '#F59E0B', category: 'productivity', pageIndex: 0, order: 1, badgeCount: 2 },
 
   // Real Queryable 3rd Party Packages on Device
-  { id: 'app-calculator', name: 'Calculator', iconName: 'Calculator', color: '#FF9500', category: 'system', pageIndex: 0, order: 1, packageName: 'com.miui.calculator' },
-  { id: 'app-notes', name: 'Notes', iconName: 'PenTool', color: '#FFCC00', category: 'productivity', pageIndex: 0, order: 2, packageName: 'com.miui.notes' },
-  { id: 'app-termux', name: 'Termux', iconName: 'SquareTerminal', color: '#34C759', category: 'tools', pageIndex: 0, order: 3, packageName: 'com.termux' },
-  { id: 'app-discord', name: 'Discord', iconName: 'MessageSquare', color: '#5865F2', category: 'media', pageIndex: 0, order: 4, packageName: 'com.discord' },
-  { id: 'app-brave', name: 'Brave Browser', iconName: 'Globe', color: '#FF1B2D', category: 'media', pageIndex: 0, order: 5, packageName: 'com.brave.browser' },
+  { id: 'app-calculator', name: 'Calculator', iconName: 'Calculator', color: '#FF9500', category: 'system', pageIndex: 0, order: 2, packageName: 'com.miui.calculator' },
+  { id: 'app-notes', name: 'MIUI Notes', iconName: 'PenTool', color: '#FFCC00', category: 'productivity', pageIndex: 0, order: 3, packageName: 'com.miui.notes' },
+  { id: 'app-termux', name: 'Termux', iconName: 'Terminal', color: '#34C759', category: 'tools', pageIndex: 0, order: 4, packageName: 'com.termux' },
+  { id: 'app-discord', name: 'Discord', iconName: 'MessageSquare', color: '#5865F2', category: 'media', pageIndex: 0, order: 5, packageName: 'com.discord' },
+  { id: 'app-brave', name: 'Brave Browser', iconName: 'Globe', color: '#FF1B2D', category: 'media', pageIndex: 0, order: 6, packageName: 'com.brave.browser' },
 ];
 
-export const DOCK_APP_IDS = ['settings'];
+export const DOCK_APP_IDS = ['settings', 'notes'];
 
 export const INITIAL_NOTIFICATIONS: NotificationItem[] = [];
 
@@ -239,4 +241,62 @@ export const INITIAL_CLIPBOARD_SYNC_CONFIG: ClipboardSyncConfig = {
 export const INITIAL_TRUSTED_DEVICES: TrustedDevice[] = [];
 
 export const INITIAL_REMOTE_EXECUTABLES: RemoteExecutable[] = [];
+
+export const INITIAL_NOTES: NoteItem[] = [
+  {
+    id: 'note-5',
+    title: 'Workstation Setup Checklist',
+    text: 'Essential hardware and pipeline configuration',
+    completed: false,
+    type: 'checklist',
+    color: 'emerald',
+    createdAt: Date.now() - 1000 * 60 * 30,
+    pinned: true,
+    checklist: [
+      { id: 'chk-1', text: '120Hz display refresh synchronization', completed: true },
+      { id: 'chk-2', text: 'Cross-device node mesh discovery', completed: true },
+      { id: 'chk-3', text: 'Real-time clipboard synchronization', completed: false },
+      { id: 'chk-4', text: 'Low-latency Web Audio buffer test', completed: false },
+    ],
+  },
+  {
+    id: 'note-1',
+    title: 'Nodus Sprint Tasks',
+    text: 'Optimize 120Hz HyperOS gesture pipeline and audio latency buffer',
+    completed: false,
+    type: 'todo',
+    color: 'sapphire',
+    createdAt: Date.now() - 1000 * 60 * 60 * 2,
+    dueDate: 'Today, 6:00 PM',
+  },
+  {
+    id: 'note-2',
+    title: 'Cluster Verification',
+    text: 'Verify cross-device clipboard sync across POCO Pad and RIG-01',
+    completed: false,
+    type: 'todo',
+    color: 'purple',
+    createdAt: Date.now() - 1000 * 60 * 120,
+    dueDate: 'Tomorrow',
+  },
+  {
+    id: 'note-3',
+    title: 'Google Calendar Sync Idea',
+    text: 'Upcoming integration: Sync meeting notes and reminders directly into the Nodus Top Widget bar',
+    completed: false,
+    type: 'note',
+    color: 'amber',
+    createdAt: Date.now() - 1000 * 60 * 300,
+    pinned: false,
+  },
+  {
+    id: 'note-4',
+    title: 'Docker Build Container',
+    text: 'Update Dockerfile with Node.js 22 LTS base image',
+    completed: true,
+    type: 'todo',
+    color: 'rose',
+    createdAt: Date.now() - 1000 * 60 * 60 * 24,
+  },
+];
 

@@ -33,14 +33,17 @@ export const DesktopAppWindow: React.FC<DesktopAppWindowProps> = ({ appId, child
 
   return (
     <div 
-      className={`h-full w-full flex flex-col border border-white/10 shadow-2xl overflow-hidden ${currentTheme.cardRadius} backdrop-blur-3xl select-none transition-colors duration-200`}
+      className={`h-full w-full flex flex-col border ${currentTheme.isLight ? 'border-[#CBD5E1]' : 'border-white/10'} shadow-2xl overflow-hidden ${currentTheme.cardRadius} backdrop-blur-3xl select-none transition-colors duration-200`}
       style={{
         backgroundColor: getSurfaceRgba(settings.theme, settings.taskbarOpacity, 'window'),
       }}
     >
       {/* Sleek Frosted Window Header */}
       <div 
-        className="h-12 border-b border-white/10 px-5 flex items-center justify-between flex-shrink-0 backdrop-blur-md bg-black/20"
+        className={`h-12 border-b ${currentTheme.isLight ? 'border-[#E2E8F0]' : 'border-white/10'} px-5 flex items-center justify-between flex-shrink-0 backdrop-blur-md`}
+        style={{
+          backgroundColor: getSurfaceRgba(settings.theme, settings.taskbarOpacity, 'popup'),
+        }}
       >
         {/* Left: App Icon & Name */}
         <div className="flex items-center gap-2.5">
@@ -68,7 +71,7 @@ export const DesktopAppWindow: React.FC<DesktopAppWindowProps> = ({ appId, child
           <button
             onClick={handleMinimize}
             onPointerDown={(e) => e.stopPropagation()}
-            className="w-7 h-7 rounded-lg hover:bg-white/10 active:scale-90 text-[#8E8E93] hover:text-[#F0F0F2] transition flex items-center justify-center"
+            className={`w-7 h-7 ${currentTheme.buttonRadius} ${currentTheme.classes.actionButton} active:scale-90 transition flex items-center justify-center`}
             title="Minimize"
           >
             <Minus size={14} />
@@ -76,7 +79,7 @@ export const DesktopAppWindow: React.FC<DesktopAppWindowProps> = ({ appId, child
           <button
             onClick={handleClose}
             onPointerDown={(e) => e.stopPropagation()}
-            className="w-7 h-7 rounded-lg bg-[#FF3B30]/15 hover:bg-[#FF3B30] active:scale-90 text-[#FF3B30] hover:text-white transition flex items-center justify-center shadow-sm"
+            className={`w-7 h-7 ${currentTheme.buttonRadius} bg-[#FF3B30]/15 hover:bg-[#FF3B30] active:scale-90 text-[#FF3B30] hover:text-white transition flex items-center justify-center shadow-sm`}
             title="Close"
           >
             <X size={14} strokeWidth={2.5} />
@@ -85,7 +88,7 @@ export const DesktopAppWindow: React.FC<DesktopAppWindowProps> = ({ appId, child
       </div>
 
       {/* Window Body Content */}
-      <div className="flex-1 overflow-hidden relative bg-[#0A0A0E]/95">
+      <div className="flex-1 overflow-hidden relative bg-transparent">
         {children}
       </div>
     </div>

@@ -5,7 +5,11 @@ import { NavigationBar } from './NavigationBar';
 import { QuickSettingsShade } from './QuickSettingsShade';
 import { HomeScreen } from '../home/HomeScreen';
 import { SettingsApp } from '../apps/SettingsApp';
+import { NotesApp } from '../apps/NotesApp';
+import { NotesWidgetModal } from '../home/NotesWidgetModal';
+import { SingleNoteModal } from '../home/SingleNoteModal';
 import { WALLPAPER_PRESETS } from '../../utils/constants';
+import { getSystemTheme } from '../../utils/themes';
 import { Power, Volume2, Maximize2, Minimize2 } from 'lucide-react';
 import { audio } from '../../utils/audio';
 
@@ -38,6 +42,9 @@ export const PhoneFrame: React.FC = () => {
     if (activeAppId === 'settings') {
       return <SettingsApp />;
     }
+    if (activeAppId === 'notes') {
+      return <NotesApp />;
+    }
     return null;
   };
 
@@ -59,7 +66,7 @@ export const PhoneFrame: React.FC = () => {
       {/* Main Viewport (Home Screen or Active App) */}
       <div className="relative flex-1 flex flex-col overflow-hidden z-10">
         {isInternalApp ? (
-          <div className="w-full h-full bg-[#0A0A0C] overflow-hidden animate-in zoom-in-95 duration-200">
+          <div className={`w-full h-full ${getSystemTheme(settings.theme).isLight ? 'bg-[#F8FAFD]' : 'bg-[#0A0A0C]'} overflow-hidden animate-in zoom-in-95 duration-200`}>
             {renderActiveApp()}
           </div>
         ) : (
@@ -72,6 +79,8 @@ export const PhoneFrame: React.FC = () => {
 
       {/* Overlay Layers */}
       <QuickSettingsShade />
+      <NotesWidgetModal />
+      <SingleNoteModal />
     </div>
   );
 

@@ -5,6 +5,7 @@ import { getSystemTheme, getAccentColor } from '../../utils/themes';
 import { useLauncher } from '../../context/LauncherContext';
 import { fetchRemoteShortcutIcon } from '../../services/RemoteShortcutsService';
 import { audio } from '../../utils/audio';
+import { ThemedSelect } from '../common/ThemedSelect';
 
 interface AddRemoteShortcutModalProps {
   isOpen: boolean;
@@ -204,18 +205,19 @@ export const AddRemoteShortcutModal: React.FC<AddRemoteShortcutModalProps> = ({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-semibold text-white block mb-1">Category</label>
-              <select
+              <ThemedSelect
                 value={category}
-                onChange={(e: any) => setCategory(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-[#38BDF8]"
-              >
-                <option value="tools">Tools</option>
-                <option value="productivity">Productivity</option>
-                <option value="games">Games</option>
-                <option value="media">Media</option>
-                <option value="system">System</option>
-                <option value="custom">Custom</option>
-              </select>
+                onChange={(val: any) => setCategory(val)}
+                options={[
+                  { value: 'tools', label: 'Tools' },
+                  { value: 'productivity', label: 'Productivity' },
+                  { value: 'games', label: 'Games' },
+                  { value: 'media', label: 'Media' },
+                  { value: 'system', label: 'System' },
+                  { value: 'custom', label: 'Custom' },
+                ]}
+                className="w-full"
+              />
             </div>
 
             {/* Icon Preview */}

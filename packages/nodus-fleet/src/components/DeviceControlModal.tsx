@@ -30,7 +30,9 @@ export const DeviceControlModal: React.FC<DeviceControlModalProps> = ({ device, 
   const [processes, setProcesses] = useState<Array<{ pid: number; name: string; memory_kb: number }>>([]);
   const [activeSubTab, setActiveSubTab] = useState<'controls' | 'processes'>('controls');
 
-  const baseUrl = `http://${device.ipAddress}:9120`;
+  const cleanIp = device.ipAddress.replace(/^https?:\/\//, '').split(':')[0];
+  const port = device.port || 9120;
+  const baseUrl = `http://${cleanIp}:${port}`;
 
   const showStatus = (msg: string) => {
     setStatusMsg(msg);

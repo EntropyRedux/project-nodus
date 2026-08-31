@@ -49,6 +49,10 @@ const DEFAULT_SETTINGS: LauncherSettings = {
   notificationBadges: true,
   atAGlanceWidget: true,
   clockWidgetStyle: 'digital-bold',
+  enableClockWidget: true,
+  enableDeviceNameWidget: true,
+  enableBatteryWidget: true,
+  enableNotesWidget: true,
   minimalistMode: false,
   leftPanelOpacity: 85,
   taskbarOpacity: 92,
@@ -227,12 +231,6 @@ export const SystemSettingsProvider: React.FC<{ children: React.ReactNode }> = (
 
   const showToast = useCallback((message: string, duration = 3000) => {
     setToastMessage(message);
-    const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
-    if (bridge?.showToast) {
-      try {
-        bridge.showToast(message, false);
-      } catch (e) {}
-    }
     setTimeout(() => {
       setToastMessage((prev) => (prev === message ? null : prev));
     }, duration);
@@ -414,7 +412,7 @@ export const SystemSettingsProvider: React.FC<{ children: React.ReactNode }> = (
 
   const addNotification = useCallback((notif: Omit<NotificationItem, 'id' | 'time' | 'read'>) => {
     if (settings.soundEffects) {
-      audio.playNotificationChime();
+      audio.playNotification();
     }
     const newNotif: NotificationItem = {
       ...notif,

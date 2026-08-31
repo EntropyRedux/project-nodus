@@ -132,7 +132,7 @@ export const AmbientTaskbar: React.FC = () => {
           ) : systemStats ? (
             <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-black/40 text-[11px] border border-white/5 font-mono">
               <span className="text-[#8E8E93]">Host PC</span>
-              <span className="text-[#34C759] font-bold">{systemStats.cpu_usage_pct}% CPU</span>
+              <span className="text-[#34C759] font-bold">{Math.round(systemStats.cpu_load_percent)}% CPU</span>
             </div>
           ) : null}
 

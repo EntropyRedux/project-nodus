@@ -1,7 +1,3 @@
-// ─── LauncherContext (Unified Composite Facade) ───────────────
-// Partitions state into FleetContext, AppGridContext, SystemSettingsContext,
-// and ClipboardContext while providing 100% backward compatibility for useLauncher().
-
 import React, { useMemo } from 'react';
 import {
   SystemSettingsProvider,
@@ -23,17 +19,24 @@ import {
   useClipboard,
   ClipboardContextType,
 } from './ClipboardContext';
+import {
+  NotesProvider,
+  useNotes,
+  NotesContextType,
+} from './NotesContext';
 
 // Export domain sub-providers and sub-hooks
 export { SystemSettingsProvider, useSystemSettings } from './SystemSettingsContext';
 export { FleetProvider, useFleet } from './FleetContext';
 export { AppGridProvider, useAppGrid } from './AppGridContext';
 export { ClipboardProvider, useClipboard } from './ClipboardContext';
+export { NotesProvider, useNotes } from './NotesContext';
 
 export type LauncherContextType = SystemSettingsContextType &
   FleetContextType &
   AppGridContextType &
-  ClipboardContextType;
+  ClipboardContextType &
+  NotesContextType;
 
 /**
  * Composite Provider nesting domain contexts in order of dependency.
@@ -44,7 +47,9 @@ export const LauncherProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       <FleetProvider>
         <AppGridProvider>
           <ClipboardProvider>
-            {children}
+            <NotesProvider>
+              {children}
+            </NotesProvider>
           </ClipboardProvider>
         </AppGridProvider>
       </FleetProvider>
@@ -61,11 +66,14 @@ export const useLauncher = (): LauncherContextType => {
   const fleet = useFleet();
   const appGrid = useAppGrid();
   const clip = useClipboard();
+  const notes = useNotes();
 
   return useMemo(() => ({
     ...sys,
     ...fleet,
     ...appGrid,
     ...clip,
-  }), [sys, fleet, appGrid, clip]);
+    ...notes,
+  }), [sys, fleet, appGrid, clip, notes]);
 };
+

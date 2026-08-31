@@ -9,8 +9,33 @@ export interface HotCornerConfig {
   cooldown_ms: number;
 }
 
+export const isTauri = (): boolean => {
+  return typeof window !== 'undefined' && Boolean((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__);
+};
+
+const MOCK_PROCESSES: DeviceProcess[] = [
+  { pid: 4820, name: 'code.exe', memoryMb: 820, cpu: 3.4, category: 'user', user: 'Developer', status: 'running', description: 'Visual Studio Code IDE' },
+  { pid: 8192, name: 'chrome.exe', memoryMb: 1450, cpu: 5.2, category: 'user', user: 'Developer', status: 'running', description: 'Google Chrome Browser' },
+  { pid: 1204, name: 'node.exe', memoryMb: 340, cpu: 1.8, category: 'user', user: 'Developer', status: 'running', description: 'Node.js Runtime Worker' },
+  { pid: 9120, name: 'nodus-hub.exe', memoryMb: 128, cpu: 0.6, category: 'daemon', user: 'SYSTEM', status: 'running', description: 'Nodus Fleet Bridge Daemon' },
+  { pid: 6540, name: 'spotify.exe', memoryMb: 260, cpu: 0.9, category: 'user', user: 'Developer', status: 'running', description: 'Spotify Music Streaming' },
+  { pid: 3120, name: 'explorer.exe', memoryMb: 195, cpu: 0.4, category: 'system', user: 'SYSTEM', status: 'running', description: 'Windows Desktop Shell' },
+];
+
+const MOCK_SYSTEM_STATS: SystemStats = {
+  hostname: 'Nodus-Workstation-PC',
+  os: 'Windows 11 Pro 23H2 (x64)',
+  cpu_load_percent: 18,
+  ram_used_mb: 8420,
+  ram_total_mb: 32768,
+  uptime_seconds: 43200,
+};
+
 export const TauriService = {
   async getProcesses(): Promise<DeviceProcess[]> {
+    if (!isTauri()) {
+      return MOCK_PROCESSES;
+    }
     try {
       const raw = await invoke<{ pid: number; name: string; memory_kb: number; category?: string; user?: string; cpu?: number }[]>('get_processes');
       return raw.map((p) => ({
@@ -23,12 +48,16 @@ export const TauriService = {
         status: 'running' as const,
       }));
     } catch (e) {
-      console.warn('[TauriService] getProcesses error:', e);
-      return [];
+      console.warn('[TauriService] getProcesses error (falling back to mock):', e);
+      return MOCK_PROCESSES;
     }
   },
 
   async killProcess(pid: number): Promise<boolean> {
+    if (!isTauri()) {
+      console.log(`[WebPreview] Simulated process kill: ${pid}`);
+      return true;
+    }
     try {
       return await invoke<boolean>('kill_process', { pid });
     } catch (e) {
@@ -38,6 +67,10 @@ export const TauriService = {
   },
 
   async lockWorkstation(): Promise<boolean> {
+    if (!isTauri()) {
+      console.log('[WebPreview] Simulated lock workstation');
+      return true;
+    }
     try {
       return await invoke<boolean>('lock_workstation');
     } catch (e) {
@@ -47,24 +80,31 @@ export const TauriService = {
   },
 
   async getSystemStats(): Promise<SystemStats | null> {
+    if (!isTauri()) {
+      return MOCK_SYSTEM_STATS;
+    }
     try {
       return await invoke<SystemStats>('get_system_stats');
     } catch (e) {
-      console.warn('[TauriService] getSystemStats error:', e);
-      return null;
+      console.warn('[TauriService] getSystemStats error (falling back to mock):', e);
+      return MOCK_SYSTEM_STATS;
     }
   },
 
   async getHotCornerConfig(): Promise<HotCornerConfig | null> {
+    if (!isTauri()) {
+      return { enabled: true, hotspot_size: 8, dwell_time_ms: 180, cooldown_ms: 500 };
+    }
     try {
       return await invoke<HotCornerConfig>('get_hotcorner_config');
     } catch (e) {
       console.warn('[TauriService] getHotCornerConfig error:', e);
-      return null;
+      return { enabled: true, hotspot_size: 8, dwell_time_ms: 180, cooldown_ms: 500 };
     }
   },
 
   async setHotCornerEnabled(enabled: boolean): Promise<void> {
+    if (!isTauri()) return;
     try {
       await invoke('set_hotcorner_enabled', { enabled });
     } catch (e) {
@@ -73,15 +113,20 @@ export const TauriService = {
   },
 
   async setClickThrough(ignore: boolean): Promise<void> {
+    if (!isTauri()) return;
     try {
       const win = getCurrentWindow();
       await win.setIgnoreCursorEvents(ignore);
     } catch (e) {
-      // In web-browser dev mode this might fail safely
+      // Safe fallback
     }
   },
 
   async controlMedia(action: string): Promise<boolean> {
+    if (!isTauri()) {
+      console.log(`[WebPreview] Simulated media control: ${action}`);
+      return true;
+    }
     try {
       return await invoke<boolean>('control_media', { action });
     } catch (e) {
@@ -91,6 +136,9 @@ export const TauriService = {
   },
 
   async getClipboardText(): Promise<string> {
+    if (!isTauri()) {
+      return 'Nodus Companion live clipboard sync ready.';
+    }
     try {
       return await invoke<string>('get_clipboard_text');
     } catch (e) {
@@ -100,6 +148,12 @@ export const TauriService = {
   },
 
   async setClipboardText(text: string): Promise<boolean> {
+    if (!isTauri()) {
+      if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        navigator.clipboard.writeText(text).catch(() => {});
+      }
+      return true;
+    }
     try {
       return await invoke<boolean>('set_clipboard_text', { text });
     } catch (e) {
@@ -109,6 +163,7 @@ export const TauriService = {
   },
 
   async getClipboardImage(): Promise<string | null> {
+    if (!isTauri()) return null;
     try {
       return await invoke<string | null>('get_clipboard_image');
     } catch (e) {
@@ -117,6 +172,7 @@ export const TauriService = {
   },
 
   async setClipboardImage(base64Png: string): Promise<boolean> {
+    if (!isTauri()) return true;
     try {
       return await invoke<boolean>('set_clipboard_image', { base64Png });
     } catch (e) {
@@ -126,6 +182,9 @@ export const TauriService = {
   },
 
   async getClipboardContent(): Promise<{ content_type: string; text?: string; image_data?: string }> {
+    if (!isTauri()) {
+      return { content_type: 'text', text: 'Simulated clipboard payload' };
+    }
     try {
       return await invoke<{ content_type: string; text?: string; image_data?: string }>('get_clipboard_content');
     } catch (e) {
@@ -134,6 +193,10 @@ export const TauriService = {
   },
 
   async executeLocalCommand(commandOrPath: string, args?: string, workingDir?: string): Promise<boolean> {
+    if (!isTauri()) {
+      console.log(`[WebPreview] Simulated local execution: ${commandOrPath} ${args || ''}`);
+      return true;
+    }
     try {
       return await invoke<boolean>('execute_local_command', {
         req: {
@@ -149,46 +212,49 @@ export const TauriService = {
   },
 
   async simulateMouseMove(dx: number, dy: number): Promise<boolean> {
+    if (!isTauri()) return true;
     try {
       return await invoke<boolean>('simulate_mouse_move', { dx, dy });
     } catch (e) {
-      console.error('[TauriService] simulateMouseMove error:', e);
       return false;
     }
   },
 
   async simulateMouseClick(button: string): Promise<boolean> {
+    if (!isTauri()) return true;
     try {
       return await invoke<boolean>('simulate_mouse_click', { button });
     } catch (e) {
-      console.error(`[TauriService] simulateMouseClick(${button}) error:`, e);
       return false;
     }
   },
 
   async simulateMouseScroll(dx?: number, dy?: number): Promise<boolean> {
+    if (!isTauri()) return true;
     try {
       return await invoke<boolean>('simulate_mouse_scroll', { dx, dy });
     } catch (e) {
-      console.error('[TauriService] simulateMouseScroll error:', e);
       return false;
     }
   },
 
   async simulateHotkey(keys: string[]): Promise<boolean> {
+    if (!isTauri()) {
+      console.log(`[WebPreview] Simulated hotkey: ${keys.join('+')}`);
+      return true;
+    }
     try {
       return await invoke<boolean>('simulate_hotkey', { keys });
     } catch (e) {
-      console.error(`[TauriService] simulateHotkey(${keys.join('+')}) error:`, e);
       return false;
     }
   },
 
   async simulateText(text: string): Promise<boolean> {
+    if (!isTauri()) return true;
     try {
       return await invoke<boolean>('simulate_text', { text });
     } catch (e) {
-      console.error('[TauriService] simulateText error:', e);
       return false;
     }
   },

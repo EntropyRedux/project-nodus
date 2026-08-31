@@ -26,6 +26,7 @@ import { ClipboardItem, DeviceType } from '../../types/launcher';
 import { DEVICE_COLORS } from '../../utils/constants';
 import { universalNetworkFetch } from '../../services/FleetDirectClient';
 import { getSystemTheme, getAccentColor, getSurfaceRgba } from '../../utils/themes';
+import { ThemedSelect } from '../common/ThemedSelect';
 
 interface ClipboardHistoryPanelProps {
   onClose?: () => void;
@@ -121,9 +122,9 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
     >
       {/* 1. Compact Header Card */}
       <div 
-        className={`p-3 sm:p-3.5 ${currentTheme.cardRadius} border border-white/10 shadow-lg space-y-2.5 bg-black/20`}
+        className={`p-3 sm:p-3.5 ${currentTheme.cardRadius} ${currentTheme.classes.itemCard} shadow-sm space-y-2.5`}
       >
-        <div className="flex items-center justify-between border-b border-white/5 pb-2">
+        <div className={`flex items-center justify-between border-b ${currentTheme.isLight ? 'border-[#E2E8F0]' : 'border-white/5'} pb-2`}>
           <div className="flex items-center gap-2">
             <div 
               className={`p-1.5 ${currentTheme.buttonRadius} border`}
@@ -137,7 +138,7 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
             </div>
             <div>
               <h3 className={`text-xs font-bold ${currentTheme.classes.textPrimary} tracking-wide`}>Clipboard History</h3>
-              <p className={`text-[10px] ${currentTheme.classes.textMuted}`}>Shared across linked nodes</p>
+              <p className={`text-[10px] ${currentTheme.classes.textSecondary}`}>Shared across linked nodes</p>
             </div>
           </div>
 
@@ -160,7 +161,7 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
                   audio.playTap();
                   onClose();
                 }}
-                className="p-1 rounded-lg text-[#8E8E93] hover:text-[#F0F0F2] hover:bg-white/10 transition"
+                className={`p-1 ${currentTheme.buttonRadius} ${currentTheme.classes.actionButton}`}
                 title="Hide Clipboard Panel"
               >
                 <ChevronRight size={14} />
@@ -172,18 +173,18 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
         {/* Search & Filter Bar */}
         <div className="space-y-1.5">
           <div className="relative w-full">
-            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#8E8E93]" />
+            <Search size={12} className={`absolute left-2.5 top-1/2 -translate-y-1/2 ${currentTheme.classes.textMuted}`} />
             <input
               type="text"
               placeholder="Search clips..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-[#0A0A0C]/80 border border-white/10 rounded-xl pl-7 pr-7 py-1 text-xs text-[#F0F0F2] placeholder-[#8E8E93] focus:outline-none focus:border-[#34C759]"
+              className={`w-full ${currentTheme.classes.inputField} pl-7 pr-7 py-1 text-xs transition`}
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-[#8E8E93] hover:text-[#F0F0F2]"
+                className={`absolute right-2 top-1/2 -translate-y-1/2 ${currentTheme.classes.textMuted} hover:opacity-100`}
               >
                 <X size={11} />
               </button>
@@ -197,11 +198,14 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
                 audio.playTap();
                 setFilterDevice('all');
               }}
-              className={`px-2 py-0.5 rounded-lg text-[10px] font-medium transition shrink-0 ${
+              className={`px-2 py-0.5 ${currentTheme.pillRadius} text-[10px] font-medium transition shrink-0 ${
                 filterDevice === 'all'
                   ? 'bg-white/20 text-[#F0F0F2] font-bold border border-white/20'
+                  : currentTheme.isLight
+                  ? 'bg-[#F1F5F9] text-[#475569] hover:text-[#0F172A] border border-[#CBD5E1]'
                   : 'bg-[#0A0A0C]/60 text-[#8E8E93] hover:text-[#F0F0F2] border border-white/5'
               }`}
+              style={filterDevice === 'all' ? { backgroundColor: currentAccent.hex, color: '#090B10', borderColor: currentAccent.hex } : undefined}
             >
               All ({clipboardItems.length})
             </button>
@@ -211,9 +215,11 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
                 audio.playTap();
                 setOnlyPinned(!onlyPinned);
               }}
-              className={`px-2 py-0.5 rounded-lg text-[10px] font-medium transition shrink-0 flex items-center gap-1 ${
+              className={`px-2 py-0.5 ${currentTheme.pillRadius} text-[10px] font-medium transition shrink-0 flex items-center gap-1 ${
                 onlyPinned
                   ? 'bg-[#FFD60A]/20 text-[#FFD60A] font-bold border border-[#FFD60A]/40'
+                  : currentTheme.isLight
+                  ? 'bg-[#F1F5F9] text-[#475569] hover:text-[#FFD60A] border border-[#CBD5E1]'
                   : 'bg-[#0A0A0C]/60 text-[#8E8E93] hover:text-[#FFD60A] border border-white/5'
               }`}
               title="Pinned only"
@@ -233,10 +239,10 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
                     audio.playTap();
                     setFilterDevice(isSelected ? 'all' : d.id);
                   }}
-                  className="p-1 rounded-lg text-[10px] transition shrink-0 flex items-center gap-1 border"
+                  className={`p-1 ${currentTheme.buttonRadius} text-[10px] transition shrink-0 flex items-center gap-1 border`}
                   style={{
-                    backgroundColor: isSelected ? `${devColor}30` : '#0A0A0C99',
-                    borderColor: isSelected ? `${devColor}80` : 'rgba(255,255,255,0.06)',
+                    backgroundColor: isSelected ? `${devColor}30` : currentTheme.isLight ? '#F8FAFD' : '#0A0A0C99',
+                    borderColor: isSelected ? `${devColor}80` : currentTheme.isLight ? '#E2E8F0' : 'rgba(255,255,255,0.06)',
                     color: devColor,
                   }}
                   title={`${d.name} (${count} clips)`}
@@ -253,13 +259,10 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
       {/* 2. Quick Broadcast Input */}
       <form
         onSubmit={handleBroadcast}
-        className="p-2.5 rounded-xl border border-white/10 shadow-md flex items-center gap-1.5"
-        style={{
-          backgroundColor: `rgba(28, 28, 34, ${Math.min(1, clipboardPanelAlpha * 1.05)})`,
-        }}
+        className={`p-2.5 ${currentTheme.cardRadius} ${currentTheme.classes.itemCard} shadow-xs flex items-center gap-1.5`}
       >
         <div 
-          className="p-1 rounded-lg border flex items-center justify-center shrink-0"
+          className={`p-1 ${currentTheme.buttonRadius} border flex items-center justify-center shrink-0`}
           style={{
             backgroundColor: `${DEVICE_COLORS[inputDeviceId] || '#34C759'}20`,
             borderColor: `${DEVICE_COLORS[inputDeviceId] || '#34C759'}40`,
@@ -270,30 +273,30 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
           {getDeviceIcon(devices.find((d) => d.id === inputDeviceId)?.type || 'desktop', 12)}
         </div>
 
-        <select
+        <ThemedSelect
           value={inputDeviceId}
-          onChange={(e) => setInputDeviceId(e.target.value)}
-          className="bg-transparent text-[10px] text-[#8E8E93] focus:outline-none max-w-[65px] truncate cursor-pointer"
-        >
-          {devices.map((d) => (
-            <option key={d.id} value={d.id} className="bg-[#1C1C1E] text-white">
-              {d.name}
-            </option>
-          ))}
-        </select>
+          onChange={(val) => setInputDeviceId(val)}
+          options={devices.map((d) => ({
+            value: d.id,
+            label: d.name,
+            icon: getDeviceIcon(d.type, 12),
+          }))}
+          compact
+          className="shrink-0"
+        />
 
         <input
           type="text"
           placeholder="Sync new text..."
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
-          className="flex-1 bg-[#0A0A0C] border border-white/10 rounded-lg px-2 py-1 text-xs text-[#F0F0F2] placeholder-[#8E8E93] focus:outline-none focus:border-[#34C759] min-w-0"
+          className={`flex-1 ${currentTheme.classes.inputField} px-2 py-1 text-xs min-w-0`}
         />
 
         <button
           type="submit"
           disabled={!inputText.trim()}
-          className="p-1.5 bg-[#34C759] hover:bg-[#30D158] text-[#0A0A0C] rounded-lg transition flex items-center justify-center disabled:opacity-30 shrink-0"
+          className={`p-1.5 ${currentTheme.buttonRadius} bg-[#34C759] hover:bg-[#30D158] text-[#0A0A0C] transition flex items-center justify-center disabled:opacity-30 shrink-0 font-bold`}
           title="Broadcast to cluster"
         >
           <Send size={12} />
@@ -304,14 +307,11 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
       <div className="flex-1 flex flex-col gap-2 min-h-0">
         {filteredItems.length === 0 ? (
           <div 
-            className="p-6 text-center rounded-2xl border border-white/10 text-[#8E8E93] space-y-1.5 shadow-md"
-            style={{
-              backgroundColor: `rgba(28, 28, 34, ${Math.min(1, clipboardPanelAlpha * 1.05)})`,
-            }}
+            className={`p-6 text-center ${currentTheme.cardRadius} ${currentTheme.classes.itemCard} space-y-1.5 shadow-sm`}
           >
             <Clipboard size={22} className="mx-auto opacity-30 text-[#34C759]" />
-            <p className="text-xs font-semibold text-[#F0F0F2]">No clips found</p>
-            <p className="text-[10px]">Copy text on any device to see it here.</p>
+            <p className={`text-xs font-semibold ${currentTheme.classes.textPrimary}`}>No clips found</p>
+            <p className={`text-[10px] ${currentTheme.classes.textSecondary}`}>Copy text on any device to see it here.</p>
           </div>
         ) : (
           filteredItems.map((item) => {
@@ -325,9 +325,8 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
               <div
                 key={item.id}
                 onClick={(e) => toggleExpand(item.id, e)}
-                className="group relative p-2.5 rounded-xl border border-white/10 hover:border-white/20 transition-all duration-150 shadow-sm flex flex-col gap-1.5 cursor-pointer"
+                className={`group relative p-2.5 ${currentTheme.cardRadius} ${currentTheme.classes.itemCard} hover:shadow-md transition-all duration-150 flex flex-col gap-1.5 cursor-pointer`}
                 style={{
-                  backgroundColor: `rgba(28, 28, 34, ${Math.min(1, clipboardPanelAlpha * 1.05)})`,
                   borderLeftWidth: '3.5px',
                   borderLeftColor: devColor,
                 }}
@@ -355,13 +354,13 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
                           ? 'text-[#007AFF] font-mono underline decoration-blue-500/30' 
                           : isCode 
                           ? 'text-[#34C759] font-mono text-[11px]' 
-                          : 'text-[#F0F0F2]'
+                          : currentTheme.classes.textPrimary
                       }`}>
                         {item.text}
                       </span>
                     ) : (
-                      <div className="flex items-center gap-1.5 text-[10px] text-[#8E8E93]">
-                        <span className="font-semibold text-[#F0F0F2] truncate">{item.deviceName}</span>
+                      <div className={`flex items-center gap-1.5 text-[10px] ${currentTheme.classes.textSecondary}`}>
+                        <span className={`font-semibold ${currentTheme.classes.textPrimary} truncate`}>{item.deviceName}</span>
                         <span>•</span>
                         <span>{item.timestamp}</span>
                       </div>
@@ -376,10 +375,10 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
                     {/* Expand/Collapse Toggle Button */}
                     <button
                       onClick={(e) => toggleExpand(item.id, e)}
-                      className={`p-1 rounded-md transition ${
+                      className={`p-1 ${currentTheme.buttonRadius} transition ${
                         isExpanded
-                          ? 'bg-white/15 text-white'
-                          : 'text-[#8E8E93] hover:text-[#F0F0F2] hover:bg-white/10'
+                          ? currentTheme.isLight ? 'bg-[#E2E8F0] text-[#0F172A]' : 'bg-white/15 text-white'
+                          : currentTheme.isLight ? 'text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9]' : 'text-[#8E8E93] hover:text-[#F0F0F2] hover:bg-white/10'
                       }`}
                       title={isExpanded ? 'Collapse to single row' : 'Expand full content'}
                     >
@@ -389,10 +388,10 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
                     {/* Pin Button */}
                     <button
                       onClick={() => togglePinClipboardItem(item.id)}
-                      className={`p-1 rounded-md transition ${
+                      className={`p-1 ${currentTheme.buttonRadius} transition ${
                         item.pinned
                           ? 'text-[#FFD60A] bg-[#FFD60A]/15'
-                          : 'text-[#8E8E93] hover:text-[#FFD60A] hover:bg-white/10'
+                          : currentTheme.isLight ? 'text-[#64748B] hover:text-[#FFD60A] hover:bg-[#F1F5F9]' : 'text-[#8E8E93] hover:text-[#FFD60A] hover:bg-white/10'
                       }`}
                       title={item.pinned ? 'Unpin' : 'Pin'}
                     >
@@ -402,10 +401,10 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
                     {/* Copy Button (Icon Only with status check) */}
                     <button
                       onClick={(e) => handleCopy(item, e)}
-                      className={`p-1 rounded-md transition ${
+                      className={`p-1 ${currentTheme.buttonRadius} transition ${
                         isJustCopied
-                          ? 'bg-[#34C759] text-[#0A0A0C] shadow-sm'
-                          : 'text-[#8E8E93] hover:text-[#34C759] hover:bg-white/10'
+                          ? 'bg-[#34C759] text-[#0A0A0C] shadow-sm font-bold'
+                          : currentTheme.isLight ? 'text-[#64748B] hover:text-[#34C759] hover:bg-[#F1F5F9]' : 'text-[#8E8E93] hover:text-[#34C759] hover:bg-white/10'
                       }`}
                       title={isJustCopied ? 'Copied!' : 'Copy'}
                     >
@@ -415,7 +414,7 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
                     {/* Delete Button */}
                     <button
                       onClick={() => removeClipboardItem(item.id)}
-                      className="p-1 text-[#8E8E93] hover:text-[#FF3B30] hover:bg-white/10 rounded-md transition"
+                      className={`p-1 ${currentTheme.isLight ? 'text-[#64748B] hover:text-[#FF3B30] hover:bg-[#F1F5F9]' : 'text-[#8E8E93] hover:text-[#FF3B30] hover:bg-white/10'} ${currentTheme.buttonRadius} transition`}
                       title="Delete"
                     >
                       <Trash2 size={11} />
@@ -425,9 +424,9 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
 
                 {/* Expanded Multi-Line Content Container */}
                 {isExpanded && (
-                  <div className="pt-1 text-xs border-t border-white/5 animate-in fade-in zoom-in-95 duration-150">
+                  <div className={`pt-1 text-xs border-t ${currentTheme.isLight ? 'border-[#E2E8F0]' : 'border-white/5'} animate-in fade-in zoom-in-95 duration-150`}>
                     {item.type === 'image' && item.imageData ? (
-                      <div className="relative rounded-xl overflow-hidden border border-white/10 bg-black/40 max-h-56 flex items-center justify-center p-1.5">
+                      <div className={`relative ${currentTheme.cardRadius} overflow-hidden border ${currentTheme.isLight ? 'border-[#CBD5E1] bg-[#F1F5F9]' : 'border-white/10 bg-black/40'} max-h-56 flex items-center justify-center p-1.5`}>
                         <img
                           src={item.imageData}
                           alt="Clipboard clip"
@@ -435,22 +434,22 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
                         />
                       </div>
                     ) : isLink ? (
-                      <div className="flex items-start gap-1.5 p-2 rounded-lg bg-[#0A0A0C] border border-white/5 text-[#007AFF] font-mono break-all leading-relaxed">
+                      <div className={`flex items-start gap-1.5 p-2 ${currentTheme.buttonRadius} ${currentTheme.isLight ? 'bg-[#F8FAFD] border border-[#CBD5E1]' : 'bg-[#0A0A0C] border border-white/5'} text-[#007AFF] font-mono break-all leading-relaxed`}>
                         <ExternalLink size={12} className="shrink-0 mt-0.5" />
                         <span className="underline decoration-blue-500/40">{item.text}</span>
                       </div>
                     ) : isCode ? (
-                      <pre className="p-2 rounded-lg bg-[#0A0A0C] border border-white/5 text-[#34C759] font-mono text-[11px] whitespace-pre-wrap break-all leading-relaxed max-h-48 overflow-y-auto scrollbar-thin">
+                      <pre className={`p-2 ${currentTheme.buttonRadius} ${currentTheme.isLight ? 'bg-[#F8FAFD] border border-[#CBD5E1]' : 'bg-[#0A0A0C] border border-white/5'} text-[#34C759] font-mono text-[11px] whitespace-pre-wrap break-all leading-relaxed max-h-48 overflow-y-auto scrollbar-thin`}>
                         {item.text}
                       </pre>
                     ) : (
-                      <div className="p-2 rounded-lg bg-[#0A0A0C]/60 border border-white/5 text-[#F0F0F2] whitespace-pre-wrap break-words leading-relaxed max-h-48 overflow-y-auto scrollbar-thin">
+                      <div className={`p-2 ${currentTheme.buttonRadius} ${currentTheme.isLight ? 'bg-[#F8FAFD] border border-[#CBD5E1] text-[#0F172A]' : 'bg-[#0A0A0C]/60 border border-white/5 text-[#F0F0F2]'} whitespace-pre-wrap break-words leading-relaxed max-h-48 overflow-y-auto scrollbar-thin`}>
                         {item.text}
                       </div>
                     )}
 
-                    <div className="flex items-center justify-between text-[9px] text-[#8E8E93] pt-1.5 px-0.5">
-                      <span className="uppercase font-mono font-bold tracking-wider opacity-70">
+                    <div className={`flex items-center justify-between text-[9px] ${currentTheme.classes.textSecondary} pt-1.5 px-0.5`}>
+                      <span className="uppercase font-mono font-bold tracking-wider opacity-75">
                         {item.type} • {item.text.length} chars
                       </span>
                       <span className="italic text-[#34C759]">Click anywhere on card to copy</span>
@@ -464,7 +463,7 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
       </div>
 
       {/* 4. Compact Bottom Status Bar */}
-      <div className="p-2 rounded-xl bg-[#1C1C1E]/80 backdrop-blur-xl border border-white/10 shadow-md flex items-center justify-between text-[10px] text-[#8E8E93] shrink-0">
+      <div className={`p-2 ${currentTheme.cardRadius} ${currentTheme.classes.itemCard} shadow-sm flex items-center justify-between text-[10px] ${currentTheme.classes.textSecondary} shrink-0`}>
         <span>
           {clipboardItems.length} items ({clipboardItems.filter((i) => i.pinned).length} pinned)
         </span>
@@ -472,7 +471,7 @@ export const ClipboardHistoryPanel: React.FC<ClipboardHistoryPanelProps> = ({ on
         {clipboardItems.some((i) => !i.pinned) && (
           <button
             onClick={clearClipboardHistory}
-            className="p-1 rounded-md text-[#8E8E93] hover:text-[#FF3B30] hover:bg-white/5 transition flex items-center gap-1 font-semibold"
+            className={`p-1 ${currentTheme.buttonRadius} ${currentTheme.classes.actionButton} hover:text-[#FF3B30] transition flex items-center gap-1 font-semibold`}
             title="Clear unpinned clips"
           >
             <Trash2 size={11} />

@@ -79,13 +79,25 @@ export const ACCENT_COLORS: Record<AccentColorId, AccentColorConfig> = {
     badgeBorder: 'rgba(16, 185, 129, 0.35)',
     previewPalette: ['#10B981', '#059669', '#047857', '#D1FAE5'],
   },
+  amethyst: {
+    id: 'amethyst',
+    name: 'Amethyst',
+    subtitle: 'Mystic Purple & Royal Violet',
+    hex: '#A855F7',
+    lightHex: '#9333EA',
+    darkHex: '#7E22CE',
+    glowRgba: 'rgba(168, 85, 247, 0.35)',
+    badgeBg: 'rgba(168, 85, 247, 0.15)',
+    badgeBorder: 'rgba(168, 85, 247, 0.35)',
+    previewPalette: ['#A855F7', '#9333EA', '#7E22CE', '#F3E8FF'],
+  },
 };
 
 export const ACCENT_COLOR_LIST: AccentColorConfig[] = Object.values(ACCENT_COLORS);
 
-export function getAccentColor(id?: AccentColorId): AccentColorConfig {
-  if (id && ACCENT_COLORS[id]) {
-    return ACCENT_COLORS[id];
+export function getAccentColor(id?: AccentColorId | string): AccentColorConfig {
+  if (id && (ACCENT_COLORS as Record<string, AccentColorConfig>)[id]) {
+    return (ACCENT_COLORS as Record<string, AccentColorConfig>)[id];
   }
   return ACCENT_COLORS.sapphire;
 }
@@ -93,6 +105,24 @@ export function getAccentColor(id?: AccentColorId): AccentColorConfig {
 /* =========================================================
    2. SYSTEM UI THEME PACK DEFINITIONS
    ========================================================= */
+
+export interface ThemeSurfaceTokens {
+  canvasBg: string;
+  panelBg: string;
+  cardBg: string;
+  cardHoverBg: string;
+  inputBg: string;
+  borderSubtle: string;
+  borderDefault: string;
+  borderHover: string;
+  textPrimary: string;
+  textSecondary: string;
+  textMuted: string;
+  cardRadius: string;
+  pillRadius: string;
+  buttonRadius: string;
+  cardShadow: string;
+}
 
 export interface SystemTheme {
   id: ThemeId;
@@ -103,13 +133,16 @@ export interface SystemTheme {
   keyAesthetic: string[];
   wallpaperId: string;
   wallpaperStyle: React.CSSProperties;
-  archetype: 'glass' | 'hud' | 'brutalist' | 'minimal';
+  archetype: 'glass' | 'hud' | 'brutalist' | 'minimal' | 'material';
+  isLight: boolean;
+  homescreenTextShadow: string;
   cardRadius: string;
   buttonRadius: string;
   pillRadius: string;
   borderStyle: string;
   cardShadow: string;
   activeButtonTransform: string;
+  surfaces: ThemeSurfaceTokens;
   classes: {
     containerFont: string;
     bgCanvas: string;
@@ -141,6 +174,74 @@ export interface SystemTheme {
 }
 
 export const SYSTEM_THEMES: Record<ThemeId, SystemTheme> = {
+  'material-light': {
+    id: 'material-light',
+    name: 'Material Atmosphere',
+    tagline: 'Google Material You & Tonal Light Canvas',
+    designSystem: 'Google Material 3',
+    description: 'Clean, high-legibility Google-inspired light surfaces with pastel tonal containers, pill geometry, and soft ambient elevation.',
+    keyAesthetic: ['Tonal surface containers', 'Pill & squircle geometry', 'High-contrast typography', 'Soft ambient elevation'],
+    wallpaperId: 'alpine-horizon',
+    wallpaperStyle: {
+      backgroundImage: `linear-gradient(rgba(10, 10, 12, 0.4), rgba(10, 10, 12, 0.65)), url('https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=2000&q=80')`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+    },
+    archetype: 'material',
+    isLight: true,
+    homescreenTextShadow: 'drop-shadow-[0_1.5px_3px_rgba(0,0,0,0.9)]',
+    cardRadius: 'rounded-3xl',
+    buttonRadius: 'rounded-2xl',
+    pillRadius: 'rounded-full',
+    borderStyle: 'border border-[#E2E8F0]',
+    cardShadow: 'shadow-[0_4px_24px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.04)]',
+    activeButtonTransform: 'active:scale-95 transition-transform duration-100',
+    surfaces: {
+      canvasBg: '#F8FAFD',
+      panelBg: '#FFFFFF',
+      cardBg: '#FFFFFF',
+      cardHoverBg: '#F1F5F9',
+      inputBg: '#F1F5F9',
+      borderSubtle: '#E2E8F0',
+      borderDefault: '#CBD5E1',
+      borderHover: '#94A3B8',
+      textPrimary: '#0F172A',
+      textSecondary: '#475569',
+      textMuted: '#64748B',
+      cardRadius: 'rounded-3xl',
+      pillRadius: 'rounded-full',
+      buttonRadius: 'rounded-2xl',
+      cardShadow: 'shadow-[0_4px_24px_rgba(0,0,0,0.06)]',
+    },
+    classes: {
+      containerFont: 'font-sans',
+      bgCanvas: 'bg-[#F8FAFD]',
+      bgOverlay: 'bg-black/[0.03]',
+      textPrimary: 'text-[#0F172A]',
+      textSecondary: 'text-[#334155]',
+      textMuted: 'text-[#64748B]',
+      cardBg: 'bg-[#FFFFFF] backdrop-blur-xl',
+      cardBorder: 'border-[#E2E8F0]',
+      cardBorderHover: 'hover:border-[#CBD5E1]',
+      cardHeader: 'bg-[#F8FAFD] border-b border-[#E2E8F0]',
+      taskbarBg: 'bg-[#FFFFFF]/95 backdrop-blur-2xl',
+      taskbarBorder: 'border-t border-[#E2E8F0]',
+      sidebarBg: 'bg-[#F8FAFD]/95 backdrop-blur-2xl border-r border-[#E2E8F0]',
+      badgeStyle: 'bg-[#F1F5F9] border border-[#CBD5E1] text-[#0F172A]',
+      modalContainer: 'backdrop-blur-3xl border border-[#CBD5E1] rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.12),0_4px_12px_rgba(0,0,0,0.04)]',
+      modalHeader: 'bg-white/60 border-b border-[#E2E8F0]',
+      drawerFlyout: 'backdrop-blur-3xl border border-[#CBD5E1] rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.14),0_6px_16px_rgba(0,0,0,0.06)]',
+      inputField: 'bg-white/80 border border-[#CBD5E1] rounded-2xl text-[#0F172A] placeholder-[#64748B] focus:border-[#0B57D0] focus:bg-[#FFFFFF]',
+      actionButton: 'bg-white/70 hover:bg-white/90 text-[#0F172A] border border-[#E2E8F0] rounded-2xl active:scale-95 transition-all',
+      itemCard: 'bg-white/80 hover:bg-white/95 backdrop-blur-md border border-[#E2E8F0] rounded-2xl shadow-xs text-[#0F172A]',
+      contextMenu: 'backdrop-blur-2xl border border-[#E2E8F0] rounded-2xl shadow-2xl shadow-black/10 text-[#0F172A]',
+      iconBg: 'bg-[#FFFFFF]',
+      iconBorder: 'border border-[#E2E8F0]',
+      iconHover: 'hover:bg-[#F8FAFD] hover:border-[#CBD5E1]',
+      iconShadow: 'shadow-[0_2px_8px_rgba(0,0,0,0.06),0_1px_2px_rgba(0,0,0,0.04)]',
+      folderBg: 'bg-[#F8FAFD] border border-[#E2E8F0] shadow-xs hover:bg-[#F1F5F9]',
+    },
+  },
   'glassmorphism': {
     id: 'glassmorphism',
     name: 'Obsidian Glass',
@@ -148,18 +249,38 @@ export const SYSTEM_THEMES: Record<ThemeId, SystemTheme> = {
     designSystem: 'Aero Glassmorphism',
     description: 'Ultra-refined translucent dark surfaces, smooth organic squircles, and delicate ambient light reflections.',
     keyAesthetic: ['Frosted backdrop blurs', 'Smooth rounded corners', 'Ambient glow halos', 'Minimal floating dock'],
-    wallpaperId: 'alpine',
+    wallpaperId: 'alpine-horizon',
     wallpaperStyle: {
-      backgroundColor: '#090B10',
-      backgroundImage: 'radial-gradient(ellipse 75% 65% at 50% -15%, rgba(56, 189, 248, 0.12), rgba(16, 185, 129, 0.05), rgba(9, 11, 16, 0.98))',
+      backgroundImage: `linear-gradient(rgba(10, 10, 12, 0.4), rgba(10, 10, 12, 0.65)), url('https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=2000&q=80')`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
     },
     archetype: 'glass',
+    isLight: false,
+    homescreenTextShadow: 'drop-shadow-[0_1.5px_3px_rgba(0,0,0,0.85)]',
     cardRadius: 'rounded-2xl',
     buttonRadius: 'rounded-xl',
     pillRadius: 'rounded-full',
     borderStyle: 'border border-white/[0.08]',
     cardShadow: 'shadow-[0_20px_50px_rgba(0,0,0,0.7)]',
     activeButtonTransform: 'active:scale-95 transition-transform duration-100',
+    surfaces: {
+      canvasBg: '#090B10',
+      panelBg: 'rgba(9, 11, 16, 0.88)',
+      cardBg: 'rgba(255, 255, 255, 0.04)',
+      cardHoverBg: 'rgba(255, 255, 255, 0.08)',
+      inputBg: 'rgba(255, 255, 255, 0.04)',
+      borderSubtle: 'rgba(255, 255, 255, 0.08)',
+      borderDefault: 'rgba(255, 255, 255, 0.12)',
+      borderHover: 'rgba(255, 255, 255, 0.22)',
+      textPrimary: '#F1F5F9',
+      textSecondary: '#94A3B8',
+      textMuted: '#64748B',
+      cardRadius: 'rounded-2xl',
+      pillRadius: 'rounded-full',
+      buttonRadius: 'rounded-xl',
+      cardShadow: 'shadow-[0_20px_50px_rgba(0,0,0,0.7)]',
+    },
     classes: {
       containerFont: 'font-sans',
       bgCanvas: 'bg-[#090B10]',
@@ -196,18 +317,38 @@ export const SYSTEM_THEMES: Record<ThemeId, SystemTheme> = {
     designSystem: 'Tactical Military HUD',
     description: 'Angular chamfered framing, monospace telemetry readouts, scanline matrices, bracketed labels, and high-tech status grids.',
     keyAesthetic: ['[SYS//ONLINE] brackets', 'Sharp chamfered edges', 'Monospace telemetry', 'Segmented tactical grid'],
-    wallpaperId: 'deep-nebula',
+    wallpaperId: 'cyber-grid',
     wallpaperStyle: {
-      backgroundColor: '#05070B',
-      backgroundImage: 'radial-gradient(ellipse 90% 70% at 50% -10%, rgba(20, 30, 45, 0.4), rgba(5, 7, 11, 0.98)), repeating-linear-gradient(0deg, rgba(255,255,255,0.01) 0px, rgba(255,255,255,0.01) 1px, transparent 1px, transparent 4px)',
+      backgroundImage: `linear-gradient(rgba(10, 10, 12, 0.4), rgba(10, 10, 12, 0.65)), url('https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?auto=format&fit=crop&w=2000&q=80')`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
     },
     archetype: 'hud',
+    isLight: false,
+    homescreenTextShadow: 'drop-shadow-[0_1.5px_3px_rgba(0,0,0,0.9)]',
     cardRadius: 'rounded-none',
     buttonRadius: 'rounded-none',
     pillRadius: 'rounded-none',
     borderStyle: 'border border-cyan-500/30',
     cardShadow: 'shadow-[0_0_25px_rgba(0,240,255,0.08)]',
     activeButtonTransform: 'active:translate-x-0.5 active:translate-y-0.5 transition-transform duration-75',
+    surfaces: {
+      canvasBg: '#05070B',
+      panelBg: 'rgba(7, 12, 18, 0.94)',
+      cardBg: 'rgba(255, 255, 255, 0.04)',
+      cardHoverBg: 'rgba(255, 255, 255, 0.08)',
+      inputBg: 'rgba(0, 0, 0, 0.90)',
+      borderSubtle: 'rgba(6, 182, 212, 0.35)',
+      borderDefault: 'rgba(6, 182, 212, 0.45)',
+      borderHover: '#22D3EE',
+      textPrimary: '#E2F1F8',
+      textSecondary: '#7B9EAF',
+      textMuted: '#415C6B',
+      cardRadius: 'rounded-none',
+      pillRadius: 'rounded-none',
+      buttonRadius: 'rounded-none',
+      cardShadow: 'shadow-[0_0_25px_rgba(0,240,255,0.08)]',
+    },
     classes: {
       containerFont: 'font-hud',
       bgCanvas: 'bg-[#05070B]',
@@ -244,19 +385,38 @@ export const SYSTEM_THEMES: Record<ThemeId, SystemTheme> = {
     designSystem: 'Retro Pop Neobrutalism',
     description: 'Chunky 2.5px solid high-contrast borders, solid tactile 3D offset drop shadows, sticker badges, and crisp geometric pop.',
     keyAesthetic: ['Solid 4px offset shadow', 'Thick 2.5px dark borders', 'Tactile button press', 'Sticker chip tags'],
-    wallpaperId: 'tokyo-synth',
+    wallpaperId: 'material-fluid',
     wallpaperStyle: {
-      backgroundColor: '#0F1117',
-      backgroundImage: 'radial-gradient(#ffffff0a 2px, transparent 2px)',
-      backgroundSize: '24px 24px',
+      backgroundImage: `linear-gradient(rgba(10, 10, 12, 0.35), rgba(10, 10, 12, 0.6)), url('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=2000&q=80')`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
     },
     archetype: 'brutalist',
+    isLight: false,
+    homescreenTextShadow: 'drop-shadow-[0_2px_3px_rgba(0,0,0,0.95)]',
     cardRadius: 'rounded-xl',
     buttonRadius: 'rounded-lg',
     pillRadius: 'rounded-md',
     borderStyle: 'border-2 border-black/80',
     cardShadow: 'shadow-[6px_6px_0px_#000000]',
     activeButtonTransform: 'active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all duration-75',
+    surfaces: {
+      canvasBg: '#0C0E14',
+      panelBg: '#181C26',
+      cardBg: '#202534',
+      cardHoverBg: '#2A3147',
+      inputBg: '#0E1118',
+      borderSubtle: '#000000',
+      borderDefault: '#000000',
+      borderHover: '#FFFFFF',
+      textPrimary: '#FFFFFF',
+      textSecondary: '#D1D5DB',
+      textMuted: '#9CA3AF',
+      cardRadius: 'rounded-xl',
+      pillRadius: 'rounded-md',
+      buttonRadius: 'rounded-lg',
+      cardShadow: 'shadow-[4px_4px_0px_#000000]',
+    },
     classes: {
       containerFont: 'font-brutalist',
       bgCanvas: 'bg-[#0C0E14]',
@@ -293,18 +453,38 @@ export const SYSTEM_THEMES: Record<ThemeId, SystemTheme> = {
     designSystem: 'Minimalist Swiss Studio',
     description: 'Understated Swiss typographic hierarchy, flat matte slate surfaces, zero decorative drop-shadows, and pure breathability.',
     keyAesthetic: ['Zero drop-shadows', 'Hairline grid dividers', 'Matte charcoal slate', 'Generous whitespace'],
-    wallpaperId: 'nordic-frost',
+    wallpaperId: 'forest-mist',
     wallpaperStyle: {
-      backgroundColor: '#0D1117',
-      backgroundImage: 'linear-gradient(180deg, #111620 0%, #0D1117 100%)',
+      backgroundImage: `linear-gradient(rgba(10, 10, 12, 0.4), rgba(10, 10, 12, 0.65)), url('https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=2000&q=80')`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
     },
     archetype: 'minimal',
+    isLight: false,
+    homescreenTextShadow: 'drop-shadow-[0_1.5px_3px_rgba(0,0,0,0.85)]',
     cardRadius: 'rounded-none',
     buttonRadius: 'rounded-none',
     pillRadius: 'rounded-none',
     borderStyle: 'border border-white/[0.08]',
     cardShadow: 'shadow-none',
     activeButtonTransform: 'active:opacity-75 transition-opacity duration-100',
+    surfaces: {
+      canvasBg: '#0D1117',
+      panelBg: '#131822',
+      cardBg: '#181F2C',
+      cardHoverBg: '#1E2638',
+      inputBg: '#10151E',
+      borderSubtle: 'rgba(255, 255, 255, 0.08)',
+      borderDefault: 'rgba(255, 255, 255, 0.12)',
+      borderHover: 'rgba(255, 255, 255, 0.25)',
+      textPrimary: '#F8FAFC',
+      textSecondary: '#94A3B8',
+      textMuted: '#64748B',
+      cardRadius: 'rounded-none',
+      pillRadius: 'rounded-none',
+      buttonRadius: 'rounded-none',
+      cardShadow: 'shadow-none',
+    },
     classes: {
       containerFont: 'font-minimal',
       bgCanvas: 'bg-[#0D1117]',
@@ -338,9 +518,9 @@ export const SYSTEM_THEMES: Record<ThemeId, SystemTheme> = {
 
 export const THEME_LIST: SystemTheme[] = Object.values(SYSTEM_THEMES);
 
-export function getSystemTheme(themeId?: ThemeId): SystemTheme {
-  if (themeId && SYSTEM_THEMES[themeId]) {
-    return SYSTEM_THEMES[themeId];
+export function getSystemTheme(themeId?: ThemeId | string): SystemTheme {
+  if (themeId && (SYSTEM_THEMES as Record<string, SystemTheme>)[themeId]) {
+    return (SYSTEM_THEMES as Record<string, SystemTheme>)[themeId];
   }
   return SYSTEM_THEMES['glassmorphism'];
 }
@@ -350,12 +530,25 @@ export type SurfaceType = 'modal' | 'panel' | 'taskbar' | 'sidebar' | 'popup' | 
 /**
  * Computes reactive RGBA color for any surface type based on the active theme and global opacity slider value.
  */
-export function getSurfaceRgba(themeId?: ThemeId, opacityPercent?: number, surface: SurfaceType = 'panel'): string {
+export function getSurfaceRgba(themeId?: ThemeId | string, opacityPercent?: number, surface: SurfaceType = 'panel'): string {
   const userPct = opacityPercent ?? 92;
   const alpha = Math.max(0.12, Math.min(0.98, userPct / 100));
   const t = themeId || 'glassmorphism';
 
   switch (t) {
+    case 'material-light':
+      switch (surface) {
+        case 'modal': return `rgba(255, 255, 255, ${(alpha * 0.96).toFixed(3)})`;
+        case 'panel': return `rgba(255, 255, 255, ${(alpha * 0.92).toFixed(3)})`;
+        case 'taskbar': return `rgba(255, 255, 255, ${(alpha * 0.90).toFixed(3)})`;
+        case 'sidebar': return `rgba(248, 250, 253, ${(alpha * 0.90).toFixed(3)})`;
+        case 'popup': return `rgba(255, 255, 255, ${(alpha * 0.96).toFixed(3)})`;
+        case 'window': return `rgba(255, 255, 255, ${(alpha * 0.96).toFixed(3)})`;
+        case 'card': return `rgba(255, 255, 255, ${(alpha * 0.75).toFixed(3)})`;
+        case 'itemCard': return `rgba(248, 250, 252, ${(alpha * 0.60).toFixed(3)})`;
+      }
+      break;
+
     case 'cyberpunk-hud':
       switch (surface) {
         case 'modal': return `rgba(7, 12, 18, ${(alpha * 0.96).toFixed(3)})`;

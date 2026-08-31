@@ -1,5 +1,5 @@
 import React, { useRef, memo, useCallback, useMemo } from 'react';
-import { X, FolderPlus } from 'lucide-react';
+import { X, FolderPlus, ArrowLeftRight } from 'lucide-react';
 import { AppItem } from '../../types/launcher';
 import { DynamicIcon } from '../common/DynamicIcon';
 import { useLauncher } from '../../context/LauncherContext';
@@ -23,6 +23,7 @@ export const AppIcon: React.FC<AppIconProps> = memo(({ app, size = 'normal' }) =
     setDraggedAppId,
     setDragPosition,
     hoverTargetAppId,
+    folderCombineArmedId,
     settings, 
     showConfirm,
     notifications,
@@ -127,7 +128,18 @@ export const AppIcon: React.FC<AppIconProps> = memo(({ app, size = 'normal' }) =
       large: 'rounded-none',
       xlarge: 'rounded-none',
     },
-  }[currentTheme.archetype];
+    material: {
+      small: 'rounded-2xl',
+      medium: 'rounded-3xl',
+      large: 'rounded-3xl',
+      xlarge: 'rounded-[1.5rem]',
+    },
+  }[currentTheme.archetype] || {
+    small: 'rounded-2xl',
+    medium: 'rounded-3xl',
+    large: 'rounded-3xl',
+    xlarge: 'rounded-[1.5rem]',
+  };
 
   const sizeMap = {
     small: {
@@ -232,7 +244,11 @@ export const AppIcon: React.FC<AppIconProps> = memo(({ app, size = 'normal' }) =
       <div className="relative">
         <div
           className={`${size === 'dock' ? dockIconClass : getIconClass()} ${
-            hoverTargetAppId === app.id ? 'ring-2 ring-[#38BDF8] scale-110 shadow-[0_0_20px_rgba(56,189,248,0.5)] bg-[#38BDF8]/10' : ''
+            hoverTargetAppId === app.id
+              ? folderCombineArmedId === app.id
+                ? 'ring-2 ring-[#38BDF8] scale-110 shadow-[0_0_20px_rgba(56,189,248,0.6)] bg-[#38BDF8]/20 animate-pulse'
+                : 'ring-2 ring-white/60 scale-105 shadow-[0_0_12px_rgba(255,255,255,0.3)]'
+              : ''
           }`}
           style={
             isSquircle
@@ -310,15 +326,26 @@ export const AppIcon: React.FC<AppIconProps> = memo(({ app, size = 'normal' }) =
 
         {/* Drop Target Indicator */}
         {hoverTargetAppId === app.id && (
-          <div className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-[#38BDF8] text-[#090B10] flex items-center justify-center shadow-lg z-40 animate-bounce">
-            <FolderPlus size={13} strokeWidth={2.5} />
+          <div 
+            className={`absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full flex items-center justify-center shadow-lg z-40 transition-all ${
+              folderCombineArmedId === app.id
+                ? 'bg-[#38BDF8] text-[#090B10] animate-bounce scale-110'
+                : 'bg-white text-[#090B10] scale-95'
+            }`}
+            title={folderCombineArmedId === app.id ? 'Combine into Folder' : 'Place Here'}
+          >
+            {folderCombineArmedId === app.id ? (
+              <FolderPlus size={13} strokeWidth={2.5} />
+            ) : (
+              <ArrowLeftRight size={12} strokeWidth={2.5} />
+            )}
           </div>
         )}
       </div>
 
       {/* App Label */}
       {settings.showLabels && size !== 'dock' && (
-        <span className={`${currentSize.text} font-medium text-[#94A3B8] group-hover:text-[#F1F5F9] transition-colors mt-1.5 truncate w-full text-center tracking-tight leading-tight select-none`}>
+        <span className={`${currentSize.text} font-medium text-white/95 group-hover:text-white ${currentTheme.homescreenTextShadow} transition-colors mt-1.5 truncate w-full text-center tracking-tight leading-tight select-none`}>
           {app.name}
         </span>
       )}

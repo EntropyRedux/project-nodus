@@ -28,8 +28,8 @@ import {
 
 export const OverlayShell: React.FC = () => {
   const { 
-    activePanel, 
-    setActivePanel, 
+    activeTab, 
+    setActiveTab, 
     devices, 
     activeDeviceId, 
     selectDevice, 
@@ -44,15 +44,7 @@ export const OverlayShell: React.FC = () => {
     killProcess
   } = useDesktop();
 
-  const [activeTab, setActiveTab] = useState<'fleet' | 'clipboard' | 'shortcuts' | 'processes'>('fleet');
   const [filterQuery, setFilterQuery] = useState('');
-
-  // Sync activeTab when activePanel changes from tray or hotcorners
-  useEffect(() => {
-    if (activePanel === 'fleet') setActiveTab('fleet');
-    if (activePanel === 'clipboard') setActiveTab('clipboard');
-    if (activePanel === 'taskbar') setActiveTab('shortcuts');
-  }, [activePanel]);
 
   const getShortcutIcon = (name: string) => {
     switch (name) {
@@ -95,10 +87,7 @@ export const OverlayShell: React.FC = () => {
         {/* Center: Main Navigation Tabs */}
         <nav className="flex items-center gap-1 bg-[#181822] p-1 rounded-2xl border border-white/10 shadow-inner">
           <button
-            onClick={() => {
-              setActiveTab('fleet');
-              setActivePanel('fleet');
-            }}
+            onClick={() => setActiveTab('fleet')}
             className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
               activeTab === 'fleet'
                 ? 'bg-[#34C759] text-[#0A0A0C] shadow-md shadow-[#34C759]/25'
@@ -110,10 +99,7 @@ export const OverlayShell: React.FC = () => {
           </button>
 
           <button
-            onClick={() => {
-              setActiveTab('clipboard');
-              setActivePanel('clipboard');
-            }}
+            onClick={() => setActiveTab('clipboard')}
             className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
               activeTab === 'clipboard'
                 ? 'bg-[#007AFF] text-white shadow-md shadow-[#007AFF]/25'
@@ -125,10 +111,7 @@ export const OverlayShell: React.FC = () => {
           </button>
 
           <button
-            onClick={() => {
-              setActiveTab('shortcuts');
-              setActivePanel('taskbar');
-            }}
+            onClick={() => setActiveTab('shortcuts')}
             className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
               activeTab === 'shortcuts'
                 ? 'bg-[#BF5AF2] text-white shadow-md shadow-[#BF5AF2]/25'

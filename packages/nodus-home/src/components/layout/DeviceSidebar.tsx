@@ -106,14 +106,14 @@ export const DeviceSidebar: React.FC = () => {
 
       {/* 1. Permanent Fixed Compact Navigation Rail */}
       <aside
-        className={`w-16 h-full flex-shrink-0 flex flex-col border-r border-white/[0.06] select-none z-20 ${currentTheme.classes.containerFont} backdrop-blur-2xl transition-colors duration-200`}
+        className={`w-16 h-full flex-shrink-0 flex flex-col ${currentTheme.isLight ? 'border-r border-[#CBD5E1]' : 'border-r border-white/[0.06]'} select-none z-20 ${currentTheme.classes.containerFont} backdrop-blur-2xl transition-colors duration-200`}
         style={{ contain: 'layout style', backgroundColor: getSurfaceRgba(settings.theme, settings.taskbarOpacity, 'sidebar') }}
       >
-        <div className="p-3 border-b border-white/[0.04] flex items-center justify-center">
+        <div className={`p-3 ${currentTheme.isLight ? 'border-b border-[#E2E8F0]' : 'border-b border-white/[0.04]'} flex items-center justify-center`}>
           <button
             onClick={toggleSidebar}
             title="Toggle Cluster Nodes Drawer"
-            className={`p-2 ${currentTheme.buttonRadius} bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.06] hover:scale-105 transition flex items-center justify-center group`}
+            className={`p-2 ${currentTheme.buttonRadius} ${currentTheme.isLight ? 'bg-[#FFFFFF] hover:bg-[#F1F5F9] border border-[#CBD5E1]' : 'bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.06]'} hover:scale-105 transition flex items-center justify-center group`}
             style={{ color: currentAccent.hex }}
           >
             <Server size={18} className="group-hover:rotate-12 transition-transform" />
@@ -140,8 +140,8 @@ export const DeviceSidebar: React.FC = () => {
                   title={`${device.name} (${device.os})\nTip: Right-click to change portrait`}
                   className={`w-11 h-11 ${currentTheme.cardRadius} flex items-center justify-center relative transition-all duration-200 border ${
                     isActive
-                      ? 'bg-white/[0.08] ring-1 scale-105'
-                      : 'bg-white/[0.02] border-white/[0.04] hover:bg-white/[0.06] hover:border-white/[0.1]'
+                      ? currentTheme.isLight ? 'bg-[#FFFFFF] ring-2 scale-105 shadow-md' : 'bg-white/[0.08] ring-1 scale-105'
+                      : currentTheme.isLight ? 'bg-[#FFFFFF] border-[#E2E8F0] hover:bg-[#F8FAFD] hover:border-[#CBD5E1]' : 'bg-white/[0.02] border-white/[0.04] hover:bg-white/[0.06] hover:border-white/[0.1]'
                   }`}
                   style={{
                     borderColor: isActive ? devColor : undefined,
@@ -162,7 +162,7 @@ export const DeviceSidebar: React.FC = () => {
 
                   {isActive && (
                     <span 
-                      className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border-2 border-[#090B10]"
+                      className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border-2 ${currentTheme.isLight ? 'border-white' : 'border-[#090B10]'}`}
                       style={{ backgroundColor: devColor }}
                     />
                   )}
@@ -176,22 +176,24 @@ export const DeviceSidebar: React.FC = () => {
               audio.playTap();
               setAddModalOpen(true);
             }}
-            className={`w-11 h-11 ${currentTheme.cardRadius} border border-dashed border-white/[0.15] bg-white/[0.02] hover:bg-white/[0.06] text-[#94A3B8] transition flex items-center justify-center group`}
-            style={{ color: currentAccent.hex, borderColor: `${currentAccent.hex}50` }}
+            className={`w-11 h-11 ${currentTheme.cardRadius} border border-dashed transition flex items-center justify-center group ${
+              currentTheme.isLight ? 'border-[#CBD5E1] bg-[#FFFFFF] hover:bg-[#F8FAFD]' : 'border-white/[0.15] bg-white/[0.02] hover:bg-white/[0.06]'
+            }`}
+            style={{ color: currentAccent.hex, borderColor: `${currentAccent.hex}60` }}
             title="Connect New Device Node"
           >
             <Plus size={16} className="group-hover:scale-110 transition-transform" />
           </button>
         </div>
 
-        <div className="p-2 border-t border-white/[0.04] flex justify-center">
+        <div className={`p-2 ${currentTheme.isLight ? 'border-t border-[#E2E8F0]' : 'border-t border-white/[0.04]'} flex justify-center`}>
           <button
             onClick={() => {
               audio.playTap();
               launchApp('studio');
             }}
             title="Dual-Platform Bridge Code Studio"
-            className={`p-2 bg-white/[0.03] hover:bg-white/[0.08] ${currentTheme.buttonRadius} transition border border-white/[0.06]`}
+            className={`p-2 ${currentTheme.isLight ? 'bg-[#FFFFFF] hover:bg-[#F1F5F9] border-[#CBD5E1]' : 'bg-white/[0.03] hover:bg-white/[0.08] border-white/[0.06]'} ${currentTheme.buttonRadius} transition border`}
             style={{ color: currentAccent.hex }}
           >
             <Code size={16} />
@@ -209,8 +211,8 @@ export const DeviceSidebar: React.FC = () => {
 
       {/* 3. Slide-Out Device Drawer */}
       <aside
-        className={`fixed top-0 bottom-0 left-0 z-40 w-76 sm:w-84 flex flex-col border-r border-white/[0.06] shadow-2xl transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform ${currentTheme.classes.containerFont} backdrop-blur-3xl ${
-          !isSidebarCollapsed ? 'translate-x-0 pointer-events-auto shadow-black/90' : '-translate-x-full pointer-events-none'
+        className={`fixed top-0 bottom-0 left-0 z-40 w-76 sm:w-84 flex flex-col ${currentTheme.isLight ? 'border-r border-[#CBD5E1]' : 'border-r border-white/[0.06]'} shadow-2xl transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform ${currentTheme.classes.containerFont} backdrop-blur-3xl ${
+          !isSidebarCollapsed ? 'translate-x-0 pointer-events-auto shadow-black/60' : '-translate-x-full pointer-events-none'
         }`}
         style={{ contain: 'layout paint', backgroundColor: getSurfaceRgba(settings.theme, settings.taskbarOpacity, 'panel') }}
       >
@@ -223,17 +225,17 @@ export const DeviceSidebar: React.FC = () => {
               <Server size={16} />
             </div>
             <div>
-              <h2 className="text-xs font-bold text-[#F1F5F9] tracking-wide uppercase font-mono">
+              <h2 className={`text-xs font-bold ${currentTheme.classes.textPrimary} tracking-wide uppercase font-mono`}>
                 {currentTheme.archetype === 'hud' ? 'CLUSTER MESH // NODES' : 'Cluster Mesh'}
               </h2>
-              <p className="text-[10px] text-[#94A3B8] truncate">{devices.length} linked active nodes</p>
+              <p className={`text-[10px] ${currentTheme.classes.textSecondary} truncate`}>{devices.length} linked active nodes</p>
             </div>
           </div>
 
           <button
             onClick={toggleSidebar}
             title="Collapse Sidebar"
-            className={`p-1.5 ${currentTheme.buttonRadius} hover:bg-white/10 text-[#94A3B8] hover:text-[#F1F5F9] transition flex items-center justify-center border border-white/5`}
+            className={`p-1.5 ${currentTheme.buttonRadius} ${currentTheme.classes.actionButton} transition flex items-center justify-center`}
           >
             <ChevronLeft size={16} />
           </button>
@@ -251,7 +253,7 @@ export const DeviceSidebar: React.FC = () => {
               <div
                 key={device.id}
                 className={`group relative ${currentTheme.cardRadius} ${currentTheme.classes.itemCard} transition border ${
-                  isActive ? 'shadow-lg ring-1' : ''
+                  isActive ? (currentTheme.isLight ? 'shadow-md ring-2' : 'shadow-lg ring-1') : ''
                 }`}
                 style={{
                   borderColor: isActive ? devColor : undefined,
@@ -264,7 +266,7 @@ export const DeviceSidebar: React.FC = () => {
                     className="flex items-center justify-between cursor-pointer"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <span className={`text-[10px] font-mono font-bold text-[#94A3B8] bg-black/40 px-1.5 py-0.5 ${currentTheme.buttonRadius} border border-white/5`}>
+                      <span className={`text-[10px] font-mono font-bold ${currentTheme.isLight ? 'text-[#475569] bg-[#F1F5F9] border-[#CBD5E1]' : 'text-[#94A3B8] bg-black/40 border-white/5'} px-1.5 py-0.5 ${currentTheme.buttonRadius} border`}>
                         0{index + 1}
                       </span>
                       <div
@@ -294,7 +296,7 @@ export const DeviceSidebar: React.FC = () => {
                         </div>
                       </div>
                       <div className="min-w-0">
-                        <h4 className="text-xs font-bold text-[#F1F5F9] truncate flex items-center gap-1.5">
+                        <h4 className={`text-xs font-bold ${currentTheme.classes.textPrimary} truncate flex items-center gap-1.5`}>
                           {device.name}
                           {isActive && (
                             <span 
@@ -303,7 +305,7 @@ export const DeviceSidebar: React.FC = () => {
                             />
                           )}
                         </h4>
-                        <p className="text-[10px] text-[#94A3B8] truncate">{device.os}</p>
+                        <p className={`text-[10px] ${currentTheme.classes.textSecondary} truncate`}>{device.os}</p>
                       </div>
                     </div>
 
@@ -315,7 +317,7 @@ export const DeviceSidebar: React.FC = () => {
                           moveDeviceUp(device.id);
                         }}
                         title="Move Up"
-                        className="p-1 rounded hover:bg-white/10 text-[#94A3B8] hover:text-[#F1F5F9] disabled:opacity-20"
+                        className={`p-1 rounded ${currentTheme.classes.actionButton} disabled:opacity-20`}
                       >
                         <ChevronUp size={14} />
                       </button>
@@ -326,7 +328,7 @@ export const DeviceSidebar: React.FC = () => {
                           moveDeviceDown(device.id);
                         }}
                         title="Move Down"
-                        className="p-1 rounded hover:bg-white/10 text-[#94A3B8] hover:text-[#F1F5F9] disabled:opacity-20"
+                        className={`p-1 rounded ${currentTheme.classes.actionButton} disabled:opacity-20`}
                       >
                         <ChevronDown size={14} />
                       </button>
@@ -336,7 +338,11 @@ export const DeviceSidebar: React.FC = () => {
                   {/* Telemetry Row */}
                   <div
                     onClick={() => selectDevice(device.id)}
-                    className={`cursor-pointer grid grid-cols-2 gap-1.5 text-[10px] text-[#94A3B8] bg-black/30 ${currentTheme.buttonRadius} p-2 border border-white/[0.06] font-mono`}
+                    className={`cursor-pointer grid grid-cols-2 gap-1.5 text-[10px] ${
+                      currentTheme.isLight 
+                        ? 'text-[#475569] bg-[#F8FAFD] border-[#CBD5E1]' 
+                        : 'text-[#94A3B8] bg-black/30 border-white/[0.06]'
+                    } ${currentTheme.buttonRadius} p-2 border font-mono`}
                   >
                     <div className="flex items-center gap-1">
                       <Wifi size={11} className="text-[#10B981]" />
@@ -357,7 +363,7 @@ export const DeviceSidebar: React.FC = () => {
                   </div>
 
                   {/* Actions Row */}
-                  <div className="flex items-center gap-1.5 pt-1 border-t border-white/[0.06]">
+                  <div className={`flex items-center gap-1.5 pt-1 border-t ${currentTheme.isLight ? 'border-[#E2E8F0]' : 'border-white/[0.06]'}`}>
                     {(device.type === 'desktop' || device.type === 'laptop' || (device.os && (device.os.toLowerCase().includes('windows') || device.os.toLowerCase().includes('linux') || device.os.toLowerCase().includes('macos')))) ? (
                       <>
                         <button
@@ -367,14 +373,14 @@ export const DeviceSidebar: React.FC = () => {
                           }}
                           className={`flex-1 py-1 px-2 ${currentTheme.buttonRadius} text-[10px] font-bold flex items-center justify-center gap-1 border transition font-mono`}
                           style={{
-                            backgroundColor: isProcOpen ? devColor : '#090B10',
-                            borderColor: isProcOpen ? devColor : 'rgba(255,255,255,0.1)',
+                            backgroundColor: isProcOpen ? devColor : currentTheme.isLight ? '#F1F5F9' : '#090B10',
+                            borderColor: isProcOpen ? devColor : currentTheme.isLight ? '#CBD5E1' : 'rgba(255,255,255,0.1)',
                             color: isProcOpen ? '#090B10' : devColor,
                           }}
                         >
                           <Activity size={11} />
                           <span>Procs</span>
-                          <span className="px-1 rounded bg-black/40 text-[9px] font-mono">
+                          <span className={`px-1 rounded ${currentTheme.isLight ? 'bg-[#E2E8F0] text-[#0F172A]' : 'bg-black/40'} text-[9px] font-mono`}>
                             {procsCount}
                           </span>
                         </button>
@@ -385,7 +391,11 @@ export const DeviceSidebar: React.FC = () => {
                             killAllUserProcesses(device.id);
                           }}
                           title="Kill All Non-System Processes"
-                          className={`py-1 px-2 ${currentTheme.buttonRadius} text-[10px] font-bold bg-[#090B10] hover:bg-[#F43F5E]/20 text-[#F43F5E] border border-[#F43F5E]/30 hover:border-[#F43F5E] flex items-center gap-1 transition`}
+                          className={`py-1 px-2 ${currentTheme.buttonRadius} text-[10px] font-bold ${
+                            currentTheme.isLight 
+                              ? 'bg-[#FEE2E2] hover:bg-[#FECACA] text-[#DC2626] border border-[#FCA5A5]' 
+                              : 'bg-[#090B10] hover:bg-[#F43F5E]/20 text-[#F43F5E] border border-[#F43F5E]/30 hover:border-[#F43F5E]'
+                          } flex items-center gap-1 transition`}
                         >
                           <Skull size={11} />
                           <span>Kill</span>
@@ -399,7 +409,11 @@ export const DeviceSidebar: React.FC = () => {
                             killAllUserProcesses(device.id);
                           }}
                           title="Clear Non-System Background Tasks to Free RAM"
-                          className={`flex-1 py-1 px-2 ${currentTheme.buttonRadius} text-[10px] font-bold bg-[#090B10] hover:bg-[#10B981]/20 text-[#10B981] border border-white/10 hover:border-[#10B981]/40 flex items-center justify-center gap-1 transition`}
+                          className={`flex-1 py-1 px-2 ${currentTheme.buttonRadius} text-[10px] font-bold ${
+                            currentTheme.isLight 
+                              ? 'bg-[#ECFDF5] hover:bg-[#D1FAE5] text-[#059669] border border-[#A7F3D0]' 
+                              : 'bg-[#090B10] hover:bg-[#10B981]/20 text-[#10B981] border border-white/10 hover:border-[#10B981]/40'
+                          } flex items-center justify-center gap-1 transition`}
                         >
                           <Zap size={11} />
                           <span>Flush RAM</span>
@@ -411,7 +425,11 @@ export const DeviceSidebar: React.FC = () => {
                             lockDevice(device.id);
                           }}
                           title="Lock Screen"
-                          className={`py-1 px-2 ${currentTheme.buttonRadius} text-[10px] font-bold bg-[#090B10] hover:bg-[#38BDF8]/20 text-[#38BDF8] border border-white/10 hover:border-[#38BDF8]/40 flex items-center gap-1 transition`}
+                          className={`py-1 px-2 ${currentTheme.buttonRadius} text-[10px] font-bold ${
+                            currentTheme.isLight 
+                              ? 'bg-[#F0F9FF] hover:bg-[#E0F2FE] text-[#0284C7] border border-[#BAE6FD]' 
+                              : 'bg-[#090B10] hover:bg-[#38BDF8]/20 text-[#38BDF8] border border-white/10 hover:border-[#38BDF8]/40'
+                          } flex items-center gap-1 transition`}
                         >
                           <Lock size={11} />
                           <span>Lock</span>
@@ -426,7 +444,11 @@ export const DeviceSidebar: React.FC = () => {
                       }}
                       disabled={device.isRebooting}
                       title="Reboot Node"
-                      className={`py-1 px-2 ${currentTheme.buttonRadius} text-[10px] font-bold bg-[#090B10] hover:bg-[#F59E0B]/20 text-[#F59E0B] border border-[#F59E0B]/30 hover:border-[#F59E0B] flex items-center gap-1 transition disabled:opacity-30`}
+                      className={`py-1 px-2 ${currentTheme.buttonRadius} text-[10px] font-bold ${
+                        currentTheme.isLight 
+                          ? 'bg-[#FEF3C7] hover:bg-[#FDE68A] text-[#D97706] border border-[#FCD34D]' 
+                          : 'bg-[#090B10] hover:bg-[#F59E0B]/20 text-[#F59E0B] border border-[#F59E0B]/30 hover:border-[#F59E0B]'
+                      } flex items-center gap-1 transition disabled:opacity-30`}
                     >
                       <RotateCcw size={11} className={device.isRebooting ? 'animate-spin' : ''} />
                       <span>Reboot</span>
@@ -434,7 +456,7 @@ export const DeviceSidebar: React.FC = () => {
                   </div>
 
                   {/* Status Indicator */}
-                  <div className="flex items-center justify-between text-[9px] text-[#94A3B8] pt-0.5 font-mono">
+                  <div className={`flex items-center justify-between text-[9px] ${currentTheme.classes.textSecondary} pt-0.5 font-mono`}>
                     <span className="flex items-center gap-1.5">
                       <span
                         className={`w-1.5 h-1.5 rounded-full ${
@@ -471,8 +493,10 @@ export const DeviceSidebar: React.FC = () => {
               audio.playTap();
               setAddModalOpen(true);
             }}
-            className={`w-full py-3 ${currentTheme.cardRadius} border border-dashed border-white/20 bg-white/[0.02] hover:bg-white/[0.06] transition flex items-center justify-center gap-2 group`}
-            style={{ color: currentAccent.hex, borderColor: `${currentAccent.hex}40` }}
+            className={`w-full py-3 ${currentTheme.cardRadius} border border-dashed transition flex items-center justify-center gap-2 group ${
+              currentTheme.isLight ? 'bg-[#FFFFFF] hover:bg-[#F8FAFD] border-[#CBD5E1]' : 'border-white/20 bg-white/[0.02] hover:bg-white/[0.06]'
+            }`}
+            style={{ color: currentAccent.hex, borderColor: `${currentAccent.hex}50` }}
           >
             <Plus size={16} className="group-hover:scale-110 transition-transform" />
             <span className="text-xs font-bold tracking-wide">Add Device</span>
@@ -480,13 +504,13 @@ export const DeviceSidebar: React.FC = () => {
         </div>
 
         {/* Footer Summary */}
-        <div className={`p-3 ${currentTheme.classes.cardHeader} text-[10px] text-[#8E8E93] flex flex-col gap-2`}>
+        <div className={`p-3 ${currentTheme.classes.cardHeader} text-[10px] ${currentTheme.classes.textSecondary} flex flex-col gap-2`}>
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" />
               Node Cluster Online
             </span>
-            <span className="font-mono text-white/50">{devices.length} Nodes</span>
+            <span className={`font-mono ${currentTheme.classes.textMuted}`}>{devices.length} Nodes</span>
           </div>
           <button
             onClick={() => {

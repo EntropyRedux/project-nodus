@@ -38,7 +38,6 @@
   }
 }
 
-/* Dynamic theme root font cascades */
 [data-theme="glassmorphism"] {
   font-family: var(--font-glass);
 }
@@ -50,6 +49,21 @@
 }
 [data-theme="nordic-minimal"] {
   font-family: var(--font-minimal);
+}
+[data-theme="material-light"] {
+  font-family: var(--font-sans);
+  --color-canvas: #F8FAFD;
+  --color-surface-base: #FFFFFF;
+  --color-surface-raised: #FFFFFF;
+  --color-surface-overlay: #FFFFFF;
+  --color-surface-hover: #F1F5F9;
+  --color-border-subtle: #E2E8F0;
+  --color-border-default: #CBD5E1;
+  --color-border-active: #94A3B8;
+  --color-text-primary: #0F172A;
+  --color-text-secondary: #475569;
+  --color-text-muted: #64748B;
+  --color-text-dim: #94A3B8;
 }
 
 @layer utilities {
@@ -129,7 +143,13 @@
 
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+    scrollbar-color: transparent transparent;
+    transition: scrollbar-color 0.3s ease;
+  }
+  .scrollbar-thin:hover,
+  .scrollbar-thin:focus,
+  .scrollbar-thin:focus-within {
+    scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
   }
   .scrollbar-thin::-webkit-scrollbar {
     width: 4px;
@@ -139,18 +159,37 @@
     background: transparent;
   }
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.07);
+    background: transparent;
     border-radius: 9999px;
+    transition: background 0.3s ease;
+  }
+  .scrollbar-thin:hover::-webkit-scrollbar-thumb,
+  .scrollbar-thin:focus::-webkit-scrollbar-thumb,
+  .scrollbar-thin:focus-within::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.14);
   }
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.30);
   }
 }
 
-/* Universal Ultra-Subtle Scrollbar across the entire DOM */
+/* Universal Auto-Hiding Scrollbar across the entire DOM */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.07) transparent;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.3s ease;
+}
+
+*:hover,
+*:focus,
+*:focus-within {
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+}
+
+[data-theme="material-light"] *:hover,
+[data-theme="material-light"] *:focus,
+[data-theme="material-light"] *:focus-within {
+  scrollbar-color: rgba(15, 23, 42, 0.18) transparent;
 }
 
 ::-webkit-scrollbar {
@@ -163,58 +202,33 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.06);
+  background: transparent;
   border-radius: 9999px;
-  transition: background 0.15s ease-in-out;
+  transition: background-color 0.3s ease;
+}
+
+*:hover::-webkit-scrollbar-thumb,
+*:focus::-webkit-scrollbar-thumb,
+*:focus-within::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+[data-theme="material-light"] *:hover::-webkit-scrollbar-thumb,
+[data-theme="material-light"] *:focus::-webkit-scrollbar-thumb,
+[data-theme="material-light"] *:focus-within::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.18);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.32) !important;
+}
+
+[data-theme="material-light"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(15, 23, 42, 0.35) !important;
 }
 
 ::-webkit-scrollbar-corner {
   background: transparent;
-}
-
-/* Theme-specific ultra-subtle scrollbar adaptations */
-[data-theme="nordic-frost"] * {
-  scrollbar-color: rgba(15, 23, 42, 0.12) transparent;
-}
-[data-theme="nordic-frost"] ::-webkit-scrollbar-thumb {
-  background: rgba(15, 23, 42, 0.10);
-}
-[data-theme="nordic-frost"] ::-webkit-scrollbar-thumb:hover {
-  background: rgba(15, 23, 42, 0.25);
-}
-
-[data-theme="tokyo-synth"] * {
-  scrollbar-color: rgba(255, 42, 133, 0.25) transparent;
-}
-[data-theme="tokyo-synth"] ::-webkit-scrollbar-thumb {
-  background: rgba(255, 42, 133, 0.18);
-}
-[data-theme="tokyo-synth"] ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 42, 133, 0.45);
-}
-
-[data-theme="solar-amber"] * {
-  scrollbar-color: rgba(245, 158, 11, 0.25) transparent;
-}
-[data-theme="solar-amber"] ::-webkit-scrollbar-thumb {
-  background: rgba(245, 158, 11, 0.18);
-}
-[data-theme="solar-amber"] ::-webkit-scrollbar-thumb:hover {
-  background: rgba(245, 158, 11, 0.45);
-}
-
-[data-theme="matrix-terminal"] * {
-  scrollbar-color: rgba(16, 185, 129, 0.25) transparent;
-}
-[data-theme="matrix-terminal"] ::-webkit-scrollbar-thumb {
-  background: rgba(16, 185, 129, 0.18);
-}
-[data-theme="matrix-terminal"] ::-webkit-scrollbar-thumb:hover {
-  background: rgba(16, 185, 129, 0.45);
 }
 
 @keyframes spin-slow {
