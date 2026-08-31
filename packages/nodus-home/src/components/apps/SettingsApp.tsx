@@ -17,6 +17,9 @@ import {
   Battery,
   StickyNote,
   Globe,
+  FlaskConical,
+  Boxes,
+  Terminal,
 } from 'lucide-react';
 import { useLauncher } from '../../context/LauncherContext';
 import { audio } from '../../utils/audio';
@@ -932,7 +935,134 @@ export const SettingsApp: React.FC = () => {
           </div>
         </div>
 
-        {/* SECTION 8: Reset & Defaults */}
+        {/* SECTION 8: 🧪 Experimental Features (Multi-Window Canvas & PWAs) */}
+        <div className={`p-4 sm:p-5 ${currentTheme.cardRadius} ${currentTheme.classes.itemCard} shadow-sm space-y-3`}>
+          <div className={`flex items-center gap-2 text-xs font-bold ${currentTheme.classes.textPrimary} tracking-wide uppercase pb-2 border-b ${currentTheme.isLight ? 'border-[#E2E8F0]' : 'border-white/5'}`}>
+            <FlaskConical size={15} style={{ color: currentAccent.hex }} />
+            <span>🧪 Experimental Features</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* 1. Multi-Window Floating Canvas */}
+            <div className={`p-3 ${currentTheme.cardRadius} ${currentTheme.isLight ? 'bg-[#F8FAFD] border border-[#E2E8F0]' : 'bg-black/20 border border-white/5'} flex flex-col justify-between gap-2.5`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Boxes size={16} style={{ color: currentAccent.hex }} />
+                  <div>
+                    <div className={`text-xs font-bold ${currentTheme.classes.textPrimary}`}>Multi-Window Web Canvas</div>
+                    <div className={`text-[10px] ${currentTheme.classes.textSecondary}`}>Draggable & resizable floating windows</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className={`flex items-center justify-between pt-2 border-t ${currentTheme.isLight ? 'border-[#E2E8F0]' : 'border-white/5'}`}>
+                <span className={`text-[10px] font-semibold ${currentTheme.classes.textSecondary}`}>Desktop Window Manager</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    audio.playTap();
+                    updateSettings({ enableExperimentalPwaWindows: !settings.enableExperimentalPwaWindows });
+                    showToast(settings.enableExperimentalPwaWindows ? 'Multi-Window Canvas disabled' : 'Multi-Window Canvas enabled');
+                  }}
+                  className={`px-3 py-1 ${currentTheme.buttonRadius} text-[11px] font-bold transition border`}
+                  style={
+                    settings.enableExperimentalPwaWindows
+                      ? { backgroundColor: currentAccent.hex, color: '#090B10', borderColor: currentAccent.hex }
+                      : currentTheme.isLight
+                      ? { backgroundColor: '#FFFFFF', color: '#475569', borderColor: '#CBD5E1' }
+                      : { backgroundColor: 'rgba(255,255,255,0.02)', color: '#8E8E93', borderColor: 'rgba(255,255,255,0.1)' }
+                  }
+                >
+                  {settings.enableExperimentalPwaWindows ? 'Enabled' : 'Disabled'}
+                </button>
+              </div>
+            </div>
+
+            {/* 2. Prefer Desktop PWA Alternatives */}
+            <div className={`p-3 ${currentTheme.cardRadius} ${currentTheme.isLight ? 'bg-[#F8FAFD] border border-[#E2E8F0]' : 'bg-black/20 border border-white/5'} flex flex-col justify-between gap-2.5`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Globe size={16} style={{ color: currentAccent.hex }} />
+                  <div>
+                    <div className={`text-xs font-bold ${currentTheme.classes.textPrimary}`}>Prefer Desktop PWAs</div>
+                    <div className={`text-[10px] ${currentTheme.classes.textSecondary}`}>Route Discord, Spotify, Notion to Web</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className={`flex items-center justify-between pt-2 border-t ${currentTheme.isLight ? 'border-[#E2E8F0]' : 'border-white/5'}`}>
+                <span className={`text-[10px] font-semibold ${currentTheme.classes.textSecondary}`}>Desktop Viewport</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    audio.playTap();
+                    updateSettings({ preferPwaAlternatives: !settings.preferPwaAlternatives });
+                    showToast(settings.preferPwaAlternatives ? 'Prefer Native Android Apps' : 'Prefer Desktop PWA Alternatives');
+                  }}
+                  className={`px-3 py-1 ${currentTheme.buttonRadius} text-[11px] font-bold transition border`}
+                  style={
+                    settings.preferPwaAlternatives
+                      ? { backgroundColor: currentAccent.hex, color: '#090B10', borderColor: currentAccent.hex }
+                      : currentTheme.isLight
+                      ? { backgroundColor: '#FFFFFF', color: '#475569', borderColor: '#CBD5E1' }
+                      : { backgroundColor: 'rgba(255,255,255,0.02)', color: '#8E8E93', borderColor: 'rgba(255,255,255,0.1)' }
+                  }
+                >
+                  {settings.preferPwaAlternatives ? 'Enabled' : 'Disabled'}
+                </button>
+              </div>
+            </div>
+
+            {/* 3. Shizuku AOSP Freeform Hook */}
+            <div className={`col-span-1 sm:col-span-2 p-3 ${currentTheme.cardRadius} ${currentTheme.isLight ? 'bg-[#F8FAFD] border border-[#E2E8F0]' : 'bg-black/20 border border-white/5'} flex flex-col justify-between gap-2.5`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Terminal size={16} style={{ color: currentAccent.hex }} />
+                  <div>
+                    <div className={`text-xs font-bold ${currentTheme.classes.textPrimary}`}>Shizuku AOSP Freeform Dispatch</div>
+                    <div className={`text-[10px] ${currentTheme.classes.textSecondary}`}>Bypass HyperOS 2-window cap via ADB windowingMode 5</div>
+                  </div>
+                </div>
+                <span
+                  className={`text-[9px] font-bold px-2 py-0.5 ${currentTheme.buttonRadius} border`}
+                  style={
+                    typeof window !== 'undefined' && (window as any).NodusNativeBridge?.isShizukuAvailable?.()
+                      ? { backgroundColor: currentAccent.badgeBg, color: currentAccent.hex, borderColor: currentAccent.badgeBorder }
+                      : currentTheme.isLight
+                      ? { backgroundColor: '#FFFFFF', color: '#64748B', borderColor: '#CBD5E1' }
+                      : { backgroundColor: 'rgba(255,255,255,0.04)', color: '#8E8E93', borderColor: 'rgba(255,255,255,0.08)' }
+                  }
+                >
+                  {typeof window !== 'undefined' && (window as any).NodusNativeBridge?.isShizukuAvailable?.() ? 'Shizuku Active' : 'Shizuku Ready'}
+                </span>
+              </div>
+
+              <div className={`flex items-center justify-between pt-2 border-t ${currentTheme.isLight ? 'border-[#E2E8F0]' : 'border-white/5'}`}>
+                <span className={`text-[10px] font-semibold ${currentTheme.classes.textSecondary}`}>Privileged Dispatch</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    audio.playTap();
+                    updateSettings({ enableExperimentalShizukuFreeform: !settings.enableExperimentalShizukuFreeform });
+                    showToast(settings.enableExperimentalShizukuFreeform ? 'Shizuku Freeform disabled' : 'Shizuku Freeform enabled');
+                  }}
+                  className={`px-3 py-1 ${currentTheme.buttonRadius} text-[11px] font-bold transition border`}
+                  style={
+                    settings.enableExperimentalShizukuFreeform
+                      ? { backgroundColor: currentAccent.hex, color: '#090B10', borderColor: currentAccent.hex }
+                      : currentTheme.isLight
+                      ? { backgroundColor: '#FFFFFF', color: '#475569', borderColor: '#CBD5E1' }
+                      : { backgroundColor: 'rgba(255,255,255,0.02)', color: '#8E8E93', borderColor: 'rgba(255,255,255,0.1)' }
+                  }
+                >
+                  {settings.enableExperimentalShizukuFreeform ? 'Enabled' : 'Disabled'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* SECTION 9: Reset & Defaults */}
         <div className="pt-2 flex items-center justify-between">
           <button
             onClick={handleResetToDefaults}

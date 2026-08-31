@@ -98,9 +98,22 @@ export const INITIAL_APPS: AppItem[] = [
   { id: 'app-calculator', name: 'Calculator', iconName: 'Calculator', color: '#FF9500', category: 'system', pageIndex: 0, order: 2, packageName: 'com.miui.calculator' },
   { id: 'app-notes', name: 'MIUI Notes', iconName: 'PenTool', color: '#FFCC00', category: 'productivity', pageIndex: 0, order: 3, packageName: 'com.miui.notes' },
   { id: 'app-termux', name: 'Termux', iconName: 'Terminal', color: '#34C759', category: 'tools', pageIndex: 0, order: 4, packageName: 'com.termux' },
-  { id: 'app-discord', name: 'Discord', iconName: 'MessageSquare', color: '#5865F2', category: 'media', pageIndex: 0, order: 5, packageName: 'com.discord' },
+  { id: 'app-discord', name: 'Discord', iconName: 'MessageSquare', color: '#5865F2', category: 'media', pageIndex: 0, order: 5, packageName: 'com.discord', pwaDesktopUrl: 'https://discord.com/app' },
   { id: 'app-brave', name: 'Brave Browser', iconName: 'Globe', color: '#FF1B2D', category: 'media', pageIndex: 0, order: 6, packageName: 'com.brave.browser' },
 ];
+
+export const PWA_APP_REGISTRY: Record<string, { name: string; url: string; iconName: string; color: string }> = {
+  'com.discord': { name: 'Discord Desktop', url: 'https://discord.com/app', iconName: 'MessageSquare', color: '#5865F2' },
+  'com.spotify.music': { name: 'Spotify Desktop', url: 'https://open.spotify.com', iconName: 'Music', color: '#1DB954' },
+  'com.google.android.youtube': { name: 'YouTube Desktop', url: 'https://www.youtube.com', iconName: 'Play', color: '#FF0000' },
+  'com.reddit.frontpage': { name: 'Reddit Desktop', url: 'https://www.reddit.com', iconName: 'Flame', color: '#FF4500' },
+  'com.google.android.gm': { name: 'Gmail Desktop', url: 'https://mail.google.com', iconName: 'Mail', color: '#EA4335' },
+  'com.openai.chatgpt': { name: 'ChatGPT Desktop', url: 'https://chatgpt.com', iconName: 'Bot', color: '#10A37F' },
+  'org.telegram.messenger': { name: 'Telegram Web', url: 'https://web.telegram.org/a/', iconName: 'Send', color: '#229ED9' },
+  'notion': { name: 'Notion Workspace', url: 'https://www.notion.so', iconName: 'FileText', color: '#E2E8F0' },
+  'excalidraw': { name: 'Excalidraw Canvas', url: 'https://excalidraw.com', iconName: 'PenTool', color: '#A855F7' },
+  'github': { name: 'GitHub Desktop', url: 'https://github.com', iconName: 'Code2', color: '#F1F5F9' },
+};
 
 export const DOCK_APP_IDS = ['settings', 'notes'];
 

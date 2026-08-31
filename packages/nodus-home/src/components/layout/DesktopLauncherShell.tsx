@@ -5,6 +5,7 @@ import { DeviceProcessSidePanel } from './DeviceProcessSidePanel';
 import { ClipboardHistoryPanel } from '../desktop/ClipboardHistoryPanel';
 import { SmartAppTaskbar } from './SmartAppTaskbar';
 import { DesktopAppWindow } from '../desktop/DesktopAppWindow';
+import { MultiWindowManager } from '../desktop/MultiWindowManager';
 import { FolderModal } from '../home/FolderModal';
 import { ToastNotification } from '../common/ToastNotification';
 import { ConfirmModal } from '../common/ConfirmModal';
@@ -522,8 +523,11 @@ export const DesktopLauncherShell: React.FC = () => {
             </div>
           </div>
 
-          {/* Active Internal App Window Modal */}
-          {isInternalApp && (
+          {/* Multi-Window Floating PWA & App Canvas */}
+          <MultiWindowManager />
+
+          {/* Active Internal App Window Modal (Fallback when experimental multi-window is disabled) */}
+          {!settings.enableExperimentalPwaWindows && isInternalApp && (
             <div 
               className="absolute inset-0 z-30 flex items-center justify-center p-4 sm:p-6 pb-20 backdrop-blur-md animate-in fade-in duration-200"
               style={{ backgroundColor: `rgba(0, 0, 0, ${Math.min(0.55, ((settings.taskbarOpacity ?? 92) / 100) * 0.45).toFixed(2)})` }}

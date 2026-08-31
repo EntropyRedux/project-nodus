@@ -73,10 +73,32 @@ export interface AppItem {
   pageIndex: number; // 0, 1, etc.
   order: number;
   packageName?: string;
+  webUrl?: string;
+  pwaDesktopUrl?: string;
+  launchTarget?: 'native' | 'pwa' | 'hybrid';
   isRemote?: boolean;
   remoteExecutableId?: string;
   remoteDeviceName?: string;
   remoteIconBase64?: string;
+}
+
+export interface FloatingWindow {
+  id: string;
+  appId: string;
+  title: string;
+  iconName?: string;
+  customIcon?: string;
+  color?: string;
+  webUrl?: string;
+  type: 'internal' | 'web_pwa' | 'remote_vnc';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  minimized: boolean;
+  maximized: boolean;
+  zIndex: number;
+  savedBounds?: { x: number; y: number; width: number; height: number };
 }
 
 export interface FolderItem {
@@ -240,6 +262,11 @@ export interface LauncherSettings {
   remoteExecutables: RemoteExecutable[];
   showRemoteAppsInMainDrawer: boolean; // Show whitelisted remote shortcuts in main launcher
   showOnlyLocalInDrawer: boolean; // Filter strictly to local apps
+
+  // 🧪 Experimental Features (Multi-Window PWA & Shizuku)
+  enableExperimentalPwaWindows: boolean; // Enable floating draggable/resizable desktop PWA windows
+  preferPwaAlternatives: boolean; // Route apps with web equivalents to rich desktop PWA windows
+  enableExperimentalShizukuFreeform: boolean; // Use privileged Shizuku AOSP freeform window dispatch
 }
 
 export type NoteCategory = 'todo' | 'note' | 'calendar' | 'checklist';

@@ -70,6 +70,9 @@ const DEFAULT_SETTINGS: LauncherSettings = {
   remoteExecutables: INITIAL_REMOTE_EXECUTABLES,
   showRemoteAppsInMainDrawer: false,
   showOnlyLocalInDrawer: true,
+  enableExperimentalPwaWindows: true,
+  preferPwaAlternatives: true,
+  enableExperimentalShizukuFreeform: false,
 };
 
 const DEFAULT_QUICK_SETTINGS: QuickSettingsState = {

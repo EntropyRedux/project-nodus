@@ -845,6 +845,34 @@ class HomeActivity : AppCompatActivity() {
         }
 
         @JavascriptInterface
+        fun isShizukuAvailable(): Boolean {
+            return try {
+                val shizukuClass = Class.forName("moe.shizuku.api.ShizukuService")
+                true
+            } catch (_: Exception) {
+                try {
+                    val process = Runtime.getRuntime().exec("which shizuku")
+                    process.waitFor() == 0
+                } catch (_: Exception) {
+                    false
+                }
+            }
+        }
+
+        @JavascriptInterface
+        fun launchAppShizukuFreeform(packageName: String): Boolean {
+            return try {
+                val cmd = "am start-activity --windowingMode 5 -n $(cmd package resolve-activity --brief $packageName | tail -n 1)"
+                val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", cmd))
+                val code = process.waitFor()
+                if (code == 0) true else launchAppFloating(packageName)
+            } catch (e: Exception) {
+                Log.w(TAG, "Shizuku freeform dispatch fallback: ${e.message}")
+                launchAppFloating(packageName)
+            }
+        }
+
+        @JavascriptInterface
         fun bringLauncherToFront(): Boolean {
             return try {
                 val intent = Intent(this@HomeActivity, HomeActivity::class.java).apply {

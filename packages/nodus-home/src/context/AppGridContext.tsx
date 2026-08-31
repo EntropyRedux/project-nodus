@@ -2,10 +2,12 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import {
   AppItem,
   FolderItem,
+  FloatingWindow,
 } from '../types/launcher';
 import {
   INITIAL_APPS,
   DOCK_APP_IDS,
+  PWA_APP_REGISTRY,
 } from '../utils/constants';
 import { audio } from '../utils/audio';
 import { simulateBridgeRpc } from '../utils/bridgeProtocol';
@@ -19,6 +21,16 @@ export interface AppGridContextType {
   currentPageIndex: number;
   totalPages: number;
   setCurrentPageIndex: (page: number) => void;
+
+  // Multi-Window Floating Canvas State & Actions
+  floatingWindows: FloatingWindow[];
+  focusedWindowId: string | null;
+  openFloatingWindow: (appId: string, customProps?: Partial<FloatingWindow>) => void;
+  closeFloatingWindow: (windowId: string) => void;
+  minimizeFloatingWindow: (windowId: string) => void;
+  maximizeFloatingWindow: (windowId: string) => void;
+  focusFloatingWindow: (windowId: string) => void;
+  updateFloatingWindowBounds: (windowId: string, bounds: Partial<FloatingWindow>) => void;
 
   // App Lifecycle & Launching
   launchApp: (appId: string, forceMode?: 'fullscreen' | 'floating') => void;
@@ -331,6 +343,93 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
     minimizeActiveApp();
   }, [settings.soundEffects, minimizeActiveApp]);
 
+  const [floatingWindows, setFloatingWindows] = useState<FloatingWindow[]>([]);
+  const [focusedWindowId, setFocusedWindowId] = useState<string | null>(null);
+
+  const focusFloatingWindow = useCallback((windowId: string) => {
+    setFocusedWindowId(windowId);
+    setFloatingWindows((prev) => {
+      const maxZ = prev.reduce((max, w) => Math.max(max, w.zIndex), 30);
+      return prev.map((w) => (w.id === windowId ? { ...w, zIndex: maxZ + 1, minimized: false } : w));
+    });
+  }, []);
+
+  const openFloatingWindow = useCallback((appId: string, customProps?: Partial<FloatingWindow>) => {
+    if (settings.soundEffects) audio.playAppOpen();
+    const existing = floatingWindows.find((w) => w.appId === appId || (customProps?.id && w.id === customProps.id));
+    if (existing) {
+      focusFloatingWindow(existing.id);
+      return;
+    }
+
+    const targetApp = apps.find((a) => a.id === appId);
+    const pwaInfo = PWA_APP_REGISTRY[targetApp?.packageName || ''] || PWA_APP_REGISTRY[appId];
+    const windowId = customProps?.id || `win_${appId}_${Date.now()}`;
+    const screenWidth = typeof window !== 'undefined' ? window.innerWidth : 1280;
+    const screenHeight = typeof window !== 'undefined' ? window.innerHeight : 800;
+
+    const cascadeOffset = (floatingWindows.length % 5) * 28;
+    const defaultWidth = Math.min(840, Math.floor(screenWidth * 0.72));
+    const defaultHeight = Math.min(580, Math.floor(screenHeight * 0.75));
+    const defaultX = Math.max(20, Math.floor((screenWidth - defaultWidth) / 2) + cascadeOffset);
+    const defaultY = Math.max(20, Math.floor((screenHeight - defaultHeight) / 2) + cascadeOffset);
+
+    const newWindow: FloatingWindow = {
+      id: windowId,
+      appId,
+      title: customProps?.title || targetApp?.name || pwaInfo?.name || 'Application',
+      iconName: customProps?.iconName || targetApp?.iconName || pwaInfo?.iconName || 'AppWindow',
+      customIcon: customProps?.customIcon || targetApp?.customIcon,
+      color: customProps?.color || targetApp?.color || pwaInfo?.color || '#38BDF8',
+      webUrl: customProps?.webUrl || targetApp?.pwaDesktopUrl || targetApp?.webUrl || pwaInfo?.url,
+      type: customProps?.type || (customProps?.webUrl || targetApp?.pwaDesktopUrl || targetApp?.webUrl || pwaInfo?.url ? 'web_pwa' : 'internal'),
+      x: customProps?.x ?? defaultX,
+      y: customProps?.y ?? defaultY,
+      width: customProps?.width ?? defaultWidth,
+      height: customProps?.height ?? defaultHeight,
+      minimized: false,
+      maximized: false,
+      zIndex: 35 + floatingWindows.length,
+      ...customProps,
+    };
+
+    setFloatingWindows((prev) => [...prev, newWindow]);
+    setFocusedWindowId(windowId);
+    setRunningApps((prev) => (prev.includes(appId) ? prev : [appId, ...prev]));
+  }, [settings.soundEffects, floatingWindows, apps, focusFloatingWindow]);
+
+  const closeFloatingWindow = useCallback((windowId: string) => {
+    if (settings.soundEffects) audio.playTap();
+    setFloatingWindows((prev) => {
+      const closingWin = prev.find((w) => w.id === windowId);
+      if (closingWin) {
+        setRunningApps((r) => r.filter((id) => id !== closingWin.appId));
+      }
+      return prev.filter((w) => w.id !== windowId);
+    });
+    if (focusedWindowId === windowId) {
+      setFocusedWindowId(null);
+    }
+  }, [settings.soundEffects, focusedWindowId]);
+
+  const minimizeFloatingWindow = useCallback((windowId: string) => {
+    if (settings.soundEffects) audio.playTap();
+    setFloatingWindows((prev) => prev.map((w) => (w.id === windowId ? { ...w, minimized: true } : w)));
+    if (focusedWindowId === windowId) {
+      setFocusedWindowId(null);
+    }
+  }, [settings.soundEffects, focusedWindowId]);
+
+  const maximizeFloatingWindow = useCallback((windowId: string) => {
+    if (settings.soundEffects) audio.playTap();
+    setFloatingWindows((prev) => prev.map((w) => (w.id === windowId ? { ...w, maximized: !w.maximized } : w)));
+    focusFloatingWindow(windowId);
+  }, [settings.soundEffects, focusFloatingWindow]);
+
+  const updateFloatingWindowBounds = useCallback((windowId: string, bounds: Partial<FloatingWindow>) => {
+    setFloatingWindows((prev) => prev.map((w) => (w.id === windowId ? { ...w, ...bounds } : w)));
+  }, []);
+
   const launchApp = useCallback((appId: string, forceMode?: 'fullscreen' | 'floating') => {
     if (settings.soundEffects) audio.playAppOpen();
 
@@ -357,7 +456,30 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     setSearchOpen(false);
 
+    const pwaInfo = PWA_APP_REGISTRY[targetApp?.packageName || ''] || PWA_APP_REGISTRY[appId];
+    const hasPwaUrl = Boolean(targetApp?.pwaDesktopUrl || targetApp?.webUrl || pwaInfo?.url);
+
+    // 1. Experimental PWA routing for rich desktop multitasking
+    if (settings.enableExperimentalPwaWindows && settings.preferPwaAlternatives && hasPwaUrl) {
+      openFloatingWindow(appId, {
+        webUrl: targetApp?.pwaDesktopUrl || targetApp?.webUrl || pwaInfo?.url,
+        title: targetApp?.name || pwaInfo?.name,
+        iconName: targetApp?.iconName || pwaInfo?.iconName,
+        color: targetApp?.color || pwaInfo?.color,
+        type: 'web_pwa',
+      });
+      return;
+    }
+
     if (!targetApp?.packageName) {
+      if (settings.enableExperimentalPwaWindows) {
+        openFloatingWindow(appId, {
+          title: appId === 'settings' ? 'Settings & Hub' : 'Sticky Notes',
+          iconName: appId === 'settings' ? 'Settings' : 'StickyNote',
+          type: 'internal',
+        });
+        return;
+      }
       setActiveAppId(appId);
     } else {
       setActiveAppId(null);
@@ -387,6 +509,15 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (targetApp?.packageName) {
       const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
 
+      // Privileged Shizuku AOSP Freeform Hook
+      if (settings.enableExperimentalShizukuFreeform && bridge?.launchAppShizukuFreeform) {
+        const shizukuLaunched = bridge.launchAppShizukuFreeform(targetApp.packageName);
+        if (shizukuLaunched) {
+          showToast(`Launched ${targetApp.name} via Shizuku AOSP Freeform`);
+          return;
+        }
+      }
+
       if (shouldFloat && bridge?.launchAppFloating) {
         const launched = bridge.launchAppFloating(targetApp.packageName);
         if (launched) {
@@ -411,11 +542,19 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
       });
       return;
     }
-  }, [settings.soundEffects, settings.remoteExecutables, settings.appLaunchMode, apps, executeRemoteApp, isFloatingModeArmed, floatingApps, showToast, activeDeviceId, activeDevice.name, addNotification]);
+  }, [settings.soundEffects, settings.remoteExecutables, settings.appLaunchMode, settings.enableExperimentalPwaWindows, settings.preferPwaAlternatives, settings.enableExperimentalShizukuFreeform, apps, executeRemoteApp, isFloatingModeArmed, floatingApps, showToast, activeDeviceId, activeDevice.name, addNotification, openFloatingWindow]);
 
   const launchAppFloating = useCallback((appId: string) => {
     if (settings.soundEffects) audio.playAppOpen();
     const targetApp = apps.find((a) => a.id === appId);
+    const pwaInfo = PWA_APP_REGISTRY[targetApp?.packageName || ''] || PWA_APP_REGISTRY[appId];
+    const hasPwaUrl = Boolean(targetApp?.pwaDesktopUrl || targetApp?.webUrl || pwaInfo?.url);
+
+    if (settings.enableExperimentalPwaWindows && (hasPwaUrl || !targetApp?.packageName)) {
+      openFloatingWindow(appId);
+      return;
+    }
+
     if (targetApp?.packageName) {
       const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
       if (bridge?.launchAppFloating) {
@@ -427,10 +566,22 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
     }
     launchApp(appId, 'floating');
-  }, [settings.soundEffects, apps, showToast, launchApp]);
+  }, [settings.soundEffects, settings.enableExperimentalPwaWindows, apps, showToast, openFloatingWindow, launchApp]);
 
   const toggleAppTask = useCallback((appId: string) => {
     if (settings.soundEffects) audio.playTap();
+
+    const existingWin = floatingWindows.find((w) => w.appId === appId);
+    if (existingWin) {
+      if (existingWin.minimized) {
+        focusFloatingWindow(existingWin.id);
+      } else if (focusedWindowId === existingWin.id) {
+        minimizeFloatingWindow(existingWin.id);
+      } else {
+        focusFloatingWindow(existingWin.id);
+      }
+      return;
+    }
 
     if (activeAppId === appId) {
       minimizeActiveApp(appId);
@@ -746,6 +897,17 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
         currentPageIndex,
         totalPages,
         setCurrentPageIndex,
+
+        // Multi-Window Floating Canvas State & Actions
+        floatingWindows,
+        focusedWindowId,
+        openFloatingWindow,
+        closeFloatingWindow,
+        minimizeFloatingWindow,
+        maximizeFloatingWindow,
+        focusFloatingWindow,
+        updateFloatingWindowBounds,
+
         launchApp,
         launchAppFloating,
         isFloatingModeArmed,

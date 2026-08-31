@@ -43,6 +43,7 @@ export const SmartAppTaskbar: React.FC = () => {
     clipboardItems,
     appBadges,
     toggleAppTask,
+    floatingWindows,
     drawerTabs,
     customTabAppMap,
     showToast,
@@ -781,7 +782,8 @@ export const SmartAppTaskbar: React.FC = () => {
           <div className="flex items-center gap-2 overflow-x-auto scrollbar-none py-1 flex-1 min-w-0">
             <div className="flex items-center gap-2 shrink-0 py-1">
               {openAppItems.map((app) => {
-                const isActive = activeAppId === app.id;
+                const isFloatingActive = (floatingWindows || []).some((w) => w.appId === app.id && !w.minimized);
+                const isActive = activeAppId === app.id || isFloatingActive;
                 const badgeNum = (app.packageName && typeof appBadges[app.packageName] === 'number') ? appBadges[app.packageName] : (app.badgeCount ?? 0);
                 const hasBadge = badgeNum > 0;
 
