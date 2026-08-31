@@ -44,3 +44,20 @@ keystore.properties
 *.so
 *.dylib
 
+# Temporary Screenshots & Screen Captures
+*.png
+*.jpg
+*.jpeg
+*.webp
+screen_*.png
+settings_*.png
+
+# Scratch / Studio Replica Dumps & Artifacts
+remix-*/
+*replica*
+shortcuts/
+*.lnk
+*_REPORT.md
+*_STATUS.md
+*_STRATEGY.md
+
