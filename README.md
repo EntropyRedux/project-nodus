@@ -2,14 +2,21 @@
 
 > **Cross-Platform Distributed Command Plane & Multi-Device Control Mesh**
 >
-> **Version:** `1.1.1`  
-> **GitHub Repository:** [https://github.com/EntropyRedux/project-nodus](https://github.com/EntropyRedux/project-nodus)
+> **Version:** `1.3.0`  
+> **GitHub Repository:** [https://github.com/EntropyRedux/project-nodus](https://github.com/EntropyRedux/project-nodus)  
+> **Latest APK Download:** [📥 Download Nodus Home v1.3.0 APK (Direct GitHub Release)](https://github.com/EntropyRedux/project-nodus/releases/latest/download/nodus-home-v1.3.0-debug.apk)
 
 ---
 
-> [!IMPORTANT]
-> **⚠️ Pre-Release / Post-Fix Notice**:  
-> This version (`v1.1.0`) contains extensive architectural refactoring, full codebase audit remediations, TypeScript heap optimizations, and new calendar/widget features. **End-to-end integration testing across all physical hardware scenarios is ongoing.**
+## 📥 Fast Downloads & Automated Builds
+
+[![GitHub Release](https://img.shields.io/github/v/release/EntropyRedux/project-nodus?color=007AFF&label=Latest%20Release)](https://github.com/EntropyRedux/project-nodus/releases/latest)
+[![CI & APK Build](https://github.com/EntropyRedux/project-nodus/actions/workflows/build-apk.yml/badge.svg)](https://github.com/EntropyRedux/project-nodus/actions/workflows/build-apk.yml)
+
+| Release | Version | Release Package | Quick Link |
+| :--- | :---: | :--- | :--- |
+| **Nodus Home** | `v1.3.0` | Android Debug APK | [📥 Download v1.3.0 APK](https://github.com/EntropyRedux/project-nodus/releases/download/v1.3.0/nodus-home-v1.3.0-debug.apk) |
+| **GitHub Releases Page** | All Builds | Source & Assets | [🔗 View All Releases](https://github.com/EntropyRedux/project-nodus/releases) |
 
 ---
 
@@ -20,23 +27,24 @@ All Nodus subsystem modules live inside this unified workspace repository under 
 
 ---
 
-## 🚀 Key Capabilities in v1.1.0
+## 🚀 Key Capabilities in v1.3.0
 
-1. **Agenda & Live Calendar Integration**:
-   - Two-way synchronized Notes & Agenda hub with offline caching and Google Calendar sync.
-   - Chronological multi-meeting pills on the desktop top bar with real-time status badges (`🔴 LIVE:` / `In Xm:`).
-   - 1-tap "Join Call" intent bridging to native Google Meet and Zoom applications with 0 background process drain.
-2. **Clock & Dual Timezone Widgets**:
-   - Main digital clock tapping directly opens the default system clock (`com.android.deskclock`).
-   - Matching-height, non-intrusive Secondary Timezone clock container supporting global timezones.
-3. **Comprehensive Codebase Audit Remediations**:
-   - Resolved TypeScript heap allocation Out-Of-Memory compilation failures.
-   - Harmonized Kotlin HTTP client endpoints (`/api/status`, `/api/process/kill`, `/api/exec`, `/api/lock`) with Tauri Rust desktop server.
-   - Cleaned redundant IP/port concatenation in device control modals.
-   - Pruned obsolete build artifacts from Android assets.
-4. **Desktop Native Engine (Tauri v2 + Rust)**:
-   - High-performance background bridge consuming only ~15 MB RAM.
-   - Sub-millisecond Win32 input simulation and dynamic 500ms power-saving hot corners.
+1. **Continuous Scroll App Grid**:
+   - Standardized continuous scrolling grid that repacks apps sequentially on Page 1 before spilling onto subsequent pages.
+2. **Smart Native Auto-Stash**:
+   - On OEM environments with a 2-window floating limit (such as HyperOS), opening a 3rd floating app automatically stashes the oldest active app into the Taskbar stack with a toast notice.
+3. **Google Calendar Sync & Privacy Consent**:
+   - Explicit account & privacy warning notice before granting calendar access.
+   - Synchronizes upcoming meetings, deadlines, and video links (Google Meet, Zoom, Teams).
+   - Added 1-tap **Unsync** button in the Calendar header for instant disconnection and event clearing.
+4. **Lifecycle-Aware Poller Throttling**:
+   - Custom `useVisibilityPoller` hook auto-pauses high-frequency background timers (Clipboard, Telemetry, Notifications) when the app or screen is hidden to conserve battery and CPU.
+5. **0%–100% System Surface Opacity Control**:
+   - System surface opacity slider range expanded from 0% to 100% across all themes.
+6. **Unified Ecosystem Module Labels**:
+   - Clear, consistent status badges (`"Requires Fleet APK"` / `"Requires Touch APK"`) when ecosystem modules are missing.
+7. **Production CI & Type Safety Gate**:
+   - Automated GitHub Actions workflow with strict `tsc --noEmit` lint and `vitest` unit test gates.
 
 ---
 

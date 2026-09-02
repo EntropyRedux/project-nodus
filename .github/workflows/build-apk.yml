@@ -1,10 +1,15 @@
-﻿name: Nodus Home CI & APK Build
+name: Nodus Home CI & APK Build
 
 on:
   push:
     branches: [ main ]
+    tags:
+      - 'v*'
   pull_request:
     branches: [ main ]
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -50,8 +55,33 @@ jobs:
           cd packages/nodus-home/android-shell
           ./gradlew assembleDebug
 
+      - name: Copy & Rename APK for Release
+        run: |
+          cp packages/nodus-home/android-shell/app/build/outputs/apk/debug/app-debug.apk nodus-home-v1.3.0-debug.apk
+
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: nodus-home-debug-apk
-          path: packages/nodus-home/android-shell/app/build/outputs/apk/debug/app-debug.apk
+          path: nodus-home-v1.3.0-debug.apk
+
+      - name: Create & Publish GitHub Release on Tag Push
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: nodus-home-v1.3.0-debug.apk
+          name: Nodus Home Release ${{ github.ref_name }}
+          body: |
+            ## Nodus Home ${{ github.ref_name }} Release
+            
+            ### Highlights:
+            - **Continuous Scroll App Grid**: Repacks icons sequentially on Page 1 before spilling over.
+            - **Smart Native Auto-Stash**: Automatically stashes the 3rd native floating window to the taskbar on dual-window capped OS environments (e.g., HyperOS).
+            - **Google Calendar Sync Consent**: Explicit opt-in warning card explaining account data scope + instant Unsync control.
+            - **Full Opacity Control**: System surface opacity slider range expanded from 0% to 100%.
+            - **Lifecycle Poller Throttling**: Background timers auto-pause on `visibilitychange` to conserve battery.
+            - **Type Safety & CI**: Zero `tsc --noEmit` lint errors with automated GitHub Actions quality gate.
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
