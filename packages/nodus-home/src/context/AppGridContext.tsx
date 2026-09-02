@@ -279,6 +279,8 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
                   color: palette[idx % palette.length],
                   category: item.isSystemApp ? 'system' : 'productivity',
                   isRemovable: !item.isSystemApp,
+                  pageIndex: existing?.pageIndex ?? 0,
+                  order: existing?.order ?? idx,
                   folderId: existing?.folderId ?? null,
                 };
               });

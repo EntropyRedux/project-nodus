@@ -19,6 +19,17 @@ export interface RemoteProcessItem {
   memory_kb: number;
 }
 
+export function getActiveFleetSessionToken(): string {
+  if (typeof window !== 'undefined') {
+    const bridge = (window as any).NodusNativeBridge;
+    if (bridge && typeof bridge.getSessionToken === 'function') {
+      return bridge.getSessionToken() || 'NODUS-FLEET-SECURE';
+    }
+    return sessionStorage.getItem('nodus_fleet_session_token') || 'NODUS-FLEET-SECURE';
+  }
+  return 'NODUS-FLEET-SECURE';
+}
+
 export async function universalNetworkFetch(
   url: string,
   options: { method?: string; body?: any; timeoutMs?: number } = {}
@@ -50,21 +61,22 @@ export async function universalNetworkFetch(
           };
         }
       } catch (err: any) {
-        console.warn('[universalNetworkFetch] Native bridge error:', err);
+        console.warn(`[NodusFleet] Native HTTP fetch failed for ${url}:`, err);
       }
     }
   }
 
   // 2. Standard Web fetch fallback
   try {
+    const token = getActiveFleetSessionToken();
     const controller = new AbortController();
     const tid = setTimeout(() => controller.abort(), options.timeoutMs || 3500);
     const res = await fetch(url, {
       method,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer NODUS-FLEET-SECURE',
-        'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE',
+        'Authorization': `Bearer ${token}`,
+        'X-Nodus-Auth-Token': token,
       },
       body: bodyStr || undefined,
       signal: controller.signal,

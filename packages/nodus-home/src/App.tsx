@@ -34,12 +34,11 @@ class ErrorBoundary extends React.Component<
           </div>
           <button
             onClick={() => {
-              localStorage.clear();
               window.location.reload();
             }}
             className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition active:scale-95"
           >
-            Reset State & Reload
+            Reload Launcher
           </button>
         </div>
       );

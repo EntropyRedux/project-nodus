@@ -452,6 +452,18 @@ class HomeActivity : AppCompatActivity() {
             }.toString()
         }
 
+        private var activeSessionToken: String = "NODUS-FLEET-SECURE"
+
+        @JavascriptInterface
+        fun getSessionToken(): String = activeSessionToken
+
+        @JavascriptInterface
+        fun setSessionToken(token: String) {
+            if (token.isNotBlank()) {
+                activeSessionToken = token
+            }
+        }
+
         @JavascriptInterface
         fun httpFetch(urlStr: String, method: String?, body: String?): String {
             return try {
@@ -463,8 +475,8 @@ class HomeActivity : AppCompatActivity() {
                 conn.readTimeout = 4000
                 conn.setRequestProperty("Content-Type", "application/json")
                 conn.setRequestProperty("Accept", "application/json")
-                conn.setRequestProperty("Authorization", "Bearer NODUS-FLEET-SECURE")
-                conn.setRequestProperty("X-Nodus-Auth-Token", "NODUS-FLEET-SECURE")
+                conn.setRequestProperty("Authorization", "Bearer ${getSessionToken()}")
+                conn.setRequestProperty("X-Nodus-Auth-Token", getSessionToken())
                 if (reqMethod == "POST" && !body.isNullOrEmpty()) {
                     conn.doOutput = true
                     conn.outputStream.use { os ->
