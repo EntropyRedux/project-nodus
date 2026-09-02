@@ -30,6 +30,10 @@ export function getActiveFleetSessionToken(): string {
   return '';
 }
 
+/**
+ * Delegates network RPC calls via the Android Native Bridge (NodusNativeBridge)
+ * when running inside the APK shell, falling back to standard fetch in web preview environments.
+ */
 export async function universalNetworkFetch(
   url: string,
   options: { method?: string; body?: any; timeoutMs?: number } = {}
@@ -39,7 +43,7 @@ export async function universalNetworkFetch(
     ? (typeof options.body === 'string' ? options.body : JSON.stringify(options.body))
     : null;
 
-  // 1. Try Native Android Bridge first if running inside APK
+  // 1. Primary path: Delegate to Native Android Bridge when running inside APK
   if (typeof window !== 'undefined') {
     const bridge = (window as any).NodusNativeBridge;
     if (bridge && typeof bridge.httpFetch === 'function') {
@@ -61,12 +65,12 @@ export async function universalNetworkFetch(
           };
         }
       } catch (err: any) {
-        console.warn(`[NodusFleet] Native HTTP fetch failed for ${url}:`, err);
+        console.warn(`[NodusHome -> Fleet] Native bridge IPC call failed for ${url}:`, err);
       }
     }
   }
 
-  // 2. Standard Web fetch fallback
+  // 2. Secondary path: Browser preview environment fallback
   try {
     const token = getActiveFleetSessionToken();
     const controller = new AbortController();
@@ -75,8 +79,7 @@ export async function universalNetworkFetch(
       method,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        'X-Nodus-Auth-Token': token,
+        ...(token ? { 'Authorization': `Bearer ${token}`, 'X-Nodus-Auth-Token': token } : {}),
       },
       body: bodyStr || undefined,
       signal: controller.signal,
@@ -88,7 +91,7 @@ export async function universalNetworkFetch(
     } catch (_) {}
     return { ok: res.ok, status: res.status, data };
   } catch (err: any) {
-    return { ok: false, status: 0, error: err?.message || 'Network request failed' };
+    return { ok: false, status: 0, error: err?.message || 'IPC / Network request failed' };
   }
 }
 
