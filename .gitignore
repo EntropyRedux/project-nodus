@@ -61,3 +61,7 @@ shortcuts/
 *_STATUS.md
 *_STRATEGY.md
 
+# Generated Documents (DO NOT PUSH)
+generated_documents_do_not_push/
+**/generated_documents_do_not_push/
+
