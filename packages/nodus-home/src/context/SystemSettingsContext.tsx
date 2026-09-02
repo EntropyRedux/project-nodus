@@ -20,6 +20,7 @@ import {
   INITIAL_TRUSTED_DEVICES,
 } from '../utils/constants';
 import { audio } from '../utils/audio';
+import { useVisibilityPoller } from '../hooks/useVisibilityPoller';
 
 export interface QuickSettingsState {
   wifi: boolean;
@@ -376,8 +377,6 @@ export const SystemSettingsProvider: React.FC<{ children: React.ReactNode }> = (
     window.addEventListener('nodus-notifications-changed', handleNotifChanged);
     window.addEventListener('android-notification-badges-updated', handleNotifChanged);
 
-    const interval = setInterval(syncNotificationBadges, 2500);
-
     // Auto-prompt on first launch if running inside Android native shell and permission is missing
     const hasPrompted = typeof window !== 'undefined' ? sessionStorage.getItem('nodus_notif_permission_prompted') : 'true';
     if (!hasPrompted && typeof window !== 'undefined' && (window as any).NodusNativeBridge?.requestNotificationListenerPermission) {
@@ -398,11 +397,12 @@ export const SystemSettingsProvider: React.FC<{ children: React.ReactNode }> = (
 
     return () => {
       clearTimeout(timer);
-      clearInterval(interval);
       window.removeEventListener('nodus-notifications-changed', handleNotifChanged);
       window.removeEventListener('android-notification-badges-updated', handleNotifChanged);
     };
   }, [syncNotificationBadges]);
+
+  useVisibilityPoller(syncNotificationBadges, 2500, true);
 
   const totalUnreadNotifications = useMemo(() => {
     const badgeTotal = Object.values(appBadges).reduce((sum, n) => sum + (typeof n === 'number' ? n : 0), 0);

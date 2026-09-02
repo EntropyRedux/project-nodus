@@ -5,6 +5,7 @@ import { audio } from '../utils/audio';
 import { universalNetworkFetch } from '../services/FleetDirectClient';
 import { useSystemSettings } from './SystemSettingsContext';
 import { useFleet } from './FleetContext';
+import { useVisibilityPoller } from '../hooks/useVisibilityPoller';
 
 export interface ClipboardContextType {
   clipboardItems: ClipboardItem[];
@@ -297,11 +298,8 @@ export const ClipboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                   pinned: false,
                 };
                 setClipboardItems((prev) => {
-                  if (prev.length > 0) {
-                    const first = prev[0];
-                    if (first.text === newItem.text && first.imageData === newItem.imageData) {
-                      return prev;
-                    }
+                  if (prev.length > 0 && prev[0].text === newItem.text) {
+                    return prev;
                   }
                   return [newItem, ...prev].slice(0, 100);
                 });
@@ -312,9 +310,39 @@ export const ClipboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
     };
 
-    const timer = setInterval(checkClipboard, 1000);
-    return () => clearInterval(timer);
+    checkClipboard();
   }, [devices, addClipboardItem]);
+
+  useVisibilityPoller(
+    useCallback(() => {
+      try {
+        const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
+        if (bridge?.getClipboardText) {
+          const text = bridge.getClipboardText();
+          if (text && typeof text === 'string' && text.trim()) {
+            setClipboardItems((prev) => {
+              const top = prev[0];
+              if (top?.text === text) return prev;
+              const newItem: ClipboardItem = {
+                id: `clip-native-${Date.now()}`,
+                text,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                deviceId: 'poco-pad',
+                deviceName: 'This Device',
+                deviceType: 'tablet',
+                deviceColor: '#007AFF',
+                pinned: false,
+                type: 'text',
+              };
+              return [newItem, ...prev].slice(0, 100);
+            });
+          }
+        }
+      } catch (_) {}
+    }, []),
+    1000,
+    true
+  );
 
   return (
     <ClipboardContext.Provider

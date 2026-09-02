@@ -16,6 +16,7 @@ import { audio } from '../utils/audio';
 import { simulateBridgeRpc } from '../utils/bridgeProtocol';
 import { universalNetworkFetch } from '../services/FleetDirectClient';
 import { useSystemSettings } from './SystemSettingsContext';
+import { useVisibilityPoller } from '../hooks/useVisibilityPoller';
 
 export interface FleetContextType {
   devices: DeviceInfo[];
@@ -199,38 +200,37 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
   }, [syncFleetState]);
 
-  // Periodic Telemetry poller for remote companion nodes
-  useEffect(() => {
-    const pollRemoteStats = async () => {
+  // Periodic Telemetry poller for remote companion nodes (paused when backgrounded)
+  useVisibilityPoller(
+    useCallback(() => {
       for (const dev of devices) {
         if (dev.id !== 'poco-pad' && dev.ipAddress) {
-          try {
-            const res = await universalNetworkFetch(`http://${dev.ipAddress}/api/status`, { timeoutMs: 2500 });
-            if (res.ok && res.data) {
-              const data = res.data;
-              setDevices((prev) =>
-                prev.map((d) =>
-                  d.id === dev.id
-                    ? {
-                        ...d,
-                        status: 'connected',
-                        cpuLoad: typeof data.cpuLoad === 'number' ? data.cpuLoad : d.cpuLoad,
-                        ramUsage: data.ramUsage || d.ramUsage,
-                        storage: data.storage || d.storage,
-                      }
-                    : d
-                )
-              );
-            }
-          } catch (_) {}
+          universalNetworkFetch(`http://${dev.ipAddress}:9120/api/status`, { timeoutMs: 2500 })
+            .then((res) => {
+              if (res.ok && res.data) {
+                const data = res.data;
+                setDevices((prev) =>
+                  prev.map((d) =>
+                    d.id === dev.id
+                      ? {
+                          ...d,
+                          status: 'connected',
+                          cpuLoad: typeof data.cpuLoad === 'number' ? data.cpuLoad : d.cpuLoad,
+                          ramUsage: data.ramUsage || d.ramUsage,
+                          storage: data.storage || d.storage,
+                        }
+                      : d
+                  )
+                );
+              }
+            })
+            .catch(() => {});
         }
       }
-    };
-
-    pollRemoteStats();
-    const interval = setInterval(pollRemoteStats, 5000);
-    return () => clearInterval(interval);
-  }, [devices.length]);
+    }, [devices]),
+    5000,
+    true
+  );
 
   const selectDevice = useCallback((id: string) => {
     audio.playTap();
