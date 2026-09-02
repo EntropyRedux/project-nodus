@@ -452,7 +452,7 @@ class HomeActivity : AppCompatActivity() {
             }.toString()
         }
 
-        private var activeSessionToken: String = "NODUS-FLEET-SECURE"
+        private var activeSessionToken: String = ""
 
         @JavascriptInterface
         fun getSessionToken(): String = activeSessionToken

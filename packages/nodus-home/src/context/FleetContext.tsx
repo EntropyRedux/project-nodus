@@ -541,7 +541,7 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     audio.playTap();
     const targetDev = devices.find((d) => d.id === deviceId) || activeDevice;
     if (targetDev && targetDev.id !== 'poco-pad' && targetDev.ipAddress) {
-      fetch(`http://${targetDev.ipAddress}/api/lock`, { method: 'POST' }).catch(() => {});
+      universalNetworkFetch(`http://${targetDev.ipAddress}:9120/api/lock`, { method: 'POST' }).catch(() => {});
       showToast(`Locked ${targetDev.name}`);
       return;
     }
