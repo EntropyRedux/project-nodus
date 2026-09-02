@@ -260,7 +260,7 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
             setApps((prevApps) => {
               const OBSOLETE_APP_IDS = new Set(['studio', 'terminal', 'monitor', 'files', 'network', 'clipboard']);
               const cleanedPrev = prevApps.filter((a) => !OBSOLETE_APP_IDS.has(a.id));
-              const existingMap = new Map(cleanedPrev.map((a) => [a.id, a]));
+              const existingMap = new Map<string, AppItem>(prevApps.map((app) => [app.id, app]));
 
               const mergedBuiltIns = builtInApps.map((b) => {
                 const ex = existingMap.get(b.id);

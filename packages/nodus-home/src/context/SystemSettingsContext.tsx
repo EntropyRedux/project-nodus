@@ -405,7 +405,7 @@ export const SystemSettingsProvider: React.FC<{ children: React.ReactNode }> = (
   useVisibilityPoller(syncNotificationBadges, 2500, true);
 
   const totalUnreadNotifications = useMemo(() => {
-    const badgeTotal = Object.values(appBadges).reduce((sum, n) => sum + (typeof n === 'number' ? n : 0), 0);
+    const badgeTotal = Object.values(appBadges).reduce<number>((sum, n) => sum + (typeof n === 'number' ? n : 0), 0);
     const notifTotal = notifications.filter((n) => !n.read).length;
     return Math.max(badgeTotal, notifTotal);
   }, [appBadges, notifications]);
