@@ -112,9 +112,9 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [isDeviceRailVisible, setDeviceRailVisible] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('nodus_device_rail_visible');
-      return saved !== null ? JSON.parse(saved) : true;
+      return saved !== null ? JSON.parse(saved) : false;
     }
-    return true;
+    return false;
   });
 
   const [userProfileAvatar, setUserProfileAvatarState] = useState<string | null>(() => {

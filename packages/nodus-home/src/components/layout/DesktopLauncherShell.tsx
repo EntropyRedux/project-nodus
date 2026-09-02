@@ -110,13 +110,28 @@ export const DesktopLauncherShell: React.FC = () => {
     }
   }, [activeDeviceId, isLocalDevice]);
 
+  const isFleetInstalled = useMemo(() => {
+    if (typeof window !== 'undefined' && (window as any).NodusNativeBridge?.isFleetInstalled) {
+      return Boolean((window as any).NodusNativeBridge.isFleetInstalled());
+    }
+    return false;
+  }, []);
+
   useEffect(() => {
     const handleOpenPanel = (e: any) => {
       const panel = e.detail?.panel;
       if (panel === 'clipboard') {
+        if (!settings.enableClipboardPanel || !isFleetInstalled) {
+          showToast('Nodus Fleet APK is required for universal clipboard');
+          return;
+        }
         audio.playTap();
         setClipboardOpen(true);
       } else if (panel === 'device_switcher') {
+        if (!settings.enableMultiDevice || !isFleetInstalled) {
+          showToast('Nodus Fleet APK is required for multi-device mesh');
+          return;
+        }
         audio.playTap();
         if (isSidebarCollapsed) {
           toggleSidebar();
@@ -129,7 +144,7 @@ export const DesktopLauncherShell: React.FC = () => {
     };
     window.addEventListener('nodus_open_panel', handleOpenPanel);
     return () => window.removeEventListener('nodus_open_panel', handleOpenPanel);
-  }, [isSidebarCollapsed, toggleSidebar, setClipboardOpen, setTaskbarOpen, setSearchOpen]);
+  }, [isSidebarCollapsed, toggleSidebar, setClipboardOpen, setTaskbarOpen, setSearchOpen, settings.enableClipboardPanel, settings.enableMultiDevice, isFleetInstalled, showToast]);
 
   const [hoveredFolderId, setHoveredFolderId] = useState<string | null>(null);
   const folderDwellTimerRef = useRef<number | null>(null);
@@ -380,10 +395,10 @@ export const DesktopLauncherShell: React.FC = () => {
       </div>
 
       {/* 1. Left Multi-Device Mesh Sidebar */}
-      {settings.enableMultiDevice && isDeviceRailVisible && <DeviceSidebar />}
+      {settings.enableMultiDevice && isFleetInstalled && isDeviceRailVisible && <DeviceSidebar />}
 
       {/* 2. Side Panel for Device Processes */}
-      {settings.enableMultiDevice && isDeviceRailVisible && <DeviceProcessSidePanel />}
+      {settings.enableMultiDevice && isFleetInstalled && isDeviceRailVisible && <DeviceProcessSidePanel />}
 
       {/* 3. Main Desktop Canvas */}
       <main className="flex-1 h-full flex flex-col justify-between relative overflow-hidden transition-all duration-300 ease-in-out z-10">
@@ -552,15 +567,17 @@ export const DesktopLauncherShell: React.FC = () => {
       </main>
 
       {/* Right Desktop Column: Cross-Device Clipboard Panel */}
-      <div
-        className={`fixed top-4 bottom-18 right-4 z-50 w-84 sm:w-88 xl:w-96 flex flex-col rounded-2xl shadow-2xl transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform ${
-          isClipboardOpen
-            ? 'translate-x-0 opacity-100 pointer-events-auto shadow-[0_20px_50px_rgba(0,0,0,0.85)]'
-            : 'translate-x-[110%] opacity-0 pointer-events-none'
-        }`}
-      >
-        <ClipboardHistoryPanel onClose={() => setClipboardOpen(false)} />
-      </div>
+      {settings.enableClipboardPanel && isFleetInstalled && (
+        <div
+          className={`fixed top-4 bottom-18 right-4 z-50 w-84 sm:w-88 xl:w-96 flex flex-col rounded-2xl shadow-2xl transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform ${
+            isClipboardOpen
+              ? 'translate-x-0 opacity-100 pointer-events-auto shadow-[0_20px_50px_rgba(0,0,0,0.85)]'
+              : 'translate-x-[110%] opacity-0 pointer-events-none'
+          }`}
+        >
+          <ClipboardHistoryPanel onClose={() => setClipboardOpen(false)} />
+        </div>
+      )}
 
       <SmartAppTaskbar />
       <FolderModal />

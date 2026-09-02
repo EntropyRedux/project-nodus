@@ -92,19 +92,32 @@ export const SettingsApp: React.FC = () => {
   const handleResetToDefaults = () => {
     audio.playTap();
     updateSettings({
-      theme: 'glassmorphism',
+      theme: 'material-light',
+      themeMode: 'dark',
       accentColor: 'sapphire',
-      appLaunchMode: 'fullscreen',
+      appLaunchMode: 'floating',
       iconSize: 'medium',
       drawerLayout: 'continuous',
       wallpaper: 'alpine-horizon',
       customWallpaperUrl: undefined,
       iconShape: 'modern',
       selectedIconPackPackage: undefined,
-      taskbarOpacity: 92,
+      leftPanelOpacity: 30,
+      taskbarOpacity: 30,
+      clipboardPanelOpacity: 30,
+      folderOpacity: 30,
       taskbarIconScale: 'medium',
-      enableMultiDevice: true,
+      enableClockWidget: true,
+      enableBatteryWidget: true,
+      enableDeviceNameWidget: false,
+      enableNotesWidget: false,
+      atAGlanceWidget: false,
+      enableMultiDevice: false,
+      enableClipboardPanel: false,
       enableAssistiveTouch: false,
+      enableExperimentalPwaWindows: false,
+      preferPwaAlternatives: false,
+      enableExperimentalShizukuFreeform: false,
     });
     showToast('Settings restored to default');
   };
@@ -865,24 +878,32 @@ export const SettingsApp: React.FC = () => {
               </div>
 
               <div className={`flex items-center justify-between pt-2 border-t ${currentTheme.isLight ? 'border-[#E2E8F0]' : 'border-white/5'}`}>
-                <span className={`text-[10px] font-semibold ${currentTheme.classes.textSecondary}`}>Multi-Device Features</span>
+                <span className={`text-[10px] font-semibold ${currentTheme.classes.textSecondary}`}>Multi-Device Mesh & Clipboard</span>
                 <button
                   type="button"
                   onClick={() => {
                     audio.playTap();
-                    updateSettings({ enableMultiDevice: !settings.enableMultiDevice });
-                    showToast(settings.enableMultiDevice ? 'Multi-Device features disabled' : 'Multi-Device features enabled');
+                    if (!isFleetInstalled) {
+                      showToast('Nodus Fleet APK is not installed on this device');
+                      return;
+                    }
+                    const nextVal = !settings.enableMultiDevice;
+                    updateSettings({
+                      enableMultiDevice: nextVal,
+                      enableClipboardPanel: nextVal,
+                    });
+                    showToast(nextVal ? 'Fleet & Clipboard panels enabled' : 'Fleet & Clipboard panels disabled');
                   }}
                   className={`px-3 py-1 ${currentTheme.buttonRadius} text-[11px] font-bold transition border`}
                   style={
-                    settings.enableMultiDevice
+                    settings.enableMultiDevice && isFleetInstalled
                       ? { backgroundColor: currentAccent.hex, color: '#090B10', borderColor: currentAccent.hex }
                       : currentTheme.isLight
                       ? { backgroundColor: '#FFFFFF', color: '#475569', borderColor: '#CBD5E1' }
                       : { backgroundColor: 'rgba(255,255,255,0.02)', color: '#8E8E93', borderColor: 'rgba(255,255,255,0.1)' }
                   }
                 >
-                  {settings.enableMultiDevice ? 'Enabled' : 'Disabled'}
+                  {!isFleetInstalled ? 'Requires Fleet APK' : settings.enableMultiDevice ? 'Enabled' : 'Disabled'}
                 </button>
               </div>
             </div>

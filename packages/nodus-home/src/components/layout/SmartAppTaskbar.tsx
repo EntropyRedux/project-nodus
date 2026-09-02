@@ -70,6 +70,13 @@ export const SmartAppTaskbar: React.FC = () => {
   const currentTheme = getSystemTheme(settings.theme);
   const currentAccent = getAccentColor(settings.accentColor);
 
+  const isFleetInstalled = useMemo(() => {
+    if (typeof window !== 'undefined' && (window as any).NodusNativeBridge?.isFleetInstalled) {
+      return Boolean((window as any).NodusNativeBridge.isFleetInstalled());
+    }
+    return false;
+  }, []);
+
   const [isStartMenuOpen, setIsStartMenuOpen] = useState(false);
   const [isTabConfigOpen, setIsTabConfigOpen] = useState(false);
   const [menuSearch, setMenuSearch] = useState('');
@@ -606,44 +613,46 @@ export const SmartAppTaskbar: React.FC = () => {
         className={`fixed bottom-0 left-0 right-0 ${sizeConfig.dockHeight} ${currentTheme.classes.taskbarBg} ${currentTheme.classes.taskbarBorder} px-3 sm:px-4 flex items-center justify-between z-40 select-none transition-colors duration-200 backdrop-blur-2xl`}
         style={{ backgroundColor: getSurfaceRgba(settings.theme, settings.taskbarOpacity, 'taskbar') }}
       >
-        {/* LEFT SECTION: Avatar, Start, Page Dots, Running & Recent Apps */}
+        {/* LEFT SECTION: Avatar (Fleet), Start, Page Dots, Running & Recent Apps */}
         <div className="flex items-center gap-2 flex-1 min-w-0 pr-3">
-          <button
-            id="nodus-avatar-btn"
-            onClick={handleAvatarClick}
-            onTouchStart={handleAvatarTouchStart}
-            onTouchEnd={handleAvatarTouchEnd}
-            onTouchCancel={handleAvatarTouchEnd}
-            onMouseDown={handleAvatarTouchStart}
-            onMouseUp={handleAvatarTouchEnd}
-            onMouseLeave={handleAvatarTouchEnd}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              audio.playTap();
-              if (fileInputRef.current) {
-                fileInputRef.current.value = '';
-                fileInputRef.current.click();
-              }
-            }}
-            className={`relative ${sizeConfig.btnSize} ${currentTheme.cardRadius} overflow-hidden ${
-              currentTheme.isLight ? 'bg-white/85 hover:bg-white border-[#CBD5E1]' : 'bg-white/[0.03] hover:bg-white/[0.08] border-white/[0.06]'
-            } border transition flex items-center justify-center shrink-0 shadow-none cursor-pointer`}
-            style={{
-              borderColor: !isSidebarCollapsed ? devColor : undefined,
-              boxShadow: !isSidebarCollapsed ? `0 0 12px ${devColor}50` : undefined,
-            }}
-            title="Single tap: Expand cluster drawer | Double tap: Toggle device rail | Long press: Change photo"
-          >
-            {userAvatar ? (
-              <img src={userAvatar} alt="Profile" className={`w-full h-full object-cover ${currentTheme.cardRadius}`} />
-            ) : (
-              renderDeviceIcon(sizeConfig.iconSize)
-            )}
-            <span
-              className="absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full border-2 border-[#090B10]"
-              style={{ backgroundColor: devColor }}
-            />
-          </button>
+          {settings.enableMultiDevice && isFleetInstalled && (
+            <button
+              id="nodus-avatar-btn"
+              onClick={handleAvatarClick}
+              onTouchStart={handleAvatarTouchStart}
+              onTouchEnd={handleAvatarTouchEnd}
+              onTouchCancel={handleAvatarTouchEnd}
+              onMouseDown={handleAvatarTouchStart}
+              onMouseUp={handleAvatarTouchEnd}
+              onMouseLeave={handleAvatarTouchEnd}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                audio.playTap();
+                if (fileInputRef.current) {
+                  fileInputRef.current.value = '';
+                  fileInputRef.current.click();
+                }
+              }}
+              className={`relative ${sizeConfig.btnSize} ${currentTheme.cardRadius} overflow-hidden ${
+                currentTheme.isLight ? 'bg-white/85 hover:bg-white border-[#CBD5E1]' : 'bg-white/[0.03] hover:bg-white/[0.08] border-white/[0.06]'
+              } border transition flex items-center justify-center shrink-0 shadow-none cursor-pointer`}
+              style={{
+                borderColor: !isSidebarCollapsed ? devColor : undefined,
+                boxShadow: !isSidebarCollapsed ? `0 0 12px ${devColor}50` : undefined,
+              }}
+              title="Single tap: Expand cluster drawer | Double tap: Toggle device rail | Long press: Change photo"
+            >
+              {userAvatar ? (
+                <img src={userAvatar} alt="Profile" className={`w-full h-full object-cover ${currentTheme.cardRadius}`} />
+              ) : (
+                renderDeviceIcon(sizeConfig.iconSize)
+              )}
+              <span
+                className="absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full border-2 border-[#090B10]"
+                style={{ backgroundColor: devColor }}
+              />
+            </button>
+          )}
 
           <button
             id="nodus-start-btn"
@@ -867,27 +876,29 @@ export const SmartAppTaskbar: React.FC = () => {
           </button>
 
           {/* Universal Cross-Device Clipboard History Button */}
-          <button
-            onClick={() => {
-              toggleClipboardPanel();
-            }}
-            className={`relative p-2 ${currentTheme.buttonRadius} transition flex items-center justify-center shrink-0`}
-            style={{
-              backgroundColor: isClipboardOpen ? currentAccent.hex : currentTheme.isLight ? 'rgba(255,255,255,0.7)' : 'transparent',
-              color: isClipboardOpen ? '#090B10' : currentTheme.isLight ? '#475569' : '#94A3B8',
-            }}
-            title={isClipboardOpen ? 'Close Clipboard Panel' : 'Open Cross-Device Clipboard'}
-          >
-            <ClipboardIcon size={15} style={{ color: isClipboardOpen ? '#090B10' : currentAccent.hex }} />
-            {clipboardItems.length > 0 && !isClipboardOpen && (
-              <span
-                className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-1 rounded-full text-[#090B10] text-[8px] font-extrabold flex items-center justify-center shadow-md leading-none font-mono"
-                style={{ backgroundColor: currentAccent.hex }}
-              >
-                {clipboardItems.length > 9 ? '9+' : clipboardItems.length}
-              </span>
-            )}
-          </button>
+          {settings.enableClipboardPanel && isFleetInstalled && (
+            <button
+              onClick={() => {
+                toggleClipboardPanel();
+              }}
+              className={`relative p-2 ${currentTheme.buttonRadius} transition flex items-center justify-center shrink-0`}
+              style={{
+                backgroundColor: isClipboardOpen ? currentAccent.hex : currentTheme.isLight ? 'rgba(255,255,255,0.7)' : 'transparent',
+                color: isClipboardOpen ? '#090B10' : currentTheme.isLight ? '#475569' : '#94A3B8',
+              }}
+              title={isClipboardOpen ? 'Close Clipboard Panel' : 'Open Cross-Device Clipboard'}
+            >
+              <ClipboardIcon size={15} style={{ color: isClipboardOpen ? '#090B10' : currentAccent.hex }} />
+              {clipboardItems.length > 0 && !isClipboardOpen && (
+                <span
+                  className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-1 rounded-full text-[#090B10] text-[8px] font-extrabold flex items-center justify-center shadow-md leading-none font-mono"
+                  style={{ backgroundColor: currentAccent.hex }}
+                >
+                  {clipboardItems.length > 9 ? '9+' : clipboardItems.length}
+                </span>
+              )}
+            </button>
+          )}
         </div>
       </footer>
 
