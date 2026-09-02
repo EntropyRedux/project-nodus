@@ -8,6 +8,7 @@ export interface NotesContextType {
   notes: NoteItem[];
   calendarEvents: CalendarEventItem[];
   isCalendarPermissionGranted: boolean;
+  isCalendarSyncEnabled: boolean;
   nextAlarm: { triggerTime: number; formattedTime?: string } | null;
   isNotesModalOpen: boolean;
   selectedNoteId: string | null;
@@ -22,6 +23,7 @@ export interface NotesContextType {
   closeSingleNote: () => void;
   fetchCalendarEvents: () => void;
   requestCalendarAccess: () => void;
+  disconnectCalendar: () => void;
   fetchNextAlarm: () => void;
   openClockApp: () => void;
   addNote: (noteData: {
@@ -61,6 +63,14 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const [calendarEvents, setCalendarEvents] = useState<CalendarEventItem[]>([]);
   const [nextAlarm, setNextAlarm] = useState<{ triggerTime: number; formattedTime?: string } | null>(null);
+  const [isCalendarSyncEnabled, setIsCalendarSyncEnabled] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('nodus_calendar_sync_enabled');
+      if (saved !== null) return saved === 'true';
+    }
+    return false; // Default: Disabled until user explicitly clicks +Sync Calendar
+  });
+
   const [isCalendarPermissionGranted, setIsCalendarPermissionGranted] = useState<boolean>(() => {
     if (typeof window !== 'undefined' && (window as any).NodusNativeBridge?.hasCalendarPermission) {
       try {
@@ -69,13 +79,45 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
     return false;
   });
+
   const [isNotesModalOpen, setNotesModalOpen] = useState<boolean>(false);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [singleViewingNoteId, setSingleViewingNoteId] = useState<string | null>(null);
   const [notesActiveTab, setNotesActiveTab] = useState<'all' | 'todo' | 'note' | 'checklist' | 'calendar'>('all');
 
+  const disconnectCalendar = useCallback(() => {
+    audio.playTap();
+    setIsCalendarSyncEnabled(false);
+    setCalendarEvents([]);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('nodus_calendar_sync_enabled', 'false');
+    }
+    showToast('Google Calendar disconnected');
+  }, [showToast]);
+
+  const requestCalendarAccess = useCallback(() => {
+    audio.playTap();
+    setIsCalendarSyncEnabled(true);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('nodus_calendar_sync_enabled', 'true');
+    }
+    if (typeof window === 'undefined') return;
+    const bridge = (window as any).NodusNativeBridge;
+    if (bridge && typeof bridge.requestCalendarPermission === 'function') {
+      try {
+        bridge.requestCalendarPermission();
+      } catch (e) {
+        console.warn('Error requesting calendar permission:', e);
+      }
+    }
+  }, []);
+
   const fetchCalendarEvents = useCallback(() => {
     if (typeof window === 'undefined') return;
+    if (!isCalendarSyncEnabled) {
+      setCalendarEvents([]);
+      return;
+    }
     const bridge = (window as any).NodusNativeBridge;
     if (bridge && typeof bridge.hasCalendarPermission === 'function') {
       try {
@@ -95,7 +137,7 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         console.warn('Error fetching native calendar events:', e);
       }
     }
-  }, []);
+  }, [isCalendarSyncEnabled]);
 
   const fetchNextAlarm = useCallback(() => {
     if (typeof window === 'undefined') return;
@@ -132,21 +174,7 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, []);
 
-  const requestCalendarAccess = useCallback(() => {
-    audio.playTap();
-    if (typeof window === 'undefined') return;
-    const bridge = (window as any).NodusNativeBridge;
-    if (bridge && typeof bridge.requestCalendarPermission === 'function') {
-      try {
-        bridge.requestCalendarPermission();
-        setTimeout(() => {
-          fetchCalendarEvents();
-        }, 1200);
-      } catch (e) {
-        console.warn('Error requesting calendar permission:', e);
-      }
-    }
-  }, [fetchCalendarEvents]);
+
 
   // Initial fetch and 60-second polling
   useEffect(() => {
@@ -375,6 +403,7 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         notes,
         calendarEvents,
         isCalendarPermissionGranted,
+        isCalendarSyncEnabled,
         nextAlarm,
         isNotesModalOpen,
         selectedNoteId,
@@ -389,6 +418,7 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         closeSingleNote,
         fetchCalendarEvents,
         requestCalendarAccess,
+        disconnectCalendar,
         fetchNextAlarm,
         openClockApp,
         addNote,

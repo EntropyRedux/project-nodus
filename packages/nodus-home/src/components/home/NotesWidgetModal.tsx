@@ -42,8 +42,10 @@ export const NotesWidgetModal: React.FC = () => {
     toggleChecklistItem,
     calendarEvents,
     isCalendarPermissionGranted,
+    isCalendarSyncEnabled,
     fetchCalendarEvents,
     requestCalendarAccess,
+    disconnectCalendar,
     notesActiveTab,
     settings,
   } = useLauncher();
@@ -736,19 +738,32 @@ export const NotesWidgetModal: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      audio.playTap();
-                      fetchCalendarEvents();
-                    }}
-                    className={`px-2 py-1 ${currentTheme.pillRadius} text-[10px] font-semibold ${currentTheme.classes.actionButton} flex items-center gap-1 transition`}
-                    title="Refresh Calendar"
-                  >
-                    <RefreshCw size={11} />
-                    <span>Sync</span>
-                  </button>
-                  {!isCalendarPermissionGranted && (
+                  {isCalendarSyncEnabled && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          audio.playTap();
+                          fetchCalendarEvents();
+                        }}
+                        className={`px-2 py-1 ${currentTheme.pillRadius} text-[10px] font-semibold ${currentTheme.classes.actionButton} flex items-center gap-1 transition`}
+                        title="Refresh Calendar"
+                      >
+                        <RefreshCw size={11} />
+                        <span>Sync</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={disconnectCalendar}
+                        className={`px-2 py-1 ${currentTheme.pillRadius} text-[10px] font-semibold bg-[#FF3B30]/10 hover:bg-[#FF3B30]/20 text-[#FF3B30] border border-[#FF3B30]/25 transition`}
+                        title="Disconnect Calendar Sync"
+                      >
+                        Unsync
+                      </button>
+                    </>
+                  )}
+                  {!isCalendarPermissionGranted && !isCalendarSyncEnabled && (
                     <button
                       type="button"
                       onClick={requestCalendarAccess}
@@ -761,26 +776,38 @@ export const NotesWidgetModal: React.FC = () => {
                 </div>
               </div>
 
-              {/* If permission not granted: Banner */}
-              {!isCalendarPermissionGranted ? (
+              {/* If permission not granted or sync not enabled: Banner */}
+              {(!isCalendarPermissionGranted || !isCalendarSyncEnabled) ? (
                 <div
-                  className={`p-6 ${currentTheme.cardRadius} ${currentTheme.classes.itemCard} border text-center space-y-3`}
+                  className={`p-6 ${currentTheme.cardRadius} ${currentTheme.classes.itemCard} border text-center space-y-3.5`}
                   style={{ backgroundColor: getSurfaceRgba(settings.theme, settings.taskbarOpacity ?? 92, 'card') }}
                 >
-                  <CalendarDays size={32} className="mx-auto" style={{ color: currentAccent.hex }} />
-                  <div>
-                    <h4 className={`text-sm font-bold ${currentTheme.classes.textPrimary}`}>Google Calendar Not Connected</h4>
-                    <p className={`text-xs ${currentTheme.classes.textSecondary} max-w-sm mx-auto mt-1`}>
-                      Grant calendar permission so Nodus Home can display your meetings, deadlines, and video links right on your desktop.
+                  <CalendarDays size={34} className="mx-auto" style={{ color: currentAccent.hex }} />
+                  <div className="space-y-1">
+                    <h4 className={`text-sm font-bold ${currentTheme.classes.textPrimary}`}>Google Calendar Sync</h4>
+                    <p className={`text-xs ${currentTheme.classes.textSecondary} max-w-md mx-auto leading-relaxed`}>
+                      Syncs upcoming meetings, deadlines, and video links (Google Meet, Zoom, Teams) directly onto your desktop launcher.
                     </p>
                   </div>
+
+                  <div className={`p-3 rounded-xl text-left border ${currentTheme.isLight ? 'bg-black/5 border-black/10 text-[#475569]' : 'bg-white/5 border-white/10 text-[#94A3B8]'} text-[11px] space-y-1.5 max-w-md mx-auto font-sans`}>
+                    <div className="font-semibold text-xs flex items-center gap-1.5" style={{ color: currentAccent.hex }}>
+                      <span>📌 Account & Privacy Notice:</span>
+                    </div>
+                    <ul className="list-disc list-inside space-y-1 opacity-90 leading-tight">
+                      <li>Reads calendar events from <b>all Google Accounts</b> signed into this Android device.</li>
+                      <li>No external cloud servers are used; sync stays 100% local on your device.</li>
+                      <li>To filter which calendars display, toggle them in the native Google Calendar app.</li>
+                    </ul>
+                  </div>
+
                   <button
                     type="button"
                     onClick={requestCalendarAccess}
                     style={{ backgroundColor: currentAccent.hex, color: '#090B10' }}
-                    className={`px-4 py-2 ${currentTheme.pillRadius} text-xs font-bold shadow-md transition`}
+                    className={`px-5 py-2.5 ${currentTheme.pillRadius} text-xs font-bold shadow-md transition hover:scale-105 active:scale-95`}
                   >
-                    Connect Android Calendar
+                    Connect Device Calendar
                   </button>
                 </div>
               ) : calendarEvents.length === 0 ? (

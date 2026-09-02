@@ -175,6 +175,8 @@ export const SystemSettingsProvider: React.FC<{ children: React.ReactNode }> = (
           return {
             ...DEFAULT_SETTINGS,
             ...parsed,
+            drawerLayout: 'continuous',
+            notificationBadges: parsed.notificationBadges ?? true,
             trustedDevices: cleanTrusted,
             remoteExecutables: cleanExecs,
             windowsBridge: cleanWinBridge,
@@ -375,6 +377,24 @@ export const SystemSettingsProvider: React.FC<{ children: React.ReactNode }> = (
     window.addEventListener('android-notification-badges-updated', handleNotifChanged);
 
     const interval = setInterval(syncNotificationBadges, 2500);
+
+    // Auto-prompt on first launch if running inside Android native shell and permission is missing
+    const hasPrompted = typeof window !== 'undefined' ? sessionStorage.getItem('nodus_notif_permission_prompted') : 'true';
+    if (!hasPrompted && typeof window !== 'undefined' && (window as any).NodusNativeBridge?.requestNotificationListenerPermission) {
+      setTimeout(() => {
+        const bridge = (window as any).NodusNativeBridge;
+        if (bridge.isNotificationListenerEnabled && !bridge.isNotificationListenerEnabled()) {
+          sessionStorage.setItem('nodus_notif_permission_prompted', 'true');
+          setConfirmDialog({
+            isOpen: true,
+            title: 'Enable Notification Badges',
+            message: 'Nodus Home requires Notification Access to show live unread counter badges on Gmail, LinkedIn, and your app icons. Would you like to open system settings now?',
+            confirmText: 'Open Settings',
+            onConfirm: () => bridge.requestNotificationListenerPermission(),
+          });
+        }
+      }, 1500);
+    }
 
     return () => {
       clearTimeout(timer);

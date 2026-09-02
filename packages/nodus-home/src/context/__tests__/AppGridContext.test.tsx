@@ -18,7 +18,7 @@ describe('AppGridContext', () => {
     const { result } = renderHook(() => useAppGrid(), { wrapper });
     expect(result.current.apps.length).toBeGreaterThan(0);
     expect(result.current.dockAppIds.length).toBeGreaterThan(0);
-    expect(result.current.totalPages).toBeGreaterThanOrEqual(2);
+    expect(result.current.totalPages).toBeGreaterThanOrEqual(1);
   });
 
   it('should create and delete a folder correctly', () => {

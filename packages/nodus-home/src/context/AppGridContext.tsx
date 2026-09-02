@@ -91,7 +91,7 @@ export interface AppGridContextType {
 export const AppGridContext = createContext<AppGridContextType | null>(null);
 
 export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { settings, showToast, showConfirm, addNotification } = useSystemSettings();
+  const { settings, updateSettings, showToast, showConfirm, addNotification } = useSystemSettings();
   const { activeDeviceId, activeDevice, executeRemoteApp } = useFleet();
 
   const [apps, setApps] = useState<AppItem[]>(() => {
@@ -165,7 +165,11 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [activeAppId, setActiveAppId] = useState<string | null>(null);
   const [foregroundAppId, setForegroundAppId] = useState<string | null>(null);
   const [minimizedAppIds, setMinimizedAppIds] = useState<string[]>([]);
-  const [isFloatingModeArmed, setIsFloatingModeArmed] = useState<boolean>(false);
+  const [isFloatingModeArmed, setIsFloatingModeArmed] = useState<boolean>(() => settings.appLaunchMode === 'floating');
+
+  useEffect(() => {
+    setIsFloatingModeArmed(settings.appLaunchMode === 'floating');
+  }, [settings.appLaunchMode]);
   const [appContextMenu, setAppContextMenu] = useState<{ isOpen: boolean; appId: string; x: number; y: number } | null>(null);
 
   const [runningApps, setRunningApps] = useState<string[]>([]);
@@ -248,16 +252,24 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
           if (Array.isArray(list) && list.length > 0) {
             const builtInApps = INITIAL_APPS.filter((a) => !a.packageName);
             const palette = ['#007AFF', '#34C759', '#FF9500', '#AF52DE', '#FF2D55', '#5856D6', '#64D2FF', '#FFCC00'];
-            const APPS_PER_PAGE = 36;
+
+            // Dynamic APPS_PER_PAGE capacity calculation based on grid columns & icon scale
+            const cols = settings.gridColumns || 5;
+            const APPS_PER_PAGE = Math.max(48, cols * 8); // 48 apps per page capacity for rich desktop tablet grids
 
             setApps((prevApps) => {
               const OBSOLETE_APP_IDS = new Set(['studio', 'terminal', 'monitor', 'files', 'network', 'clipboard']);
               const cleanedPrev = prevApps.filter((a) => !OBSOLETE_APP_IDS.has(a.id));
               const existingMap = new Map(cleanedPrev.map((a) => [a.id, a]));
+
+              const mergedBuiltIns = builtInApps.map((b) => {
+                const ex = existingMap.get(b.id);
+                return ex ? { ...b, folderId: ex.folderId ?? null } : b;
+              });
+
               const nativeApps: AppItem[] = list.map((item, idx) => {
                 const appId = `pkg_${item.packageName}`;
                 const existing = existingMap.get(appId);
-                const totalSlot = builtInApps.length + idx;
                 return {
                   id: appId,
                   name: item.label,
@@ -267,18 +279,26 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
                   color: palette[idx % palette.length],
                   category: item.isSystemApp ? 'system' : 'productivity',
                   isRemovable: !item.isSystemApp,
-                  pageIndex: existing?.pageIndex ?? Math.floor(totalSlot / APPS_PER_PAGE),
-                  order: existing?.order ?? totalSlot % APPS_PER_PAGE,
                   folderId: existing?.folderId ?? null,
                 };
               });
 
-              const mergedBuiltIns = builtInApps.map((b) => {
-                const ex = existingMap.get(b.id);
-                return ex ? { ...b, folderId: ex.folderId ?? null } : b;
+              const allUnsorted = [...mergedBuiltIns, ...nativeApps];
+
+              // Filter out items inside folders
+              const unassignedApps = allUnsorted.filter((a) => !a.folderId);
+
+              // Continuous Sequential Repacking: 1st page must be completely filled first
+              let currentSlot = 0;
+              const repacked = unassignedApps.map((app) => {
+                const pageIndex = Math.floor(currentSlot / APPS_PER_PAGE);
+                const order = currentSlot % APPS_PER_PAGE;
+                currentSlot++;
+                return { ...app, pageIndex, order };
               });
 
-              const merged = [...mergedBuiltIns, ...nativeApps];
+              const folderedApps = allUnsorted.filter((a) => a.folderId);
+              const merged = [...repacked, ...folderedApps];
               localStorage.setItem('nodus_home_v5_apps', JSON.stringify(merged));
               return merged;
             });
@@ -308,12 +328,11 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const toggleFloatingMode = useCallback(() => {
     if (settings.soundEffects) audio.playTap();
-    setIsFloatingModeArmed((prev) => {
-      const next = !prev;
-      showToast(next ? 'Floating Window Mode: ON' : 'Floating Window Mode: OFF');
-      return next;
-    });
-  }, [settings.soundEffects, showToast]);
+    const nextFloating = !isFloatingModeArmed;
+    setIsFloatingModeArmed(nextFloating);
+    updateSettings({ appLaunchMode: nextFloating ? 'floating' : 'fullscreen' });
+    showToast(nextFloating ? 'Floating Window Mode: ON' : 'Floating Window Mode: OFF');
+  }, [settings.soundEffects, isFloatingModeArmed, updateSettings, showToast]);
 
   const openAppContextMenu = useCallback((appId: string, x: number, y: number) => {
     if (settings.soundEffects) audio.playTap();
@@ -509,25 +528,35 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return next;
     });
 
-    const shouldFloat = forceMode === 'floating' || (!forceMode && (isFloatingModeArmed || settings.appLaunchMode === 'floating' || floatingApps.includes(appId)));
+    const shouldFloat = forceMode === 'floating' || (forceMode !== 'fullscreen' && (isFloatingModeArmed || settings.appLaunchMode === 'floating'));
 
-    if (shouldFloat) {
+    if (shouldFloat && targetApp?.packageName) {
+      setFloatingApps((prev) => {
+        const activeNativeFloating = prev.filter((id) => {
+          const item = apps.find((a) => a.id === id);
+          return item?.packageName && !minimizedAppIds.includes(id);
+        });
+
+        // Smart Stash: If device OS has 2-window floating limit (HyperOS/MIUI/etc), auto-stash oldest active app into Taskbar
+        if (activeNativeFloating.length >= 2) {
+          const oldestNativeId = activeNativeFloating[0];
+          if (oldestNativeId && oldestNativeId !== appId) {
+            const oldestApp = apps.find((a) => a.id === oldestNativeId);
+            setMinimizedAppIds((mPrev) => (mPrev.includes(oldestNativeId) ? mPrev : [...mPrev, oldestNativeId]));
+            showToast(`Auto-stashed ${oldestApp?.name || 'app'} to Taskbar`);
+          }
+        }
+
+        return prev.includes(appId) ? prev : [...prev, appId];
+      });
+    } else if (shouldFloat) {
       setFloatingApps((prev) => (prev.includes(appId) ? prev : [...prev, appId]));
-    } else if (forceMode === 'fullscreen') {
+    } else {
       setFloatingApps((prev) => prev.filter((id) => id !== appId));
     }
 
     if (targetApp?.packageName) {
       const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
-
-      // Privileged Shizuku AOSP Freeform Hook
-      if (settings.enableExperimentalShizukuFreeform && bridge?.launchAppShizukuFreeform) {
-        const shizukuLaunched = bridge.launchAppShizukuFreeform(targetApp.packageName);
-        if (shizukuLaunched) {
-          showToast(`Launched ${targetApp.name} via Shizuku AOSP Freeform`);
-          return;
-        }
-      }
 
       if (shouldFloat && bridge?.launchAppFloating) {
         const launched = bridge.launchAppFloating(targetApp.packageName);
@@ -553,21 +582,11 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
       });
       return;
     }
-  }, [settings.soundEffects, settings.remoteExecutables, settings.appLaunchMode, settings.enableExperimentalPwaWindows, settings.preferPwaAlternatives, settings.enableExperimentalShizukuFreeform, apps, executeRemoteApp, isFloatingModeArmed, floatingApps, showToast, activeDeviceId, activeDevice.name, addNotification, openFloatingWindow]);
+  }, [settings.soundEffects, settings.remoteExecutables, settings.appLaunchMode, apps, executeRemoteApp, isFloatingModeArmed, showToast, activeDeviceId, activeDevice.name, addNotification, minimizedAppIds]);
 
   const launchAppFloating = useCallback((appId: string) => {
     if (settings.soundEffects) audio.playAppOpen();
     const targetApp = apps.find((a) => a.id === appId);
-    const pwaInfo = PWA_APP_REGISTRY[targetApp?.packageName || ''] || PWA_APP_REGISTRY[appId];
-    const hasPwaUrl = Boolean(targetApp?.pwaDesktopUrl || targetApp?.webUrl || pwaInfo?.url);
-
-    if (settings.enableExperimentalPwaWindows && (hasPwaUrl || !targetApp?.packageName)) {
-      openFloatingWindow(appId);
-      return;
-    }
-
-    setForegroundAppId(appId);
-    setMinimizedAppIds((prev) => prev.filter((id) => id !== appId));
 
     if (targetApp?.packageName) {
       const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
@@ -581,7 +600,7 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
     }
     launchApp(appId, 'floating');
-  }, [settings.soundEffects, settings.enableExperimentalPwaWindows, apps, showToast, openFloatingWindow, launchApp]);
+  }, [settings.soundEffects, apps, showToast, launchApp]);
 
   const toggleAppTask = useCallback((appId: string) => {
     if (settings.soundEffects) audio.playTap();
@@ -927,7 +946,7 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
     ...apps.map((a) => a.pageIndex || 0),
     ...folders.map((f) => f.pageIndex || 0)
   );
-  const totalPages = Math.max(2, maxPageIndex + 1);
+  const totalPages = maxPageIndex + 1;
 
   return (
     <AppGridContext.Provider

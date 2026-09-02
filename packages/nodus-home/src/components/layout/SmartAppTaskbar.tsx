@@ -170,7 +170,7 @@ export const SmartAppTaskbar: React.FC = () => {
           iconSize: 18,
           indicatorH: 'h-[2px]',
           drawerWidth: 'w-[420px] sm:w-[480px]',
-          drawerMaxH: 'max-h-[500px]',
+          drawerMaxH: 'max-h-[85vh]',
           drawerGrid: 'grid-cols-4 sm:grid-cols-5 gap-2.5',
           drawerAppIconSize: 22,
           drawerAppBox: 'w-10 h-10',
@@ -182,7 +182,7 @@ export const SmartAppTaskbar: React.FC = () => {
           iconSize: 26,
           indicatorH: 'h-[3px]',
           drawerWidth: 'w-[520px] sm:w-[620px] md:w-[680px]',
-          drawerMaxH: 'max-h-[600px]',
+          drawerMaxH: 'max-h-[85vh]',
           drawerGrid: 'grid-cols-4 sm:grid-cols-5 gap-3.5',
           drawerAppIconSize: 30,
           drawerAppBox: 'w-14 h-14',
@@ -194,7 +194,7 @@ export const SmartAppTaskbar: React.FC = () => {
           iconSize: 32,
           indicatorH: 'h-[3.5px]',
           drawerWidth: 'w-[560px] sm:w-[660px] md:w-[740px]',
-          drawerMaxH: 'max-h-[640px]',
+          drawerMaxH: 'max-h-[85vh]',
           drawerGrid: 'grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-4',
           drawerAppIconSize: 34,
           drawerAppBox: 'w-16 h-16',
@@ -207,7 +207,7 @@ export const SmartAppTaskbar: React.FC = () => {
           iconSize: 22,
           indicatorH: 'h-[2.5px]',
           drawerWidth: 'w-[480px] sm:w-[560px] md:w-[620px]',
-          drawerMaxH: 'max-h-[560px]',
+          drawerMaxH: 'max-h-[85vh]',
           drawerGrid: 'grid-cols-4 sm:grid-cols-5 gap-3',
           drawerAppIconSize: 26,
           drawerAppBox: 'w-12 h-12',
@@ -463,7 +463,7 @@ export const SmartAppTaskbar: React.FC = () => {
           </div>
 
           {/* Alphabetical App Grid */}
-          <div className={`grid ${sizeConfig.drawerGrid} overflow-y-auto max-h-[360px] pr-1 scrollbar-thin scrollbar-thumb-white/10 flex-1 py-1`}>
+          <div className={`grid ${sizeConfig.drawerGrid} overflow-y-auto max-h-[calc(85vh-160px)] pr-1 scrollbar-thin scrollbar-thumb-white/10 flex-1 py-1`}>
             {sortedApps.length === 0 ? (
               <div className={`col-span-full py-12 text-center text-xs ${currentTheme.classes.textMuted}`}>
                 No matching apps found
@@ -580,19 +580,6 @@ export const SmartAppTaskbar: React.FC = () => {
               </button>
             ))}
           </div>
-
-          <div className="h-4 w-[1px] bg-white/15" />
-
-          <button
-            onClick={() => {
-              audio.playTap();
-              updateSettings({ drawerLayout: isContinuous ? 'paginated' : 'continuous' });
-            }}
-            className={`px-2.5 py-1 bg-[#141924] hover:bg-[#1C2333] text-[#F1F5F9] ${currentTheme.pillRadius} text-xs font-semibold transition border border-white/10`}
-            title="Toggle Continuous Drawer vs Paginated View"
-          >
-            {isContinuous ? 'Pages View' : 'Drawer View'}
-          </button>
 
           <div className="h-4 w-[1px] bg-white/15" />
 

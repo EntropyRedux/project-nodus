@@ -35,6 +35,8 @@ export const SettingsApp: React.FC = () => {
     updateSettings,
     closeActiveApp,
     showToast,
+    isNotificationListenerEnabled,
+    requestNotificationListenerPermission,
   } = useLauncher();
 
   const currentTheme = getSystemTheme(settings.theme);
@@ -102,6 +104,7 @@ export const SettingsApp: React.FC = () => {
       customWallpaperUrl: undefined,
       iconShape: 'modern',
       selectedIconPackPackage: undefined,
+      secondaryTimezone: undefined,
       leftPanelOpacity: 30,
       taskbarOpacity: 30,
       clipboardPanelOpacity: 30,
@@ -376,49 +379,7 @@ export const SettingsApp: React.FC = () => {
               </div>
             </div>
 
-            {/* App Display Format */}
-            <div className="space-y-1.5">
-              <label className={`text-[11px] font-semibold ${currentTheme.classes.textSecondary}`}>App Display Format</label>
-              <div className="grid grid-cols-2 gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    audio.playTap();
-                    updateSettings({ drawerLayout: 'continuous' });
-                  }}
-                  className={`py-2 px-2.5 ${currentTheme.buttonRadius} text-xs font-bold transition flex items-center justify-center gap-1.5 border`}
-                  style={
-                    (settings.drawerLayout ?? 'continuous') === 'continuous'
-                      ? { backgroundColor: currentAccent.hex, color: '#090B10', borderColor: currentAccent.hex }
-                      : currentTheme.isLight
-                      ? { backgroundColor: '#F8FAFD', borderColor: '#CBD5E1', color: '#475569' }
-                      : { backgroundColor: 'rgba(255,255,255,0.02)', borderColor: 'rgba(255,255,255,0.06)', color: '#8E8E93' }
-                  }
-                >
-                  <LayoutGrid size={13} />
-                  <span>Continuous</span>
-                </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    audio.playTap();
-                    updateSettings({ drawerLayout: 'paginated' });
-                  }}
-                  className={`py-2 px-2.5 ${currentTheme.buttonRadius} text-xs font-bold transition flex items-center justify-center gap-1.5 border`}
-                  style={
-                    settings.drawerLayout === 'paginated'
-                      ? { backgroundColor: currentAccent.hex, color: '#090B10', borderColor: currentAccent.hex }
-                      : currentTheme.isLight
-                      ? { backgroundColor: '#F8FAFD', borderColor: '#CBD5E1', color: '#475569' }
-                      : { backgroundColor: 'rgba(255,255,255,0.02)', borderColor: 'rgba(255,255,255,0.06)', color: '#8E8E93' }
-                  }
-                >
-                  <AppWindow size={13} />
-                  <span>Paginated</span>
-                </button>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -475,7 +436,7 @@ export const SettingsApp: React.FC = () => {
         </div>
 
         {/* SECTION 4: Custom Icon Packs */}
-        <div className={`p-4 sm:p-5 ${currentTheme.cardRadius} ${currentTheme.classes.itemCard} shadow-sm space-y-3`}>
+        <div className={`relative z-20 p-4 sm:p-5 ${currentTheme.cardRadius} ${currentTheme.classes.itemCard} shadow-sm space-y-3`}>
           <div className={`flex items-center justify-between pb-2 border-b ${currentTheme.isLight ? 'border-[#E2E8F0]' : 'border-white/5'}`}>
             <div className={`flex items-center gap-2 text-xs font-bold ${currentTheme.classes.textPrimary} tracking-wide uppercase`}>
               <Sparkles size={15} style={{ color: currentAccent.hex }} />
@@ -552,10 +513,10 @@ export const SettingsApp: React.FC = () => {
                 </span>
               </div>
               <div className="flex items-center gap-3">
-                <span className={`text-[10px] font-mono ${currentTheme.classes.textMuted}`}>20%</span>
+                <span className={`text-[10px] font-mono ${currentTheme.classes.textMuted}`}>0%</span>
                 <input
                   type="range"
-                  min="20"
+                  min="0"
                   max="100"
                   step="1"
                   value={settings.taskbarOpacity ?? 92}
@@ -937,151 +898,76 @@ export const SettingsApp: React.FC = () => {
                   type="button"
                   onClick={() => {
                     audio.playTap();
+                    if (!isTouchInstalled) {
+                      showToast('Nodus Touch APK is not installed on this device');
+                      return;
+                    }
                     updateSettings({ enableAssistiveTouch: !settings.enableAssistiveTouch });
                     showToast(settings.enableAssistiveTouch ? 'Assistive Touch disabled' : 'Assistive Touch enabled');
                   }}
                   className={`px-3 py-1 ${currentTheme.buttonRadius} text-[11px] font-bold transition border`}
                   style={
-                    settings.enableAssistiveTouch
+                    settings.enableAssistiveTouch && isTouchInstalled
                       ? { backgroundColor: currentAccent.hex, color: '#090B10', borderColor: currentAccent.hex }
                       : currentTheme.isLight
                       ? { backgroundColor: '#FFFFFF', color: '#475569', borderColor: '#CBD5E1' }
                       : { backgroundColor: 'rgba(255,255,255,0.02)', color: '#8E8E93', borderColor: 'rgba(255,255,255,0.1)' }
                   }
                 >
-                  {settings.enableAssistiveTouch ? 'Enabled' : 'Disabled'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* SECTION 8: 🧪 Experimental Features (Multi-Window Canvas & PWAs) */}
-        <div className={`p-4 sm:p-5 ${currentTheme.cardRadius} ${currentTheme.classes.itemCard} shadow-sm space-y-3`}>
-          <div className={`flex items-center gap-2 text-xs font-bold ${currentTheme.classes.textPrimary} tracking-wide uppercase pb-2 border-b ${currentTheme.isLight ? 'border-[#E2E8F0]' : 'border-white/5'}`}>
-            <FlaskConical size={15} style={{ color: currentAccent.hex }} />
-            <span>🧪 Experimental Features</span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* 1. Multi-Window Floating Canvas */}
-            <div className={`p-3 ${currentTheme.cardRadius} ${currentTheme.isLight ? 'bg-[#F8FAFD] border border-[#E2E8F0]' : 'bg-black/20 border border-white/5'} flex flex-col justify-between gap-2.5`}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Boxes size={16} style={{ color: currentAccent.hex }} />
-                  <div>
-                    <div className={`text-xs font-bold ${currentTheme.classes.textPrimary}`}>Multi-Window Web Canvas</div>
-                    <div className={`text-[10px] ${currentTheme.classes.textSecondary}`}>Draggable & resizable floating windows</div>
-                  </div>
-                </div>
-              </div>
-
-              <div className={`flex items-center justify-between pt-2 border-t ${currentTheme.isLight ? 'border-[#E2E8F0]' : 'border-white/5'}`}>
-                <span className={`text-[10px] font-semibold ${currentTheme.classes.textSecondary}`}>Desktop Window Manager</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    audio.playTap();
-                    updateSettings({ enableExperimentalPwaWindows: !settings.enableExperimentalPwaWindows });
-                    showToast(settings.enableExperimentalPwaWindows ? 'Multi-Window Canvas disabled' : 'Multi-Window Canvas enabled');
-                  }}
-                  className={`px-3 py-1 ${currentTheme.buttonRadius} text-[11px] font-bold transition border`}
-                  style={
-                    settings.enableExperimentalPwaWindows
-                      ? { backgroundColor: currentAccent.hex, color: '#090B10', borderColor: currentAccent.hex }
-                      : currentTheme.isLight
-                      ? { backgroundColor: '#FFFFFF', color: '#475569', borderColor: '#CBD5E1' }
-                      : { backgroundColor: 'rgba(255,255,255,0.02)', color: '#8E8E93', borderColor: 'rgba(255,255,255,0.1)' }
-                  }
-                >
-                  {settings.enableExperimentalPwaWindows ? 'Enabled' : 'Disabled'}
+                  {!isTouchInstalled ? 'Requires Touch APK' : settings.enableAssistiveTouch ? 'Enabled' : 'Disabled'}
                 </button>
               </div>
             </div>
 
-            {/* 2. Prefer Desktop PWA Alternatives */}
-            <div className={`p-3 ${currentTheme.cardRadius} ${currentTheme.isLight ? 'bg-[#F8FAFD] border border-[#E2E8F0]' : 'bg-black/20 border border-white/5'} flex flex-col justify-between gap-2.5`}>
+            {/* Notification Listener Service Status & Activation Card */}
+            <div className={`p-3 ${currentTheme.cardRadius} ${currentTheme.isLight ? 'bg-[#F8FAFD] border border-[#E2E8F0]' : 'bg-black/20 border border-white/5'} flex flex-col justify-between gap-2.5 col-span-1 sm:col-span-2`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Globe size={16} style={{ color: currentAccent.hex }} />
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: isNotificationListenerEnabled ? currentAccent.hex : '#F43F5E' }} />
                   <div>
-                    <div className={`text-xs font-bold ${currentTheme.classes.textPrimary}`}>Prefer Desktop PWAs</div>
-                    <div className={`text-[10px] ${currentTheme.classes.textSecondary}`}>Route Discord, Spotify, Notion to Web</div>
-                  </div>
-                </div>
-              </div>
-
-              <div className={`flex items-center justify-between pt-2 border-t ${currentTheme.isLight ? 'border-[#E2E8F0]' : 'border-white/5'}`}>
-                <span className={`text-[10px] font-semibold ${currentTheme.classes.textSecondary}`}>Desktop Viewport</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    audio.playTap();
-                    updateSettings({ preferPwaAlternatives: !settings.preferPwaAlternatives });
-                    showToast(settings.preferPwaAlternatives ? 'Prefer Native Android Apps' : 'Prefer Desktop PWA Alternatives');
-                  }}
-                  className={`px-3 py-1 ${currentTheme.buttonRadius} text-[11px] font-bold transition border`}
-                  style={
-                    settings.preferPwaAlternatives
-                      ? { backgroundColor: currentAccent.hex, color: '#090B10', borderColor: currentAccent.hex }
-                      : currentTheme.isLight
-                      ? { backgroundColor: '#FFFFFF', color: '#475569', borderColor: '#CBD5E1' }
-                      : { backgroundColor: 'rgba(255,255,255,0.02)', color: '#8E8E93', borderColor: 'rgba(255,255,255,0.1)' }
-                  }
-                >
-                  {settings.preferPwaAlternatives ? 'Enabled' : 'Disabled'}
-                </button>
-              </div>
-            </div>
-
-            {/* 3. Shizuku AOSP Freeform Hook */}
-            <div className={`col-span-1 sm:col-span-2 p-3 ${currentTheme.cardRadius} ${currentTheme.isLight ? 'bg-[#F8FAFD] border border-[#E2E8F0]' : 'bg-black/20 border border-white/5'} flex flex-col justify-between gap-2.5`}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Terminal size={16} style={{ color: currentAccent.hex }} />
-                  <div>
-                    <div className={`text-xs font-bold ${currentTheme.classes.textPrimary}`}>Shizuku AOSP Freeform Dispatch</div>
-                    <div className={`text-[10px] ${currentTheme.classes.textSecondary}`}>Bypass HyperOS 2-window cap via ADB windowingMode 5</div>
+                    <div className={`text-xs font-bold ${currentTheme.classes.textPrimary}`}>OS App Notification Counter Badges</div>
+                    <div className={`text-[10px] ${currentTheme.classes.textSecondary}`}>Real-time OS notification listener & unread badge engine</div>
                   </div>
                 </div>
                 <span
                   className={`text-[9px] font-bold px-2 py-0.5 ${currentTheme.buttonRadius} border`}
                   style={
-                    typeof window !== 'undefined' && (window as any).NodusNativeBridge?.isShizukuAvailable?.()
+                    isNotificationListenerEnabled
                       ? { backgroundColor: currentAccent.badgeBg, color: currentAccent.hex, borderColor: currentAccent.badgeBorder }
-                      : currentTheme.isLight
-                      ? { backgroundColor: '#FFFFFF', color: '#64748B', borderColor: '#CBD5E1' }
-                      : { backgroundColor: 'rgba(255,255,255,0.04)', color: '#8E8E93', borderColor: 'rgba(255,255,255,0.08)' }
+                      : { backgroundColor: 'rgba(244, 63, 94, 0.15)', color: '#F43F5E', borderColor: 'rgba(244, 63, 94, 0.3)' }
                   }
                 >
-                  {typeof window !== 'undefined' && (window as any).NodusNativeBridge?.isShizukuAvailable?.() ? 'Shizuku Active' : 'Shizuku Ready'}
+                  {isNotificationListenerEnabled ? 'Access Granted' : 'Permission Required'}
                 </span>
               </div>
 
               <div className={`flex items-center justify-between pt-2 border-t ${currentTheme.isLight ? 'border-[#E2E8F0]' : 'border-white/5'}`}>
-                <span className={`text-[10px] font-semibold ${currentTheme.classes.textSecondary}`}>Privileged Dispatch</span>
+                <span className={`text-[10px] font-semibold ${currentTheme.classes.textSecondary}`}>
+                  {isNotificationListenerEnabled
+                    ? 'Active: Unread counter badges render on home & drawer app icons'
+                    : 'System permission required for OS notification listener access'}
+                </span>
                 <button
                   type="button"
                   onClick={() => {
                     audio.playTap();
-                    updateSettings({ enableExperimentalShizukuFreeform: !settings.enableExperimentalShizukuFreeform });
-                    showToast(settings.enableExperimentalShizukuFreeform ? 'Shizuku Freeform disabled' : 'Shizuku Freeform enabled');
+                    requestNotificationListenerPermission();
                   }}
                   className={`px-3 py-1 ${currentTheme.buttonRadius} text-[11px] font-bold transition border`}
                   style={
-                    settings.enableExperimentalShizukuFreeform
-                      ? { backgroundColor: currentAccent.hex, color: '#090B10', borderColor: currentAccent.hex }
-                      : currentTheme.isLight
-                      ? { backgroundColor: '#FFFFFF', color: '#475569', borderColor: '#CBD5E1' }
-                      : { backgroundColor: 'rgba(255,255,255,0.02)', color: '#8E8E93', borderColor: 'rgba(255,255,255,0.1)' }
+                    isNotificationListenerEnabled
+                      ? { backgroundColor: currentAccent.badgeBg, color: currentAccent.hex, borderColor: currentAccent.badgeBorder }
+                      : { backgroundColor: currentAccent.hex, color: '#090B10', borderColor: currentAccent.hex }
                   }
                 >
-                  {settings.enableExperimentalShizukuFreeform ? 'Enabled' : 'Disabled'}
+                  {isNotificationListenerEnabled ? 'Manage Access' : 'Enable Notification Access'}
                 </button>
               </div>
             </div>
           </div>
         </div>
+
+
 
         {/* SECTION 9: Reset & Defaults */}
         <div className="pt-2 flex items-center justify-between">
