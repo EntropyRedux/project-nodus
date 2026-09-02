@@ -15,6 +15,7 @@ use crate::commands::{
     clipboard::{get_clipboard_content, set_win32_clipboard, set_win32_clipboard_image},
     exec::execute_shortcut,
     icon::extract_exe_icon,
+    input::{simulate_hotkey, simulate_mouse_click, simulate_mouse_move, simulate_mouse_scroll, simulate_text},
     media::send_media_appcommand,
     process::get_processes,
     shortcuts::{get_installed_windows_apps, get_shared_shortcuts, load_shared_config, scan_shortcuts_folder, DiscoveredApp},
@@ -324,7 +325,7 @@ pub fn start_server(port: u16) {
                     }
 
                     // Process Terminate
-                    (Method::Post, "/api/process/kill") => {
+                    (Method::Post, "/api/process/kill") | (Method::Post, "/api/processes/kill") => {
                         if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
                             if let Ok(req) = serde_json::from_str::<KillProcReq>(&body_str) {
                                 match crate::commands::process::kill_process(req.pid) {
@@ -402,7 +403,7 @@ pub fn start_server(port: u16) {
                     }
 
                     // Media AppCommand Controls
-                    (Method::Post, "/api/media") => {
+                    (Method::Post, "/api/media") | (Method::Post, "/api/media/control") => {
                         if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
                             if let Ok(req) = serde_json::from_str::<MediaControlReq>(&body_str) {
                                 match send_media_appcommand(&req.action) {
@@ -418,7 +419,7 @@ pub fn start_server(port: u16) {
                     }
 
                     // Remote Execution
-                    (Method::Post, "/api/exec") => {
+                    (Method::Post, "/api/exec") | (Method::Post, "/api/execute") => {
                         if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
                             if let Ok(req) = serde_json::from_str::<ExecReq>(&body_str) {
                                 let cmd = req.command_or_path.or(req.command).unwrap_or_default();
@@ -432,6 +433,83 @@ pub fn start_server(port: u16) {
                                 }
                             } else {
                                 (400, json!({ "status": "error", "message": "Invalid JSON body for exec" }))
+                            }
+                        } else {
+                            (400, json!({ "status": "error", "message": "Body exceeds maximum size" }))
+                        }
+                    }
+
+                    // Virtual Trackpad & Mouse Simulation
+                    (Method::Post, "/api/input/mouse/move") => {
+                        if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
+                            if let Ok(req) = serde_json::from_str::<MouseMoveHttpReq>(&body_str) {
+                                match simulate_mouse_move(req.dx, req.dy) {
+                                    Ok(_) => (200, json!({ "status": "success" })),
+                                    Err(e) => (500, json!({ "status": "error", "message": e })),
+                                }
+                            } else {
+                                (400, json!({ "status": "error", "message": "Invalid JSON body for mouse move" }))
+                            }
+                        } else {
+                            (400, json!({ "status": "error", "message": "Body exceeds maximum size" }))
+                        }
+                    }
+
+                    (Method::Post, "/api/input/mouse/click") => {
+                        if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
+                            if let Ok(req) = serde_json::from_str::<MouseClickHttpReq>(&body_str) {
+                                match simulate_mouse_click(req.button) {
+                                    Ok(_) => (200, json!({ "status": "success" })),
+                                    Err(e) => (500, json!({ "status": "error", "message": e })),
+                                }
+                            } else {
+                                (400, json!({ "status": "error", "message": "Invalid JSON body for mouse click" }))
+                            }
+                        } else {
+                            (400, json!({ "status": "error", "message": "Body exceeds maximum size" }))
+                        }
+                    }
+
+                    (Method::Post, "/api/input/mouse/scroll") => {
+                        if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
+                            if let Ok(req) = serde_json::from_str::<MouseScrollHttpReq>(&body_str) {
+                                match simulate_mouse_scroll(req.dx, req.dy) {
+                                    Ok(_) => (200, json!({ "status": "success" })),
+                                    Err(e) => (500, json!({ "status": "error", "message": e })),
+                                }
+                            } else {
+                                (400, json!({ "status": "error", "message": "Invalid JSON body for mouse scroll" }))
+                            }
+                        } else {
+                            (400, json!({ "status": "error", "message": "Body exceeds maximum size" }))
+                        }
+                    }
+
+                    // Virtual Keyboard & Hotkey Simulation
+                    (Method::Post, "/api/input/keyboard/hotkey") => {
+                        if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
+                            if let Ok(req) = serde_json::from_str::<HotkeyHttpReq>(&body_str) {
+                                match simulate_hotkey(req.keys) {
+                                    Ok(_) => (200, json!({ "status": "success" })),
+                                    Err(e) => (500, json!({ "status": "error", "message": e })),
+                                }
+                            } else {
+                                (400, json!({ "status": "error", "message": "Invalid JSON body for hotkey" }))
+                            }
+                        } else {
+                            (400, json!({ "status": "error", "message": "Body exceeds maximum size" }))
+                        }
+                    }
+
+                    (Method::Post, "/api/input/keyboard/text") => {
+                        if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
+                            if let Ok(req) = serde_json::from_str::<TextHttpReq>(&body_str) {
+                                match simulate_text(req.text) {
+                                    Ok(_) => (200, json!({ "status": "success" })),
+                                    Err(e) => (500, json!({ "status": "error", "message": e })),
+                                }
+                            } else {
+                                (400, json!({ "status": "error", "message": "Invalid JSON body for text" }))
                             }
                         } else {
                             (400, json!({ "status": "error", "message": "Body exceeds maximum size" }))
@@ -664,5 +742,59 @@ mod tests {
         let untrusted_headers = cors_headers_for(Some("https://malicious-tracker.com"));
         let untrusted_origin = untrusted_headers.iter().find(|h| h.field.as_str().as_str().eq_ignore_ascii_case("access-control-allow-origin")).unwrap();
         assert_eq!(untrusted_origin.value.as_str(), "https://appassets.androidplatform.net");
+    }
+
+    #[test]
+    fn test_auth_token_minting_and_registration() {
+        let custom_token = "nodus-test-token-xyz-12345".to_string();
+        add_trusted_token(custom_token.clone());
+
+        let lock = TRUSTED_TOKENS.lock().unwrap();
+        let set = lock.as_ref().unwrap();
+        assert!(set.contains(&custom_token));
+        assert!(set.contains("NODUS-FLEET-SECURE"));
+    }
+
+    #[test]
+    fn test_json_payload_deserialization() {
+        // Media request
+        let media: MediaControlReq = serde_json::from_str(r#"{"action":"play_pause"}"#).unwrap();
+        assert_eq!(media.action, "play_pause");
+
+        // Exec request with camelCase aliases
+        let exec: ExecReq = serde_json::from_str(r#"{"commandOrPath":"notepad.exe","runAsAdmin":true}"#).unwrap();
+        assert_eq!(exec.command_or_path.as_deref(), Some("notepad.exe"));
+        assert_eq!(exec.run_as_admin, Some(true));
+
+        // Mouse Move
+        let mouse_move: MouseMoveHttpReq = serde_json::from_str(r#"{"dx":15,"dy":-10}"#).unwrap();
+        assert_eq!(mouse_move.dx, 15);
+        assert_eq!(mouse_move.dy, -10);
+
+        // Mouse Click
+        let mouse_click: MouseClickHttpReq = serde_json::from_str(r#"{"button":"right"}"#).unwrap();
+        assert_eq!(mouse_click.button, "right");
+
+        // Mouse Scroll
+        let mouse_scroll: MouseScrollHttpReq = serde_json::from_str(r#"{"dx":0,"dy":120}"#).unwrap();
+        assert_eq!(mouse_scroll.dy, Some(120));
+
+        // Hotkey
+        let hotkey: HotkeyHttpReq = serde_json::from_str(r#"{"keys":["ctrl","shift","esc"]}"#).unwrap();
+        assert_eq!(hotkey.keys, vec!["ctrl", "shift", "esc"]);
+
+        // Text
+        let text: TextHttpReq = serde_json::from_str(r#"{"text":"Hello from POCO Pad"}"#).unwrap();
+        assert_eq!(text.text, "Hello from POCO Pad");
+
+        // Clipboard request with camelCase alias
+        let clip: ClipboardReq = serde_json::from_str(r#"{"text":"Synced content","imageData":"data:image/png;base64,abc"}"#).unwrap();
+        assert_eq!(clip.text.as_deref(), Some("Synced content"));
+        assert_eq!(clip.image_data.as_deref(), Some("data:image/png;base64,abc"));
+
+        // Pairing request with deviceId alias
+        let pair: PairRequest = serde_json::from_str(r#"{"deviceId":"poco-pad-1","name":"POCO Pad Pro"}"#).unwrap();
+        assert_eq!(pair.device_id.as_deref(), Some("poco-pad-1"));
+        assert_eq!(pair.name.as_deref(), Some("POCO Pad Pro"));
     }
 }

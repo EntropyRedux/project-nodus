@@ -5,5 +5,3 @@ rustflags = ["-C", "link-arg=/STACK:33554432"]
 [env]
 RUST_MIN_STACK = "67108864"
 CARGO_BUILD_JOBS = "1"
-
-
