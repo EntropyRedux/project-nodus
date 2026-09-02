@@ -57,19 +57,22 @@ jobs:
 
       - name: Copy & Rename APK for Release
         run: |
-          cp packages/nodus-home/android-shell/app/build/outputs/apk/debug/app-debug.apk nodus-home-v1.3.0-debug.apk
+          RELEASE_TAG="${{ github.ref_name }}"
+          if [ -z "$RELEASE_TAG" ] || [ "$RELEASE_TAG" = "main" ]; then RELEASE_TAG="v1.3.0"; fi
+          cp packages/nodus-home/android-shell/app/build/outputs/apk/debug/app-debug.apk "nodus-home-${RELEASE_TAG}-debug.apk"
+          echo "RELEASE_APK=nodus-home-${RELEASE_TAG}-debug.apk" >> $GITHUB_ENV
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: nodus-home-debug-apk
-          path: nodus-home-v1.3.0-debug.apk
+          path: ${{ env.RELEASE_APK }}
 
       - name: Create & Publish GitHub Release on Tag Push
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: nodus-home-v1.3.0-debug.apk
+          files: ${{ env.RELEASE_APK }}
           name: Nodus Home Release ${{ github.ref_name }}
           body: |
             ## Nodus Home ${{ github.ref_name }} Release

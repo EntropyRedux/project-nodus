@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.3.0] - 2026-09-03
 
 ### Added
-- **Automated GitHub Actions CI/CD Release Pipeline**: Created .github/workflows/build-apk.yml with explicit 	sc --noEmit lint gate, itest unit test gate, and automatic release publishing on * tag push.
+- **Automated GitHub Actions CI/CD Release Pipeline**: Created `.github/workflows/build-apk.yml` with explicit `tsc --noEmit` lint gate, `vitest` unit test gate, and automatic release publishing on `v*` tag push.
 - **Lifecycle-Aware Poller Throttling**: Custom useVisibilityPoller hook wired into ClipboardContext, FleetContext, and SystemSettingsContext to pause high-frequency background timers when the app is hidden or unfocused.
 - **IPC Bridge Handoff Cleanups**: Refactored universalNetworkFetch in FleetDirectClient.ts to delegate LAN RPCs to NodusNativeBridge IPC when running inside APK shell.
 - **Direct Download Badge**: Added GitHub release badges and direct .apk artifact download links in README.md.
