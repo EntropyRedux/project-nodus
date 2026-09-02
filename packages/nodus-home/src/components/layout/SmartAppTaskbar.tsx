@@ -32,6 +32,8 @@ export const SmartAppTaskbar: React.FC = () => {
     runningApps, 
     recentApps, 
     activeAppId, 
+    foregroundAppId,
+    minimizedAppIds,
     launchApp, 
     killApp,
     activeDevice,
@@ -732,7 +734,9 @@ export const SmartAppTaskbar: React.FC = () => {
             <div className="flex items-center gap-2 shrink-0 py-1">
               {openAppItems.map((app) => {
                 const isFloatingActive = (floatingWindows || []).some((w) => w.appId === app.id && !w.minimized);
-                const isActive = activeAppId === app.id || isFloatingActive;
+                const isForeground = (foregroundAppId === app.id && !(minimizedAppIds || []).includes(app.id));
+                const isActive = (activeAppId === app.id || isFloatingActive || isForeground) && !(minimizedAppIds || []).includes(app.id);
+                const isMinimized = (minimizedAppIds || []).includes(app.id);
                 const badgeNum = (app.packageName && typeof appBadges[app.packageName] === 'number') ? appBadges[app.packageName] : (app.badgeCount ?? 0);
                 const hasBadge = badgeNum > 0;
 
@@ -755,7 +759,7 @@ export const SmartAppTaskbar: React.FC = () => {
                       borderColor: isActive ? currentAccent.hex : undefined,
                       boxShadow: isActive ? `0 0 12px ${currentAccent.glowRgba}` : undefined,
                     }}
-                    title={`${app.name} (Running)`}
+                    title={`${app.name} (${isActive ? 'Foreground' : isMinimized ? 'Minimized' : 'Running'})`}
                   >
                     <div style={{ color: app.color || currentAccent.hex }} className="flex items-center justify-center">
                       {app.customIcon ? (

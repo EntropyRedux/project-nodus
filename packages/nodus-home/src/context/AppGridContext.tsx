@@ -45,6 +45,8 @@ export interface AppGridContextType {
   minimizeActiveApp: (appId?: string) => void;
   toggleAppTask: (appId: string) => void;
   activeAppId: string | null;
+  foregroundAppId: string | null;
+  minimizedAppIds: string[];
   runningApps: string[];
   recentApps: string[];
   killApp: (appId: string) => void;
@@ -161,10 +163,12 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [dockAppIds] = useState<string[]>(DOCK_APP_IDS);
   const [currentPageIndex, setCurrentPageIndex] = useState<number>(0);
   const [activeAppId, setActiveAppId] = useState<string | null>(null);
+  const [foregroundAppId, setForegroundAppId] = useState<string | null>(null);
+  const [minimizedAppIds, setMinimizedAppIds] = useState<string[]>([]);
   const [isFloatingModeArmed, setIsFloatingModeArmed] = useState<boolean>(false);
   const [appContextMenu, setAppContextMenu] = useState<{ isOpen: boolean; appId: string; x: number; y: number } | null>(null);
 
-  const [runningApps, setRunningApps] = useState<string[]>(['settings', 'studio', 'terminal', 'monitor']);
+  const [runningApps, setRunningApps] = useState<string[]>([]);
   const [floatingApps, setFloatingApps] = useState<string[]>([]);
   const [recentApps, setRecentApps] = useState<string[]>(() => {
     if (typeof window !== 'undefined') {
@@ -322,9 +326,13 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const minimizeActiveApp = useCallback((appId?: string) => {
     if (settings.soundEffects) audio.playTap();
-    const idToMinimize = appId || activeAppId;
+    const idToMinimize = appId || foregroundAppId || activeAppId;
     const targetApp = idToMinimize ? apps.find((a) => a.id === idToMinimize) : null;
-    setActiveAppId(null);
+    if (idToMinimize) {
+      setMinimizedAppIds((prev) => (prev.includes(idToMinimize) ? prev : [...prev, idToMinimize]));
+      if (foregroundAppId === idToMinimize) setForegroundAppId(null);
+      if (activeAppId === idToMinimize) setActiveAppId(null);
+    }
 
     const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
     if (bridge) {
@@ -336,7 +344,7 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
         bridge.bringLauncherToFront();
       }
     }
-  }, [activeAppId, apps, settings.soundEffects]);
+  }, [activeAppId, foregroundAppId, apps, settings.soundEffects]);
 
   const closeActiveApp = useCallback(() => {
     if (settings.soundEffects) audio.playTap();
@@ -485,6 +493,9 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setActiveAppId(null);
     }
 
+    setForegroundAppId(appId);
+    setMinimizedAppIds((prev) => prev.filter((id) => id !== appId));
+
     setRunningApps((prev) => {
       if (!prev.includes(appId)) return [appId, ...prev.slice(0, 11)];
       return [appId, ...prev.filter((id) => id !== appId)];
@@ -555,12 +566,16 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return;
     }
 
+    setForegroundAppId(appId);
+    setMinimizedAppIds((prev) => prev.filter((id) => id !== appId));
+
     if (targetApp?.packageName) {
       const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
       if (bridge?.launchAppFloating) {
         const launched = bridge.launchAppFloating(targetApp.packageName);
         if (launched) {
           showToast(`Opened ${targetApp.name} in floating window`);
+          setRunningApps((prev) => (prev.includes(appId) ? prev : [appId, ...prev]));
           return;
         }
       }
@@ -571,39 +586,65 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const toggleAppTask = useCallback((appId: string) => {
     if (settings.soundEffects) audio.playTap();
 
+    const targetApp = apps.find((a) => a.id === appId);
+    const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
     const existingWin = floatingWindows.find((w) => w.appId === appId);
-    if (existingWin) {
-      if (existingWin.minimized) {
-        focusFloatingWindow(existingWin.id);
-      } else if (focusedWindowId === existingWin.id) {
+
+    const isForeground = (foregroundAppId === appId && !minimizedAppIds.includes(appId)) || 
+                         (activeAppId === appId) || 
+                         (Boolean(existingWin && focusedWindowId === existingWin.id && !existingWin.minimized));
+
+    // 1. If the app is ALREADY IN THE FOREGROUND -> Trigger Simulated Minimize
+    if (isForeground) {
+      if (targetApp?.packageName) {
+        if (bridge?.minimizeApp) {
+          bridge.minimizeApp(targetApp.packageName);
+        } else if (bridge?.bringLauncherToFront) {
+          bridge.bringLauncherToFront();
+        }
+      } else if (existingWin) {
         minimizeFloatingWindow(existingWin.id);
-      } else {
-        focusFloatingWindow(existingWin.id);
+      } else if (activeAppId === appId) {
+        setActiveAppId(null);
       }
+      setMinimizedAppIds((prev) => (prev.includes(appId) ? prev : [...prev, appId]));
+      setForegroundAppId(null);
       return;
     }
 
-    if (activeAppId === appId) {
-      minimizeActiveApp(appId);
+    // 2. If the app is NOT in the foreground (minimized or background) -> Put in foreground in floating mode
+    setMinimizedAppIds((prev) => prev.filter((id) => id !== appId));
+    setForegroundAppId(appId);
+
+    if (existingWin) {
+      focusFloatingWindow(existingWin.id);
       return;
     }
 
-    const shouldFloat = isFloatingModeArmed || settings.appLaunchMode === 'floating' || floatingApps.includes(appId);
-    if (shouldFloat) {
-      launchApp(appId, 'floating');
-    } else {
-      launchApp(appId);
+    if (!targetApp?.packageName) {
+      setActiveAppId(appId);
+      return;
     }
-  }, [settings.soundEffects, settings.appLaunchMode, activeAppId, minimizeActiveApp, isFloatingModeArmed, floatingApps, launchApp]);
+
+    // Real Android Package -> Re-launch / Convert to Floating Mode on Top
+    if (bridge?.launchAppFloating) {
+      const launched = bridge.launchAppFloating(targetApp.packageName);
+      if (launched) return;
+    }
+
+    launchApp(appId, 'floating');
+  }, [settings.soundEffects, foregroundAppId, minimizedAppIds, activeAppId, floatingWindows, focusedWindowId, apps, focusFloatingWindow, minimizeFloatingWindow, launchApp]);
 
   const killApp = useCallback((appId: string) => {
     if (settings.soundEffects) audio.playTap();
     setRunningApps((prev) => prev.filter((id) => id !== appId));
     setFloatingApps((prev) => prev.filter((id) => id !== appId));
+    setMinimizedAppIds((prev) => prev.filter((id) => id !== appId));
+    if (foregroundAppId === appId) setForegroundAppId(null);
     if (activeAppId === appId) {
       minimizeActiveApp();
     }
-  }, [settings.soundEffects, activeAppId, minimizeActiveApp]);
+  }, [settings.soundEffects, foregroundAppId, activeAppId, minimizeActiveApp]);
 
   const clearAllRunningApps = useCallback(() => {
     setRunningApps([]);
@@ -920,6 +961,8 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
         minimizeActiveApp,
         toggleAppTask,
         activeAppId,
+        foregroundAppId,
+        minimizedAppIds,
         runningApps,
         recentApps,
         killApp,
