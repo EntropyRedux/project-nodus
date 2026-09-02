@@ -135,7 +135,7 @@ class FleetDaemonService : Service() {
             if (dev.optBoolean("isLocal", false)) continue
 
             val ip = dev.optString("ipAddress")
-            val port = dev.optInt("httpPort", 8080)
+            val port = dev.optInt("httpPort", dev.optInt("port", 9120))
             if (ip.isEmpty()) continue
 
             httpRpcClient.fetchStats(ip, port,
@@ -204,7 +204,7 @@ class FleetDaemonService : Service() {
     fun executeRemoteShortcut(deviceId: String, commandOrId: String, callback: (Boolean) -> Unit = {}) {
         val dev = connectedDevices[deviceId] ?: return callback(false)
         val ip = dev.optString("ipAddress")
-        val port = dev.optInt("httpPort", 8080)
+        val port = dev.optInt("httpPort", dev.optInt("port", 9120))
 
         httpRpcClient.executeShortcut(ip, port, commandOrId,
             onSuccess = { callback(true) },
@@ -215,7 +215,7 @@ class FleetDaemonService : Service() {
     fun killRemoteProcess(deviceId: String, pid: Int, callback: (Boolean) -> Unit = {}) {
         val dev = connectedDevices[deviceId] ?: return callback(false)
         val ip = dev.optString("ipAddress")
-        val port = dev.optInt("httpPort", 8080)
+        val port = dev.optInt("httpPort", dev.optInt("port", 9120))
 
         httpRpcClient.killProcess(ip, port, pid,
             onSuccess = { callback(true) },
@@ -226,7 +226,7 @@ class FleetDaemonService : Service() {
     fun sendRemoteSystemControl(deviceId: String, action: String, callback: (Boolean) -> Unit = {}) {
         val dev = connectedDevices[deviceId] ?: return callback(false)
         val ip = dev.optString("ipAddress")
-        val port = dev.optInt("httpPort", 8080)
+        val port = dev.optInt("httpPort", dev.optInt("port", 9120))
 
         httpRpcClient.sendSystemControl(ip, port, action,
             onSuccess = { callback(true) },
@@ -238,7 +238,7 @@ class FleetDaemonService : Service() {
         for ((_, dev) in connectedDevices) {
             if (dev.optBoolean("isLocal", false)) continue
             val ip = dev.optString("ipAddress")
-            val port = dev.optInt("httpPort", 8080)
+            val port = dev.optInt("httpPort", dev.optInt("port", 9120))
             if (ip.isNotEmpty()) {
                 httpRpcClient.syncClipboard(ip, port, text)
             }

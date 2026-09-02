@@ -22,7 +22,7 @@ class UdpDiscoveryManager(
     companion object {
         private const val TAG = "UdpDiscoveryManager"
         const val DISCOVERY_PORT = 8765
-        const val COMPANION_PORT = 8080
+        const val COMPANION_PORT = 9120
         private const val BEACON_INTERVAL_MS = 5000L
     }
 

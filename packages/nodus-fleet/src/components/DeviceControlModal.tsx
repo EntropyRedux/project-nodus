@@ -17,6 +17,7 @@ import {
   Cpu,
   HardDrive
 } from 'lucide-react';
+import { universalNetworkFetch } from '../services/FleetDirectClient';
 
 interface DeviceControlModalProps {
   device: DeviceInfo;
@@ -42,10 +43,9 @@ export const DeviceControlModal: React.FC<DeviceControlModalProps> = ({ device, 
   const sendMedia = async (action: string) => {
     setLoadingAction(true);
     try {
-      const res = await fetch(`${baseUrl}/api/media/control`, {
+      const res = await universalNetworkFetch(`${baseUrl}/api/media/control`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
+        body: { action },
       });
       if (res.ok) showStatus(`Media action "${action}" sent`);
       else showStatus('Failed to send media action');
@@ -58,7 +58,7 @@ export const DeviceControlModal: React.FC<DeviceControlModalProps> = ({ device, 
 
   const lockPc = async () => {
     try {
-      const res = await fetch(`${baseUrl}/api/lock`, { method: 'POST' });
+      const res = await universalNetworkFetch(`${baseUrl}/api/lock`, { method: 'POST' });
       if (res.ok) showStatus('Workstation locked');
       else showStatus('Lock failed');
     } catch (e) {
@@ -70,10 +70,9 @@ export const DeviceControlModal: React.FC<DeviceControlModalProps> = ({ device, 
     e.preventDefault();
     if (!textInput.trim()) return;
     try {
-      const res = await fetch(`${baseUrl}/api/input/keyboard/text`, {
+      const res = await universalNetworkFetch(`${baseUrl}/api/input/keyboard/text`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: textInput }),
+        body: { text: textInput },
       });
       if (res.ok) {
         showStatus('Text typed into active window');
@@ -88,10 +87,9 @@ export const DeviceControlModal: React.FC<DeviceControlModalProps> = ({ device, 
 
   const sendHotkey = async (keys: string[]) => {
     try {
-      const res = await fetch(`${baseUrl}/api/input/keyboard/hotkey`, {
+      const res = await universalNetworkFetch(`${baseUrl}/api/input/keyboard/hotkey`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keys }),
+        body: { keys },
       });
       if (res.ok) showStatus(`Hotkey [${keys.join('+')}] executed`);
       else showStatus('Hotkey failed');
@@ -102,10 +100,9 @@ export const DeviceControlModal: React.FC<DeviceControlModalProps> = ({ device, 
 
   const fetchProcesses = async () => {
     try {
-      const res = await fetch(`${baseUrl}/api/processes`);
-      if (res.ok) {
-        const data = await res.json();
-        setProcesses(data.processes || []);
+      const res = await universalNetworkFetch<{ processes?: Array<{ pid: number; name: string; memory_kb: number }> }>(`${baseUrl}/api/processes`);
+      if (res.ok && res.data) {
+        setProcesses(res.data.processes || []);
       }
     } catch (e) {
       console.warn('Could not fetch processes', e);

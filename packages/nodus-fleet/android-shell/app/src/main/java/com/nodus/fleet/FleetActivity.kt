@@ -50,6 +50,9 @@ class FleetActivity : AppCompatActivity() {
                 allowContentAccess = true
                 databaseEnabled = true
                 cacheMode = WebSettings.LOAD_DEFAULT
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                }
             }
             setBackgroundColor(0xFF030712.toInt())
 
@@ -150,6 +153,44 @@ class FleetActivity : AppCompatActivity() {
         @JavascriptInterface
         fun killRemoteProcess(deviceId: String, pid: Int) {
             FleetDaemonService.instance?.killRemoteProcess(deviceId, pid)
+        }
+
+        @JavascriptInterface
+        fun httpFetch(urlStr: String, method: String, body: String): String {
+            return try {
+                val url = java.net.URL(urlStr)
+                val conn = url.openConnection() as java.net.HttpURLConnection
+                conn.requestMethod = method.uppercase()
+                conn.connectTimeout = 3000
+                conn.readTimeout = 4000
+                conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                conn.setRequestProperty("Authorization", "Bearer NODUS-FLEET-SECURE")
+                conn.setRequestProperty("X-Nodus-Auth-Token", "NODUS-FLEET-SECURE")
+
+                if (method.equals("POST", ignoreCase = true) || method.equals("PUT", ignoreCase = true)) {
+                    conn.doOutput = true
+                    conn.outputStream.use { os ->
+                        os.write(body.toByteArray(Charsets.UTF_8))
+                    }
+                }
+
+                val code = conn.responseCode
+                val responseStream = if (code in 200..299) conn.inputStream else conn.errorStream
+                val responseText = responseStream?.bufferedReader()?.use { it.readText() } ?: "{}"
+
+                org.json.JSONObject().apply {
+                    put("status", code)
+                    put("ok", code in 200..299)
+                    put("data", responseText)
+                }.toString()
+            } catch (e: Exception) {
+                Log.e(TAG, "Native HTTP fetch error for $urlStr", e)
+                org.json.JSONObject().apply {
+                    put("status", 500)
+                    put("ok", false)
+                    put("error", e.message ?: "Unknown error")
+                }.toString()
+            }
         }
 
         @JavascriptInterface
