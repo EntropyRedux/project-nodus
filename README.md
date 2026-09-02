@@ -21,28 +21,40 @@
 ---
 
 ## 🌟 Overview
-**Project Nodus** is a modular cross-device desktop and launcher ecosystem engineered for Android tablets (optimized for the POCO Pad 12.1" 120Hz HyperOS / Android 14), Windows companion bridges, and multi-device workstation setups.
+**Project Nodus** is a universal cross-device desktop and launcher ecosystem engineered for **all Android tablets** (broadly supporting Android 10–14+, foldable displays, and custom OEM multitasking environments like Xiaomi HyperOS, Samsung One UI, and Lenovo ZUI; primary testing performed on a POCO Pad 12.1" 120Hz display), paired with Windows companion bridges and multi-device workstation control.
 
 All Nodus subsystem modules live inside this unified workspace repository under `packages/`.
 
 ---
 
-## 🚀 Key Capabilities in v1.3.0
+## 🚦 Module Status & Ecosystem Progress
 
-1. **Continuous Scroll App Grid**:
-   - Standardized continuous scrolling grid that repacks apps sequentially on Page 1 before spilling onto subsequent pages.
-2. **Smart Native Auto-Stash**:
-   - On OEM environments with a 2-window floating limit (such as HyperOS), opening a 3rd floating app automatically stashes the oldest active app into the Taskbar stack with a toast notice.
+| Module / Package | Type | Target Platform | Current Status | Description |
+| :--- | :---: | :---: | :---: | :--- |
+| **`nodus-home`** | App / APK | Universal Android Tablets | 🟢 **v1.3.0 Production Ready** | Desktop Launcher Shell, Widgets, Window Manager & System Settings |
+| **`nodus-common`** | Shared Library | TypeScript / Kotlin | 🟢 **Stable v1.1.0** | Single Source of Truth for IPC Contracts, Types & Icon Registry |
+| **`nodus-fleet`** | App / APK | Android Tablets / Mobile | 🟡 **Active Development** | Standalone LAN Mesh Controller, Device Discovery & Remote RPC |
+| **`nodus-assistive`** | Overlay APK | Android Tablets / Phones | 🟡 **Prototype Stage** | System-Wide Assistive Touch Overlay & Navigation Pill |
+| **`nodus-desktop`** | Companion App | Windows 10/11 | 🟡 **Active Development** | Tauri v2 + Rust Win32 Remote Bridge, Media & Workstation Server |
+| **`nodus-legacy`** | Archive | Android | ⚪ **Archived** | Legacy Monolith Launcher Prototype (Reference Only) |
+
+---
+
+## 🚀 Key Capabilities & Fixes in v1.3.0
+
+1. **Universal Tablet Windowing & Auto-Stash**:
+   - Designed for any tablet form factor. On OEM environments with a 2-window floating cap (e.g., HyperOS), opening a 3rd floating app automatically stashes the oldest active app into the Taskbar stack with a toast notice.
+2. **Continuous Scroll App Grid**:
+   - Standardized continuous scrolling grid that repacks app icons sequentially on Page 1 before spilling over.
 3. **Google Calendar Sync & Privacy Consent**:
    - Explicit account & privacy warning notice before granting calendar access.
-   - Synchronizes upcoming meetings, deadlines, and video links (Google Meet, Zoom, Teams).
-   - Added 1-tap **Unsync** button in the Calendar header for instant disconnection and event clearing.
+   - Synchronizes upcoming meetings, deadlines, and video links (Google Meet, Zoom, Teams) with a 1-tap **Unsync** button in the Calendar header for instant clearing.
 4. **Lifecycle-Aware Poller Throttling**:
-   - Custom `useVisibilityPoller` hook auto-pauses high-frequency background timers (Clipboard, Telemetry, Notifications) when the app or screen is hidden to conserve battery and CPU.
+   - Custom `useVisibilityPoller` hook auto-pauses high-frequency background timers (Clipboard, Telemetry, Notifications) when the launcher is backgrounded to conserve battery and CPU.
 5. **0%–100% System Surface Opacity Control**:
-   - System surface opacity slider range expanded from 0% to 100% across all themes.
+   - System surface opacity slider range expanded from 0% to 100% across all themes (including Material Atmosphere).
 6. **Unified Ecosystem Module Labels**:
-   - Clear, consistent status badges (`"Requires Fleet APK"` / `"Requires Touch APK"`) when ecosystem modules are missing.
+   - Clear, consistent status badges (`"Requires Fleet APK"` / `"Requires Touch APK"`) when companion apps are missing.
 7. **Production CI & Type Safety Gate**:
    - Automated GitHub Actions workflow with strict `tsc --noEmit` lint and `vitest` unit test gates.
 
