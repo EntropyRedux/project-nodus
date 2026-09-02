@@ -38,6 +38,7 @@ keystore.properties
 
 # Binaries & Outputs
 *.apk
+!releases/*.apk
 *.aab
 *.exe
 *.dll

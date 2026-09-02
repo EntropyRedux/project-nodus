@@ -4,18 +4,15 @@
 >
 > **Version:** `1.3.0`  
 > **GitHub Repository:** [https://github.com/EntropyRedux/project-nodus](https://github.com/EntropyRedux/project-nodus)  
-> **Latest Release:** [📥 Download Nodus Home v1.3.0 APK](https://github.com/EntropyRedux/project-nodus/releases/latest/download/nodus-home-v1.3.0-debug.apk)
+> **Latest Release:** [📥 Download Nodus Home v1.3.0 APK](releases/nodus-home-v1.3.0-debug.apk)
 
 ---
 
 ## 📚 Documentation & Quick Links
 
-[![GitHub Release](https://img.shields.io/github/v/release/EntropyRedux/project-nodus?color=007AFF&label=Latest%20Release)](https://github.com/EntropyRedux/project-nodus/releases/latest)
-[![CI & APK Build](https://github.com/EntropyRedux/project-nodus/actions/workflows/build-apk.yml/badge.svg)](https://github.com/EntropyRedux/project-nodus/actions/workflows/build-apk.yml)
-
+- **📥 [Download Nodus Home v1.3.0 APK](releases/nodus-home-v1.3.0-debug.apk)**: Direct link to the compiled `v1.3.0` debug APK stored directly in the repository for fast testing.
 - **📖 [User & Operations Guide](USER_GUIDE.md)**: Full instructions for tablet setup, gesture controls, window management, calendar sync & settings.
 - **📝 [Version Changelog](CHANGELOG.md)**: Detailed historical release notes across all ecosystem versions (`v1.0.0` through `v1.3.0`).
-- **📥 [GitHub Releases](https://github.com/EntropyRedux/project-nodus/releases)**: Fast direct downloads for all compiled `.apk` release assets.
 
 ---
 
