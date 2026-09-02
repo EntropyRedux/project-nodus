@@ -146,4 +146,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ---
 
 ## 📄 License
-MIT © 2026 EntropyRedux
+GNU AGPLv3 (GNU Affero General Public License v3) © 2026 EntropyRedux.
+
+> **Development License Note:**  
+> This project is currently licensed under the **GNU Affero General Public License v3 (AGPLv3)** during active ecosystem development to protect source integrity and network deployment reciprocity. Upon completion of full ecosystem development, selected subsystem packages may be re-licensed under more permissive open-source licenses (e.g., MIT / Apache 2.0).
