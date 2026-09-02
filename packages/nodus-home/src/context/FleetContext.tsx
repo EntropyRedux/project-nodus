@@ -32,6 +32,11 @@ export interface FleetContextType {
   isSidebarCollapsed: boolean;
   setSidebarCollapsed: (val: boolean) => void;
   toggleSidebar: () => void;
+  isDeviceRailVisible: boolean;
+  setDeviceRailVisible: (val: boolean) => void;
+  toggleDeviceRail: () => void;
+  userProfileAvatar: string | null;
+  setUserProfileAvatar: (avatarUrl: string | null) => void;
 
   // Remote Executables
   remoteExecutables: RemoteExecutable[];
@@ -104,6 +109,21 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return false;
   });
 
+  const [isDeviceRailVisible, setDeviceRailVisible] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('nodus_device_rail_visible');
+      return saved !== null ? JSON.parse(saved) : true;
+    }
+    return true;
+  });
+
+  const [userProfileAvatar, setUserProfileAvatarState] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('nodus_user_avatar') || null;
+    }
+    return null;
+  });
+
   const [deviceProcesses, setDeviceProcesses] = useState<Record<string, DeviceProcess[]>>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('nova_launcher_device_processes');
@@ -113,6 +133,12 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   });
 
   const [processModalDeviceId, setProcessModalDeviceId] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('nodus_device_rail_visible', JSON.stringify(isDeviceRailVisible));
+    } catch (_) {}
+  }, [isDeviceRailVisible]);
 
   useEffect(() => {
     try {
@@ -291,11 +317,51 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setDevices((prev) => prev.map((d) => (d.id === id ? { ...d, ...partial } : d)));
   }, []);
 
+  const toggleDeviceRail = useCallback(() => {
+    audio.playTap();
+    setDeviceRailVisible((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('nodus_device_rail_visible', JSON.stringify(next));
+      } catch (_) {}
+      showToast(next ? 'Device Switcher Rail visible' : 'Device Switcher Rail hidden');
+      return next;
+    });
+  }, [showToast]);
+
+  const setUserProfileAvatar = useCallback((avatarUrl: string | null) => {
+    audio.playTap();
+    setUserProfileAvatarState(avatarUrl);
+    try {
+      if (avatarUrl) {
+        localStorage.setItem('nodus_user_avatar', avatarUrl);
+      } else {
+        localStorage.removeItem('nodus_user_avatar');
+      }
+    } catch (_) {}
+
+    // Synchronize to active device
+    if (activeDeviceId) {
+      updateDevice(activeDeviceId, { customAvatar: avatarUrl || undefined });
+    }
+    showToast(avatarUrl ? 'Profile portrait updated' : 'Profile portrait reset');
+  }, [activeDeviceId, updateDevice, showToast]);
+
   const updateDeviceAvatar = useCallback((id: string, avatarUrl: string) => {
     audio.playTap();
     updateDevice(id, { customAvatar: avatarUrl });
+    if (id === activeDeviceId || id === 'poco-pad') {
+      setUserProfileAvatarState(avatarUrl);
+      try {
+        if (avatarUrl) {
+          localStorage.setItem('nodus_user_avatar', avatarUrl);
+        } else {
+          localStorage.removeItem('nodus_user_avatar');
+        }
+      } catch (_) {}
+    }
     showToast('Device portrait updated');
-  }, [updateDevice, showToast]);
+  }, [activeDeviceId, updateDevice, showToast]);
 
   const fetchDeviceProcesses = useCallback(async (deviceId: string) => {
     try {
@@ -644,6 +710,11 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         isSidebarCollapsed,
         setSidebarCollapsed,
         toggleSidebar,
+        isDeviceRailVisible,
+        setDeviceRailVisible,
+        toggleDeviceRail,
+        userProfileAvatar,
+        setUserProfileAvatar,
         remoteExecutables,
         addRemoteExecutable,
         updateRemoteExecutable,

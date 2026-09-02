@@ -6,6 +6,7 @@ import android.content.Intent
 import android.util.Log
 import com.nodus.common.NodusIpcContract
 import com.nodus.home.HomeActivity
+import org.json.JSONObject
 
 class FleetStateReceiver : BroadcastReceiver() {
 
@@ -28,23 +29,26 @@ class FleetStateReceiver : BroadcastReceiver() {
                     )
                 }
                 NodusIpcContract.ACTION_DEVICE_CONNECTED -> {
-                    val json = intent.getStringExtra(NodusIpcContract.EXTRA_DEVICE_JSON) ?: "{}"
+                    val raw = intent.getStringExtra(NodusIpcContract.EXTRA_DEVICE_JSON) ?: "{}"
+                    val safeJson = try { JSONObject(raw).toString() } catch (_: Exception) { "{}" }
                     activity.webView?.evaluateJavascript(
-                        "window.dispatchEvent(new CustomEvent('fleet-device-connected', { detail: $json }))",
+                        "window.dispatchEvent(new CustomEvent('fleet-device-connected', { detail: $safeJson }))",
                         null
                     )
                 }
                 NodusIpcContract.ACTION_DEVICE_DISCONNECTED -> {
-                    val json = intent.getStringExtra(NodusIpcContract.EXTRA_DEVICE_JSON) ?: "{}"
+                    val raw = intent.getStringExtra(NodusIpcContract.EXTRA_DEVICE_JSON) ?: "{}"
+                    val safeJson = try { JSONObject(raw).toString() } catch (_: Exception) { "{}" }
                     activity.webView?.evaluateJavascript(
-                        "window.dispatchEvent(new CustomEvent('fleet-device-disconnected', { detail: $json }))",
+                        "window.dispatchEvent(new CustomEvent('fleet-device-disconnected', { detail: $safeJson }))",
                         null
                     )
                 }
                 NodusIpcContract.ACTION_CLIPBOARD_CHANGED -> {
-                    val json = intent.getStringExtra(NodusIpcContract.EXTRA_CLIPBOARD_ITEM_JSON) ?: "{}"
+                    val raw = intent.getStringExtra(NodusIpcContract.EXTRA_CLIPBOARD_ITEM_JSON) ?: "{}"
+                    val safeJson = try { JSONObject(raw).toString() } catch (_: Exception) { "{}" }
                     activity.webView?.evaluateJavascript(
-                        "window.dispatchEvent(new CustomEvent('fleet-clipboard-changed', { detail: $json }))",
+                        "window.dispatchEvent(new CustomEvent('fleet-clipboard-changed', { detail: $safeJson }))",
                         null
                     )
                 }

@@ -304,6 +304,7 @@ pub fn set_win32_clipboard_image(base64_png: &str) -> Result<bool, String> {
 }
 
 #[cfg(windows)]
+#[allow(dead_code)]
 fn utf16le_base64(s: &str) -> String {
     let wide: Vec<u8> = s.encode_utf16().flat_map(|c| c.to_le_bytes()).collect();
     

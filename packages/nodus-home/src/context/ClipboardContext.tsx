@@ -254,9 +254,12 @@ export const ClipboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               timeoutMs: 2000,
             });
             if (clipRes.ok && clipRes.data) {
-              const isImage = clipRes.data.type === 'image' && typeof clipRes.data.imageData === 'string';
-              const text = (clipRes.data.text || '').trim();
-              const clipKey = isImage ? clipRes.data.imageData.substring(0, 80) : text;
+              const rawData = clipRes.data.data || clipRes.data;
+              const isImage = (rawData.type === 'image' || rawData.content_type === 'image') && 
+                typeof (rawData.imageData || rawData.image_data) === 'string';
+              const text = (rawData.text || '').trim();
+              const imgData = rawData.imageData || rawData.image_data;
+              const clipKey = isImage ? imgData.substring(0, 80) : text;
               const lastRemoteKey = lastRemoteClipsRef.current[dev.id] || '';
 
               if (clipKey && clipKey !== lastRemoteKey) {

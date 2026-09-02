@@ -57,12 +57,27 @@ export const DeviceSidebar: React.FC = () => {
   const [isAddModalOpen, setAddModalOpen] = useState(false);
   const [targetAvatarDeviceId, setTargetAvatarDeviceId] = useState<string | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  const longPressTimers = useRef<Record<string, any>>({});
 
   const handleTriggerAvatarUpload = (deviceId: string) => {
     setTargetAvatarDeviceId(deviceId);
     if (avatarInputRef.current) {
       avatarInputRef.current.value = '';
       avatarInputRef.current.click();
+    }
+  };
+
+  const startLongPress = (deviceId: string) => {
+    longPressTimers.current[deviceId] = setTimeout(() => {
+      audio.playTap();
+      handleTriggerAvatarUpload(deviceId);
+    }, 500);
+  };
+
+  const cancelLongPress = (deviceId: string) => {
+    if (longPressTimers.current[deviceId]) {
+      clearTimeout(longPressTimers.current[deviceId]);
+      delete longPressTimers.current[deviceId];
     }
   };
 
@@ -109,19 +124,8 @@ export const DeviceSidebar: React.FC = () => {
         className={`w-16 h-full flex-shrink-0 flex flex-col ${currentTheme.isLight ? 'border-r border-[#CBD5E1]' : 'border-r border-white/[0.06]'} select-none z-20 ${currentTheme.classes.containerFont} backdrop-blur-2xl transition-colors duration-200`}
         style={{ contain: 'layout style', backgroundColor: getSurfaceRgba(settings.theme, settings.taskbarOpacity, 'sidebar') }}
       >
-        <div className={`p-3 ${currentTheme.isLight ? 'border-b border-[#E2E8F0]' : 'border-b border-white/[0.04]'} flex items-center justify-center`}>
-          <button
-            onClick={toggleSidebar}
-            title="Toggle Cluster Nodes Drawer"
-            className={`p-2 ${currentTheme.buttonRadius} ${currentTheme.isLight ? 'bg-[#FFFFFF] hover:bg-[#F1F5F9] border border-[#CBD5E1]' : 'bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.06]'} hover:scale-105 transition flex items-center justify-center group`}
-            style={{ color: currentAccent.hex }}
-          >
-            <Server size={18} className="group-hover:rotate-12 transition-transform" />
-          </button>
-        </div>
-
         {/* Compact Device Rail: Icons / Portraits */}
-        <div className="flex-1 overflow-y-auto p-2 space-y-2.5 scrollbar-none flex flex-col items-center">
+        <div className="flex-1 overflow-y-auto p-2 pt-3 space-y-2.5 scrollbar-none flex flex-col items-center">
           {devices.map((device) => {
             const isActive = device.id === activeDeviceId;
             const devColor = getDeviceColor(device.id, device.type, device.os, (device as any).customColor);
@@ -133,12 +137,18 @@ export const DeviceSidebar: React.FC = () => {
                     audio.playTap();
                     selectDevice(device.id);
                   }}
+                  onTouchStart={() => startLongPress(device.id)}
+                  onTouchEnd={() => cancelLongPress(device.id)}
+                  onTouchCancel={() => cancelLongPress(device.id)}
+                  onMouseDown={() => startLongPress(device.id)}
+                  onMouseUp={() => cancelLongPress(device.id)}
+                  onMouseLeave={() => cancelLongPress(device.id)}
                   onContextMenu={(e) => {
                     e.preventDefault();
                     handleTriggerAvatarUpload(device.id);
                   }}
-                  title={`${device.name} (${device.os})\nTip: Right-click to change portrait`}
-                  className={`w-11 h-11 ${currentTheme.cardRadius} flex items-center justify-center relative transition-all duration-200 border ${
+                  title={`${device.name} (${device.os})\nTip: Long-press or Right-click to change portrait`}
+                  className={`w-11 h-11 ${currentTheme.cardRadius} flex items-center justify-center relative transition-all duration-200 border cursor-pointer ${
                     isActive
                       ? currentTheme.isLight ? 'bg-[#FFFFFF] ring-2 scale-105 shadow-md' : 'bg-white/[0.08] ring-1 scale-105'
                       : currentTheme.isLight ? 'bg-[#FFFFFF] border-[#E2E8F0] hover:bg-[#F8FAFD] hover:border-[#CBD5E1]' : 'bg-white/[0.02] border-white/[0.04] hover:bg-white/[0.06] hover:border-white/[0.1]'
@@ -274,7 +284,13 @@ export const DeviceSidebar: React.FC = () => {
                           e.stopPropagation();
                           handleTriggerAvatarUpload(device.id);
                         }}
-                        title="Click to change device portrait"
+                        onTouchStart={() => startLongPress(device.id)}
+                        onTouchEnd={() => cancelLongPress(device.id)}
+                        onTouchCancel={() => cancelLongPress(device.id)}
+                        onMouseDown={() => startLongPress(device.id)}
+                        onMouseUp={() => cancelLongPress(device.id)}
+                        onMouseLeave={() => cancelLongPress(device.id)}
+                        title="Click or Long-press to change device portrait"
                         className={`w-8 h-8 ${currentTheme.buttonRadius} overflow-hidden transition-all border flex items-center justify-center relative group/avatar cursor-pointer shrink-0`}
                         style={{
                           backgroundColor: isActive ? `${devColor}20` : `${devColor}10`,

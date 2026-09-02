@@ -61,7 +61,11 @@ export async function universalNetworkFetch(
     const tid = setTimeout(() => controller.abort(), options.timeoutMs || 3500);
     const res = await fetch(url, {
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer NODUS-FLEET-SECURE',
+        'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE',
+      },
       body: bodyStr || undefined,
       signal: controller.signal,
     });

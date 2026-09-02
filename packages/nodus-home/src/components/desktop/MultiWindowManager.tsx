@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
   X, 
   Minus, 
@@ -7,7 +7,10 @@ import {
   RotateCw, 
   ExternalLink, 
   Columns, 
-  Minimize2
+  Minimize2,
+  Smartphone,
+  ShieldAlert,
+  Globe
 } from 'lucide-react';
 import { FloatingWindow } from '../../types/launcher';
 import { useLauncher } from '../../context/LauncherContext';
@@ -30,103 +33,152 @@ export const MultiWindowManager: React.FC<MultiWindowManagerProps> = () => {
     maximizeFloatingWindow, 
     focusFloatingWindow, 
     updateFloatingWindowBounds,
-    settings 
+    settings,
+    apps,
+    showToast
   } = useLauncher();
 
   const currentTheme = getSystemTheme(settings.theme);
   const currentAccent = getAccentColor(settings.accentColor);
 
-  // Active Drag / Resize State
-  const [activeDragId, setActiveDragId] = useState<string | null>(null);
-  const [activeResizeId, setActiveResizeId] = useState<{ id: string; direction: string } | null>(null);
-  const startPointerRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const startBoundsRef = useRef<{ x: number; y: number; width: number; height: number }>({ x: 0, y: 0, width: 0, height: 0 });
+  // Active Drag / Resize tracking using refs to prevent React state thrashing during pointer movements
+  const activeOpRef = useRef<{
+    type: 'drag' | 'resize';
+    id: string;
+    direction?: string;
+    startX: number;
+    startY: number;
+    initialX: number;
+    initialY: number;
+    initialWidth: number;
+    initialHeight: number;
+    domEl: HTMLElement | null;
+  } | null>(null);
+
+  const [isInteracting, setIsInteracting] = useState(false);
   const [iframeLoadedMap, setIframeLoadedMap] = useState<Record<string, boolean>>({});
+  const [iframeErrorMap, setIframeErrorMap] = useState<Record<string, boolean>>({});
 
-  const handlePointerDownHeader = (e: React.PointerEvent, window: FloatingWindow) => {
+  const handlePointerDownHeader = (e: React.PointerEvent, win: FloatingWindow, domEl: HTMLElement | null) => {
     e.stopPropagation();
-    focusFloatingWindow(window.id);
-    if (window.maximized) return;
+    focusFloatingWindow(win.id);
+    if (win.maximized) return;
 
-    setActiveDragId(window.id);
-    startPointerRef.current = { x: e.clientX, y: e.clientY };
-    startBoundsRef.current = { x: window.x, y: window.y, width: window.width, height: window.height };
+    activeOpRef.current = {
+      type: 'drag',
+      id: win.id,
+      startX: e.clientX,
+      startY: e.clientY,
+      initialX: win.x,
+      initialY: win.y,
+      initialWidth: win.width,
+      initialHeight: win.height,
+      domEl,
+    };
+    setIsInteracting(true);
   };
 
-  const handlePointerDownResize = (e: React.PointerEvent, window: FloatingWindow, direction: string) => {
+  const handlePointerDownResize = (e: React.PointerEvent, win: FloatingWindow, direction: string, domEl: HTMLElement | null) => {
     e.stopPropagation();
-    focusFloatingWindow(window.id);
-    if (window.maximized) return;
+    focusFloatingWindow(win.id);
+    if (win.maximized) return;
 
-    setActiveResizeId({ id: window.id, direction });
-    startPointerRef.current = { x: e.clientX, y: e.clientY };
-    startBoundsRef.current = { x: window.x, y: window.y, width: window.width, height: window.height };
+    activeOpRef.current = {
+      type: 'resize',
+      id: win.id,
+      direction,
+      startX: e.clientX,
+      startY: e.clientY,
+      initialX: win.x,
+      initialY: win.y,
+      initialWidth: win.width,
+      initialHeight: win.height,
+      domEl,
+    };
+    setIsInteracting(true);
   };
 
   useEffect(() => {
+    let animFrame: number | null = null;
+
     const handlePointerMove = (e: PointerEvent) => {
-      if (activeDragId) {
-        const dx = e.clientX - startPointerRef.current.x;
-        const dy = e.clientY - startPointerRef.current.y;
-        const newX = Math.max(0, Math.min(window.innerWidth - 100, startBoundsRef.current.x + dx));
-        const newY = Math.max(0, Math.min(window.innerHeight - 100, startBoundsRef.current.y + dy));
-        updateFloatingWindowBounds(activeDragId, { x: newX, y: newY });
-      } else if (activeResizeId) {
-        const dx = e.clientX - startPointerRef.current.x;
-        const dy = e.clientY - startPointerRef.current.y;
-        const { direction, id } = activeResizeId;
-        const { x, y, width, height } = startBoundsRef.current;
+      const op = activeOpRef.current;
+      if (!op || !op.domEl) return;
 
-        let newX = x;
-        let newY = y;
-        let newWidth = width;
-        let newHeight = height;
+      if (animFrame) cancelAnimationFrame(animFrame);
 
-        const MIN_WIDTH = 340;
-        const MIN_HEIGHT = 240;
+      animFrame = requestAnimationFrame(() => {
+        const dx = e.clientX - op.startX;
+        const dy = e.clientY - op.startY;
 
-        if (direction.includes('e')) {
-          newWidth = Math.max(MIN_WIDTH, width + dx);
-        }
-        if (direction.includes('s')) {
-          newHeight = Math.max(MIN_HEIGHT, height + dy);
-        }
-        if (direction.includes('w')) {
-          const potentialWidth = width - dx;
-          if (potentialWidth >= MIN_WIDTH) {
-            newWidth = potentialWidth;
-            newX = x + dx;
+        if (op.type === 'drag') {
+          const newX = Math.max(-op.initialWidth + 120, Math.min(window.innerWidth - 80, op.initialX + dx));
+          const newY = Math.max(0, Math.min(window.innerHeight - 80, op.initialY + dy));
+          op.domEl!.style.left = `${newX}px`;
+          op.domEl!.style.top = `${newY}px`;
+        } else if (op.type === 'resize' && op.direction) {
+          let newX = op.initialX;
+          let newY = op.initialY;
+          let newWidth = op.initialWidth;
+          let newHeight = op.initialHeight;
+
+          const MIN_WIDTH = 340;
+          const MIN_HEIGHT = 240;
+
+          if (op.direction.includes('e')) {
+            newWidth = Math.max(MIN_WIDTH, op.initialWidth + dx);
           }
-        }
-        if (direction.includes('n')) {
-          const potentialHeight = height - dy;
-          if (potentialHeight >= MIN_HEIGHT) {
-            newHeight = potentialHeight;
-            newY = y + dy;
+          if (op.direction.includes('s')) {
+            newHeight = Math.max(MIN_HEIGHT, op.initialHeight + dy);
           }
-        }
+          if (op.direction.includes('w')) {
+            const potentialWidth = op.initialWidth - dx;
+            if (potentialWidth >= MIN_WIDTH) {
+              newWidth = potentialWidth;
+              newX = op.initialX + dx;
+            }
+          }
+          if (op.direction.includes('n')) {
+            const potentialHeight = op.initialHeight - dy;
+            if (potentialHeight >= MIN_HEIGHT) {
+              newHeight = potentialHeight;
+              newY = op.initialY + dy;
+            }
+          }
 
-        updateFloatingWindowBounds(id, { x: newX, y: newY, width: newWidth, height: newHeight });
-      }
+          op.domEl!.style.left = `${newX}px`;
+          op.domEl!.style.top = `${newY}px`;
+          op.domEl!.style.width = `${newWidth}px`;
+          op.domEl!.style.height = `${newHeight}px`;
+        }
+      });
     };
 
     const handlePointerUp = () => {
-      if (activeDragId || activeResizeId) {
-        setActiveDragId(null);
-        setActiveResizeId(null);
+      const op = activeOpRef.current;
+      if (op && op.domEl) {
+        const rect = op.domEl.getBoundingClientRect();
+        updateFloatingWindowBounds(op.id, {
+          x: Math.round(rect.left),
+          y: Math.round(rect.top),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+        });
       }
+      activeOpRef.current = null;
+      setIsInteracting(false);
+      if (animFrame) cancelAnimationFrame(animFrame);
     };
 
-    if (activeDragId || activeResizeId) {
-      window.addEventListener('pointermove', handlePointerMove);
-      window.addEventListener('pointerup', handlePointerUp);
-    }
+    window.addEventListener('pointermove', handlePointerMove, { passive: true });
+    window.addEventListener('pointerup', handlePointerUp);
 
     return () => {
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
+      if (animFrame) cancelAnimationFrame(animFrame);
     };
-  }, [activeDragId, activeResizeId, updateFloatingWindowBounds]);
+  }, [updateFloatingWindowBounds]);
 
   const snapWindow = (windowId: string, type: 'left' | 'right' | 'center') => {
     audio.playTap();
@@ -163,6 +215,17 @@ export const MultiWindowManager: React.FC<MultiWindowManagerProps> = () => {
     }
   };
 
+  const launchNativeFallback = useCallback((appId: string) => {
+    const target = apps.find((a) => a.id === appId);
+    const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
+    if (target?.packageName && bridge?.launchAppFloating) {
+      bridge.launchAppFloating(target.packageName);
+      showToast(`Opened ${target.name} in Native Android Freeform`);
+    } else if (target?.packageName && bridge?.launchApp) {
+      bridge.launchApp(target.packageName);
+    }
+  }, [apps, showToast]);
+
   const visibleWindows = floatingWindows.filter((w) => !w.minimized);
 
   if (visibleWindows.length === 0) return null;
@@ -192,8 +255,9 @@ export const MultiWindowManager: React.FC<MultiWindowManagerProps> = () => {
         return (
           <div
             key={win.id}
+            id={`window-${win.id}`}
             onPointerDown={() => focusFloatingWindow(win.id)}
-            className={`absolute pointer-events-auto flex flex-col ${
+            className={`absolute pointer-events-auto flex flex-col will-change-transform ${
               isMaximized ? 'rounded-none border-b' : `${currentTheme.cardRadius} border shadow-2xl`
             } ${
               isFocused
@@ -203,7 +267,7 @@ export const MultiWindowManager: React.FC<MultiWindowManagerProps> = () => {
                 : currentTheme.isLight
                 ? 'border-[#CBD5E1] shadow-lg opacity-95'
                 : 'border-white/10 shadow-lg opacity-95'
-            } backdrop-blur-2xl transition-shadow duration-150 overflow-hidden`}
+            } backdrop-blur-xl transition-shadow duration-100 overflow-hidden`}
             style={{
               ...windowStyle,
               backgroundColor: getSurfaceRgba(settings.theme, settings.taskbarOpacity, 'window'),
@@ -211,16 +275,19 @@ export const MultiWindowManager: React.FC<MultiWindowManagerProps> = () => {
           >
             {/* Window Titlebar */}
             <div
-              onPointerDown={(e) => handlePointerDownHeader(e, win)}
+              onPointerDown={(e) => {
+                const el = document.getElementById(`window-${win.id}`);
+                handlePointerDownHeader(e, win, el);
+              }}
               onDoubleClick={() => maximizeFloatingWindow(win.id)}
               className={`h-10 px-3 flex items-center justify-between shrink-0 cursor-move border-b select-none transition-colors ${
                 isFocused
                   ? currentTheme.isLight
-                    ? 'bg-slate-200/70 border-slate-300'
+                    ? 'bg-slate-200/80 border-slate-300'
                     : 'bg-white/10 border-white/10'
                   : currentTheme.isLight
-                  ? 'bg-slate-100/50 border-slate-200'
-                  : 'bg-black/20 border-white/5'
+                  ? 'bg-slate-100/60 border-slate-200'
+                  : 'bg-black/30 border-white/5'
               }`}
             >
               {/* App Identity */}
@@ -274,8 +341,11 @@ export const MultiWindowManager: React.FC<MultiWindowManagerProps> = () => {
                       onClick={() => {
                         audio.playTap();
                         setIframeLoadedMap((prev) => ({ ...prev, [win.id]: false }));
+                        setIframeErrorMap((prev) => ({ ...prev, [win.id]: false }));
+                        const ifr = document.getElementById(`iframe-${win.id}`) as HTMLIFrameElement;
+                        if (ifr) ifr.src = win.webUrl!;
                       }}
-                      title="Reload Page"
+                      title="Reload Web App"
                       className={`p-1.5 rounded-md ${currentTheme.classes.textSecondary} hover:text-white hover:bg-white/10 transition`}
                     >
                       <RotateCw size={12} />
@@ -284,7 +354,7 @@ export const MultiWindowManager: React.FC<MultiWindowManagerProps> = () => {
                       href={win.webUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      title="Open in Browser"
+                      title="Open in Desktop Browser"
                       className={`p-1.5 rounded-md ${currentTheme.classes.textSecondary} hover:text-white hover:bg-white/10 transition`}
                     >
                       <ExternalLink size={12} />
@@ -337,24 +407,31 @@ export const MultiWindowManager: React.FC<MultiWindowManagerProps> = () => {
               ) : win.appId === 'notes' ? (
                 <NotesApp />
               ) : win.type === 'web_pwa' && win.webUrl ? (
-                <div className="w-full h-full relative flex flex-col">
-                  {/* Loading / Security Badge */}
-                  {!iframeLoadedMap[win.id] && (
-                    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/40 backdrop-blur-md space-y-3">
-                      <div className="w-8 h-8 rounded-full border-2 border-t-transparent border-[#38BDF8] animate-spin" />
+                <div className="w-full h-full relative flex flex-col bg-[#0F172A]">
+                  {/* Loading Indicator */}
+                  {!iframeLoadedMap[win.id] && !iframeErrorMap[win.id] && (
+                    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-[#090B10]/80 backdrop-blur-md space-y-3">
+                      <div className="w-7 h-7 rounded-full border-2 border-t-transparent border-[#38BDF8] animate-spin" />
                       <p className="text-xs font-semibold text-slate-300">Connecting to {new URL(win.webUrl).hostname}...</p>
                     </div>
                   )}
 
                   {/* Sandboxed PWA Frame */}
                   <iframe
+                    id={`iframe-${win.id}`}
                     src={win.webUrl}
                     title={win.title}
                     onLoad={() => setIframeLoadedMap((prev) => ({ ...prev, [win.id]: true }))}
+                    onError={() => setIframeErrorMap((prev) => ({ ...prev, [win.id]: true }))}
                     className="w-full h-full border-none flex-1 bg-white"
                     sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads allow-modals"
                     allow="camera; microphone; geolocation; clipboard-read; clipboard-write; autoplay; fullscreen"
                   />
+
+                  {/* Drag Interactivity Shield to prevent iframes from stealing mouse events */}
+                  {isInteracting && (
+                    <div className="absolute inset-0 z-20 bg-transparent pointer-events-auto" />
+                  )}
                 </div>
               ) : (
                 <div className="h-full w-full flex flex-col items-center justify-center p-6 text-center space-y-3">
@@ -366,8 +443,15 @@ export const MultiWindowManager: React.FC<MultiWindowManagerProps> = () => {
                   </div>
                   <h4 className={`text-sm font-bold ${currentTheme.classes.textPrimary}`}>{win.title}</h4>
                   <p className={`text-xs max-w-xs ${currentTheme.classes.textSecondary}`}>
-                    Active multitasking process running in high-performance Nodus cluster space.
+                    Active workstation process running in high-performance Nodus cluster space.
                   </p>
+                  <button
+                    onClick={() => launchNativeFallback(win.appId)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-[#38BDF8]/20 text-[#38BDF8] border border-[#38BDF8]/30 hover:bg-[#38BDF8]/30 transition"
+                  >
+                    <Smartphone size={14} />
+                    <span>Launch Native Android APK</span>
+                  </button>
                 </div>
               )}
             </div>
@@ -375,14 +459,14 @@ export const MultiWindowManager: React.FC<MultiWindowManagerProps> = () => {
             {/* 8-Direction Resizing Grippers (Only when not maximized) */}
             {!isMaximized && (
               <>
-                <div onPointerDown={(e) => handlePointerDownResize(e, win, 'n')} className="absolute top-0 left-2 right-2 h-1.5 cursor-ns-resize" />
-                <div onPointerDown={(e) => handlePointerDownResize(e, win, 's')} className="absolute bottom-0 left-2 right-2 h-1.5 cursor-ns-resize" />
-                <div onPointerDown={(e) => handlePointerDownResize(e, win, 'w')} className="absolute top-2 bottom-2 left-0 w-1.5 cursor-ew-resize" />
-                <div onPointerDown={(e) => handlePointerDownResize(e, win, 'e')} className="absolute top-2 bottom-2 right-0 w-1.5 cursor-ew-resize" />
-                <div onPointerDown={(e) => handlePointerDownResize(e, win, 'nw')} className="absolute top-0 left-0 w-3 h-3 cursor-nwse-resize" />
-                <div onPointerDown={(e) => handlePointerDownResize(e, win, 'ne')} className="absolute top-0 right-0 w-3 h-3 cursor-nesw-resize" />
-                <div onPointerDown={(e) => handlePointerDownResize(e, win, 'sw')} className="absolute bottom-0 left-0 w-3 h-3 cursor-nesw-resize" />
-                <div onPointerDown={(e) => handlePointerDownResize(e, win, 'se')} className="absolute bottom-0 right-0 w-3 h-3 cursor-nwse-resize" />
+                <div onPointerDown={(e) => { const el = document.getElementById(`window-${win.id}`); handlePointerDownResize(e, win, 'n', el); }} className="absolute top-0 left-2 right-2 h-2 cursor-ns-resize z-30" />
+                <div onPointerDown={(e) => { const el = document.getElementById(`window-${win.id}`); handlePointerDownResize(e, win, 's', el); }} className="absolute bottom-0 left-2 right-2 h-2 cursor-ns-resize z-30" />
+                <div onPointerDown={(e) => { const el = document.getElementById(`window-${win.id}`); handlePointerDownResize(e, win, 'w', el); }} className="absolute top-2 bottom-2 left-0 w-2 cursor-ew-resize z-30" />
+                <div onPointerDown={(e) => { const el = document.getElementById(`window-${win.id}`); handlePointerDownResize(e, win, 'e', el); }} className="absolute top-2 bottom-2 right-0 w-2 cursor-ew-resize z-30" />
+                <div onPointerDown={(e) => { const el = document.getElementById(`window-${win.id}`); handlePointerDownResize(e, win, 'nw', el); }} className="absolute top-0 left-0 w-4 h-4 cursor-nwse-resize z-30" />
+                <div onPointerDown={(e) => { const el = document.getElementById(`window-${win.id}`); handlePointerDownResize(e, win, 'ne', el); }} className="absolute top-0 right-0 w-4 h-4 cursor-nesw-resize z-30" />
+                <div onPointerDown={(e) => { const el = document.getElementById(`window-${win.id}`); handlePointerDownResize(e, win, 'sw', el); }} className="absolute bottom-0 left-0 w-4 h-4 cursor-nesw-resize z-30" />
+                <div onPointerDown={(e) => { const el = document.getElementById(`window-${win.id}`); handlePointerDownResize(e, win, 'se', el); }} className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize z-30" />
               </>
             )}
           </div>

@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Nodus Desktop",
-  "version": "0.1.0",
+  "version": "1.1.1",
   "identifier": "com.nodus.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -30,7 +30,7 @@
     ],
 
     "security": {
-      "csp": null
+      "csp": "default-src 'self' tauri: http://localhost:*; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-eval';"
     }
   },
   "bundle": {

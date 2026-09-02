@@ -25,22 +25,26 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install Node dependencies & build web assets
+      - name: Install dependencies & build frontend bundle
         run: |
-          npm install
+          npm ci || npm install
+          cd packages/nodus-home
           npm run build
-          npm run sync:assets
+          rm -rf android-shell/app/src/main/assets/frontend/*
+          mkdir -p android-shell/app/src/main/assets/frontend
+          cp -r dist/* android-shell/app/src/main/assets/frontend/
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
       - name: Build Android APK
         run: |
-          cd android-shell
-          gradle assembleDebug --no-daemon --stacktrace
+          cd packages/nodus-home/android-shell
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Upload Nodus Home APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: NodusHome-debug.apk
-          path: android-shell/app/build/outputs/apk/debug/app-debug.apk
+          path: packages/nodus-home/android-shell/app/build/outputs/apk/debug/app-debug.apk

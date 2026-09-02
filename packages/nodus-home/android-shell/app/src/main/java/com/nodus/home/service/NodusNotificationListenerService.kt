@@ -87,11 +87,17 @@ class NodusNotificationListenerService : NotificationListenerService() {
 
                     val extras = sbn.notification?.extras ?: continue
                     val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
-                    val text = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
+                    val rawText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
                         ?: extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
                         ?: ""
 
-                    if (title.isBlank() && text.isBlank()) continue
+                    if (title.isBlank() && rawText.isBlank()) continue
+
+                    // Mask sensitive 2FA / OTP tokens for privacy protection
+                    val sanitizedText = rawText.replace(
+                        Regex("(?i)(\\b(?:code|otp|pin|verification)\\s*[:is]*\\s*)(\\d{4,8})"),
+                        "$1******"
+                    )
 
                     val pkg = sbn.packageName ?: ""
                     val appName = try {
@@ -113,7 +119,7 @@ class NodusNotificationListenerService : NotificationListenerService() {
                         put("packageName", pkg)
                         put("appName", appName)
                         put("title", title.ifBlank { appName })
-                        put("message", text)
+                        put("message", sanitizedText)
                         put("time", postTime)
                         put("read", false)
                         put("iconName", "Bell")

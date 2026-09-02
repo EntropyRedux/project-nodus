@@ -113,11 +113,11 @@ class HomeActivity : AppCompatActivity() {
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
-                allowFileAccess = true
+                allowFileAccess = false
                 allowContentAccess = true
                 databaseEnabled = true
                 cacheMode = WebSettings.LOAD_NO_CACHE
-                mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
                 mediaPlaybackRequiresUserGesture = false
                 useWideViewPort = true
                 loadWithOverviewMode = true
@@ -163,6 +163,11 @@ class HomeActivity : AppCompatActivity() {
                     view: WebView?,
                     request: WebResourceRequest?
                 ): Boolean {
+                    // Allow all subframe / iframe navigations to load inside Nodus windows
+                    if (request?.isForMainFrame == false) {
+                        return false
+                    }
+
                     val uri = request?.url ?: return false
                     val url = uri.toString()
                     if (url.startsWith("https://appassets.androidplatform.net/") ||
@@ -179,7 +184,7 @@ class HomeActivity : AppCompatActivity() {
                         true
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to launch external browser/app for URL: $url", e)
-                        true
+                        false
                     }
                 }
 
@@ -421,6 +426,11 @@ class HomeActivity : AppCompatActivity() {
 
     inner class NodusHomeNativeBridge(private val context: Context) {
 
+        private fun isOriginTrusted(): Boolean {
+            val url = webView?.url ?: return false
+            return url.startsWith("https://appassets.androidplatform.net/")
+        }
+
         @JavascriptInterface
         fun isPackageInstalled(packageName: String): Boolean {
             return NodusModuleDetector.isInstalled(context, packageName)
@@ -453,6 +463,8 @@ class HomeActivity : AppCompatActivity() {
                 conn.readTimeout = 4000
                 conn.setRequestProperty("Content-Type", "application/json")
                 conn.setRequestProperty("Accept", "application/json")
+                conn.setRequestProperty("Authorization", "Bearer NODUS-FLEET-SECURE")
+                conn.setRequestProperty("X-Nodus-Auth-Token", "NODUS-FLEET-SECURE")
                 if (reqMethod == "POST" && !body.isNullOrEmpty()) {
                     conn.doOutput = true
                     conn.outputStream.use { os ->

@@ -448,3 +448,18 @@ pub fn add_watched_folder(path: String) -> Result<Vec<DiscoveredApp>, String> {
     save_shared_config(&cfg);
     Ok(discovered)
 }
+
+#[tauri::command]
+pub fn get_watched_folders() -> Vec<String> {
+    let cfg = load_shared_config();
+    cfg.watched_folders
+}
+
+#[tauri::command]
+pub fn remove_watched_folder(path: String) -> Vec<String> {
+    let mut cfg = load_shared_config();
+    cfg.watched_folders.retain(|f| f != &path);
+    save_shared_config(&cfg);
+    cfg.watched_folders
+}
+

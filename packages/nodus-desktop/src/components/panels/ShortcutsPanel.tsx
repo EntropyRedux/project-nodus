@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import * as Icons from 'lucide-react';
 import { IconPickerModal } from '../common/IconPickerModal';
+import { TauriService } from '../../services/TauriCommands';
 
 interface DiscoveredApp {
   id: string;
@@ -63,12 +64,9 @@ export const ShortcutsPanel: React.FC = () => {
 
   const fetchShared = async () => {
     try {
-      const res = await fetch('http://localhost:9120/api/shortcuts');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.shortcuts) {
-          setSharedShortcuts(data.shortcuts);
-        }
+      const apps = await TauriService.getSharedShortcuts();
+      if (apps && apps.length > 0) {
+        setSharedShortcuts(apps);
       }
     } catch (e) {
       console.warn('Failed to fetch shared shortcuts:', e);
@@ -77,12 +75,9 @@ export const ShortcutsPanel: React.FC = () => {
 
   const fetchWatchedConfig = async () => {
     try {
-      const res = await fetch('http://localhost:9120/api/shortcuts/watched');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.watched_folders) {
-          setWatchedFoldersList(data.watched_folders);
-        }
+      const folders = await TauriService.getWatchedFolders();
+      if (folders && folders.length > 0) {
+        setWatchedFoldersList(folders);
       }
     } catch (e) {
       console.warn('Failed to fetch watched config:', e);
@@ -93,16 +88,15 @@ export const ShortcutsPanel: React.FC = () => {
     setIsScanning(true);
     setStatusMessage('Scanning Windows Start Menu & Installed Apps...');
     try {
-      const res = await fetch('http://localhost:9120/api/shortcuts/installed');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.apps) {
-          setDiscoveredApps(data.apps);
-          setStatusMessage(`Found ${data.apps.length} Windows applications`);
-        }
+      const apps = await TauriService.getInstalledApps();
+      if (apps && apps.length > 0) {
+        setDiscoveredApps(apps);
+        setStatusMessage(`Found ${apps.length} Windows applications`);
+      } else {
+        setStatusMessage('No applications returned. Ensure desktop backend permissions.');
       }
-    } catch (e) {
-      setStatusMessage('Scan failed. Ensure Nodus backend is active.');
+    } catch (e: any) {
+      setStatusMessage(`Scan failed: ${e.message || e}`);
     } finally {
       setIsScanning(false);
     }
@@ -126,17 +120,7 @@ export const ShortcutsPanel: React.FC = () => {
     }
 
     setSharedShortcuts(updated);
-
-    // Sync to backend store
-    try {
-      await fetch('http://localhost:9120/api/shortcuts/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updated),
-      });
-    } catch (e) {
-      console.warn('Failed to sync shortcuts:', e);
-    }
+    await TauriService.setSharedShortcuts(updated);
   };
 
   const handleUpdateIcon = async (iconName: string, iconColor: string) => {
@@ -169,17 +153,8 @@ export const ShortcutsPanel: React.FC = () => {
 
     setStatusMessage(`✓ Assigned icon <${iconName} /> (${iconColor}) to "${target.name}". Tap Sync on tablet!`);
 
-    // Persist immediately if shared
     if (sharedShortcuts.some((s) => s.path_or_appid === target.path_or_appid)) {
-      try {
-        await fetch('http://localhost:9120/api/shortcuts/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updatedShared),
-        });
-      } catch (e) {
-        console.warn('Failed to sync updated icon:', e);
-      }
+      await TauriService.setSharedShortcuts(updatedShared);
     }
   };
 
@@ -189,21 +164,15 @@ export const ShortcutsPanel: React.FC = () => {
     setIsScanning(true);
     setStatusMessage(`Scanning folder: ${target}...`);
     try {
-      const res = await fetch('http://localhost:9120/api/shortcuts/folder', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: target }),
-      });
-      const data = await res.json();
-      if (res.ok && data.apps) {
-        setFolderDiscoveredApps(data.apps);
-        if (data.watched_folders) {
-          setWatchedFoldersList(data.watched_folders);
-        }
+      const apps = await TauriService.addWatchedFolder(target);
+      if (apps && apps.length > 0) {
+        setFolderDiscoveredApps(apps);
+        const folders = await TauriService.getWatchedFolders();
+        setWatchedFoldersList(folders);
         await fetchShared();
-        setStatusMessage(`Found ${data.apps.length} shortcuts in folder! Click any item below to share it.`);
+        setStatusMessage(`Found ${apps.length} shortcuts in folder! Click any item below to share it.`);
       } else {
-        setStatusMessage(`Scan failed: ${data.message || 'Directory could not be read'}`);
+        setStatusMessage(`Directory '${target}' was read, but no .exe / .lnk / .url / .bat files were found.`);
       }
     } catch (e: any) {
       setStatusMessage(`Failed to scan folder: ${e.message || e}`);

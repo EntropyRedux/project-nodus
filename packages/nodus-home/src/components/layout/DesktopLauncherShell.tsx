@@ -54,6 +54,7 @@ export const DesktopLauncherShell: React.FC = () => {
     closeActiveApp,
     openProcessManager,
     showToast,
+    isDeviceRailVisible,
   } = useLauncher();
 
   const [isSyncingShortcuts, setIsSyncingShortcuts] = useState(false);
@@ -379,10 +380,10 @@ export const DesktopLauncherShell: React.FC = () => {
       </div>
 
       {/* 1. Left Multi-Device Mesh Sidebar */}
-      {settings.enableMultiDevice && <DeviceSidebar />}
+      {settings.enableMultiDevice && isDeviceRailVisible && <DeviceSidebar />}
 
       {/* 2. Side Panel for Device Processes */}
-      {settings.enableMultiDevice && <DeviceProcessSidePanel />}
+      {settings.enableMultiDevice && isDeviceRailVisible && <DeviceProcessSidePanel />}
 
       {/* 3. Main Desktop Canvas */}
       <main className="flex-1 h-full flex flex-col justify-between relative overflow-hidden transition-all duration-300 ease-in-out z-10">

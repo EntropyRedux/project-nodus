@@ -14,7 +14,7 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
- * Async HTTP RPC Client for communicating with companion Fleet nodes (e.g. PCControlSuite / Master / Slave).
+ * Async HTTP RPC Client for communicating with companion Fleet nodes with Bearer Authentication.
  */
 class HttpRpcClient {
 
@@ -30,18 +30,30 @@ class HttpRpcClient {
         .retryOnConnectionFailure(true)
         .build()
 
+    private fun buildRequest(url: String, authToken: String? = null, postBody: String? = null): Request {
+        val builder = Request.Builder().url(url)
+        if (!authToken.isNullOrBlank()) {
+            builder.header("Authorization", "Bearer $authToken")
+            builder.header("X-Nodus-Auth-Token", authToken)
+        }
+        if (postBody != null) {
+            builder.post(postBody.toRequestBody(JSON_MEDIA_TYPE))
+        } else {
+            builder.get()
+        }
+        return builder.build()
+    }
+
     fun fetchStats(
         ip: String,
         port: Int,
+        authToken: String? = null,
         onSuccess: (JSONObject) -> Unit,
         onError: (Exception) -> Unit = {}
     ) {
         val cleanIp = ip.removePrefix("http://").removePrefix("https://").substringBefore(":")
         val url = "http://$cleanIp:$port/api/status"
-        val request = Request.Builder()
-            .url(url)
-            .get()
-            .build()
+        val request = buildRequest(url, authToken)
 
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
@@ -69,15 +81,13 @@ class HttpRpcClient {
     fun fetchProcesses(
         ip: String,
         port: Int,
+        authToken: String? = null,
         onSuccess: (JSONArray) -> Unit,
         onError: (Exception) -> Unit = {}
     ) {
         val cleanIp = ip.removePrefix("http://").removePrefix("https://").substringBefore(":")
         val url = "http://$cleanIp:$port/api/processes"
-        val request = Request.Builder()
-            .url(url)
-            .get()
-            .build()
+        val request = buildRequest(url, authToken)
 
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
@@ -90,15 +100,11 @@ class HttpRpcClient {
                         onError(IOException("HTTP ${it.code} on $url"))
                         return
                     }
-                    val body = it.body?.string() ?: "[]"
+                    val body = it.body?.string() ?: "{}"
                     try {
-                        val array = if (body.startsWith("[")) {
-                            JSONArray(body)
-                        } else {
-                            val obj = JSONObject(body)
-                            obj.optJSONArray("processes") ?: JSONArray()
-                        }
-                        onSuccess(array)
+                        val json = JSONObject(body)
+                        val procs = json.optJSONArray("processes") ?: JSONArray()
+                        onSuccess(procs)
                     } catch (e: Exception) {
                         onError(e)
                     }
@@ -111,6 +117,7 @@ class HttpRpcClient {
         ip: String,
         port: Int,
         pid: Int,
+        authToken: String? = null,
         onSuccess: () -> Unit,
         onError: (Exception) -> Unit = {}
     ) {
@@ -120,10 +127,7 @@ class HttpRpcClient {
             put("pid", pid)
         }.toString()
 
-        val request = Request.Builder()
-            .url(url)
-            .post(payload.toRequestBody(JSON_MEDIA_TYPE))
-            .build()
+        val request = buildRequest(url, authToken, payload)
 
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
@@ -146,6 +150,7 @@ class HttpRpcClient {
         ip: String,
         port: Int,
         commandOrId: String,
+        authToken: String? = null,
         onSuccess: () -> Unit,
         onError: (Exception) -> Unit = {}
     ) {
@@ -156,10 +161,7 @@ class HttpRpcClient {
             put("command", commandOrId)
         }.toString()
 
-        val request = Request.Builder()
-            .url(url)
-            .post(payload.toRequestBody(JSON_MEDIA_TYPE))
-            .build()
+        val request = buildRequest(url, authToken, payload)
 
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
@@ -182,23 +184,17 @@ class HttpRpcClient {
         ip: String,
         port: Int,
         action: String, // "sleep" | "lock" | "restart" | "shutdown"
+        authToken: String? = null,
         onSuccess: () -> Unit,
         onError: (Exception) -> Unit = {}
     ) {
         val cleanIp = ip.removePrefix("http://").removePrefix("https://").substringBefore(":")
-        val url = if (action.equals("lock", ignoreCase = true)) {
-            "http://$cleanIp:$port/api/lock"
-        } else {
-            "http://$cleanIp:$port/api/system/control"
-        }
+        val url = "http://$cleanIp:$port/api/system/control"
         val payload = JSONObject().apply {
             put("action", action)
         }.toString()
 
-        val request = Request.Builder()
-            .url(url)
-            .post(payload.toRequestBody(JSON_MEDIA_TYPE))
-            .build()
+        val request = buildRequest(url, authToken, payload)
 
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
@@ -221,18 +217,17 @@ class HttpRpcClient {
         ip: String,
         port: Int,
         text: String,
+        authToken: String? = null,
         onSuccess: () -> Unit = {},
         onError: (Exception) -> Unit = {}
     ) {
-        val url = "http://$ip:$port/api/clipboard"
+        val cleanIp = ip.removePrefix("http://").removePrefix("https://").substringBefore(":")
+        val url = "http://$cleanIp:$port/api/clipboard"
         val payload = JSONObject().apply {
             put("text", text)
         }.toString()
 
-        val request = Request.Builder()
-            .url(url)
-            .post(payload.toRequestBody(JSON_MEDIA_TYPE))
-            .build()
+        val request = buildRequest(url, authToken, payload)
 
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {

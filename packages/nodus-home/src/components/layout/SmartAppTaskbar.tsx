@@ -14,9 +14,6 @@ import {
   Smartphone, 
   Laptop, 
   Monitor, 
-  Camera, 
-  RotateCcw, 
-  Wifi, 
   Clipboard as ClipboardIcon 
 } from 'lucide-react';
 import { useLauncher } from '../../context/LauncherContext';
@@ -62,6 +59,12 @@ export const SmartAppTaskbar: React.FC = () => {
     isNotificationListenerEnabled,
     requestNotificationListenerPermission,
     updateDeviceAvatar,
+    userProfileAvatar,
+    setUserProfileAvatar,
+    toggleDeviceRail,
+    isDeviceRailVisible,
+    toggleSidebar,
+    isSidebarCollapsed,
   } = useLauncher();
 
   const currentTheme = getSystemTheme(settings.theme);
@@ -72,33 +75,15 @@ export const SmartAppTaskbar: React.FC = () => {
   const [menuSearch, setMenuSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
-  const [isDeviceMenuOpen, setIsDeviceMenuOpen] = useState(false);
-  const [userAvatar, setUserAvatar] = useState<string | null>(() => {
-    try {
-      return activeDevice?.customAvatar || localStorage.getItem('nodus_user_avatar') || null;
-    } catch (_) {
-      return null;
-    }
-  });
+  const userAvatar = activeDevice?.customAvatar || (activeDevice?.id === 'poco-pad' ? userProfileAvatar : null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const startMenuRef = useRef<HTMLDivElement | null>(null);
-  const deviceMenuRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (activeDevice?.customAvatar) {
-      setUserAvatar(activeDevice.customAvatar);
-    }
-  }, [activeDevice?.customAvatar]);
+  const longPressTimerRef = useRef<any>(null);
+  const lastTapTimeRef = useRef<number>(0);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (deviceMenuRef.current && !deviceMenuRef.current.contains(e.target as Node)) {
-        const target = e.target as HTMLElement;
-        if (!target.closest('#nodus-avatar-btn')) {
-          setIsDeviceMenuOpen(false);
-        }
-      }
       if (startMenuRef.current && !startMenuRef.current.contains(e.target as Node)) {
         const target = e.target as HTMLElement;
         if (!target.closest('#nodus-start-btn')) {
@@ -117,29 +102,47 @@ export const SmartAppTaskbar: React.FC = () => {
       reader.onload = (event) => {
         const result = event.target?.result as string;
         if (result) {
-          setUserAvatar(result);
-          try {
-            localStorage.setItem('nodus_user_avatar', result);
-            if (activeDevice?.id && updateDeviceAvatar) {
-              updateDeviceAvatar(activeDevice.id, result);
-            }
-          } catch (_) {}
-          showToast('Profile avatar updated');
+          if (activeDevice?.id) {
+            updateDeviceAvatar(activeDevice.id, result);
+          }
+          if (activeDevice?.id === 'poco-pad' || !activeDevice) {
+            setUserProfileAvatar(result);
+          }
         }
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const handleResetAvatar = () => {
-    setUserAvatar(null);
-    try {
-      localStorage.removeItem('nodus_user_avatar');
-      if (activeDevice?.id && updateDeviceAvatar) {
-        updateDeviceAvatar(activeDevice.id, '');
+  const handleAvatarTouchStart = () => {
+    longPressTimerRef.current = setTimeout(() => {
+      audio.playTap();
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+        fileInputRef.current.click();
       }
-    } catch (_) {}
-    showToast('Reset to default device icon');
+    }, 500);
+  };
+
+  const handleAvatarTouchEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const handleAvatarClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const now = Date.now();
+    const DOUBLE_TAP_DELAY = 280;
+    if (now - lastTapTimeRef.current < DOUBLE_TAP_DELAY) {
+      lastTapTimeRef.current = 0;
+      toggleDeviceRail();
+    } else {
+      lastTapTimeRef.current = now;
+      audio.playTap();
+      toggleSidebar();
+    }
   };
 
   const unreadNotificationCount = totalUnreadNotifications;
@@ -294,18 +297,18 @@ export const SmartAppTaskbar: React.FC = () => {
     showToast('Created new folder');
   };
 
-  const renderDeviceIcon = () => {
+  const renderDeviceIcon = (size = 18) => {
     const type = activeDevice?.type || 'tablet';
     switch (type) {
       case 'phone':
-        return <Smartphone size={18} strokeWidth={2.2} className="text-[#34C759]" />;
+        return <Smartphone size={size} strokeWidth={2.2} style={{ color: devColor }} />;
       case 'laptop':
-        return <Laptop size={18} strokeWidth={2.2} className="text-[#34C759]" />;
+        return <Laptop size={size} strokeWidth={2.2} style={{ color: devColor }} />;
       case 'desktop':
-        return <Monitor size={18} strokeWidth={2.2} className="text-[#34C759]" />;
+        return <Monitor size={size} strokeWidth={2.2} style={{ color: devColor }} />;
       case 'tablet':
       default:
-        return <Tablet size={18} strokeWidth={2.2} className="text-[#34C759]" />;
+        return <Tablet size={size} strokeWidth={2.2} style={{ color: devColor }} />;
     }
   };
 
@@ -318,84 +321,6 @@ export const SmartAppTaskbar: React.FC = () => {
         accept="image/*"
         className="hidden"
       />
-
-      {/* Device Popover - Seamless Themed */}
-      {isDeviceMenuOpen && (
-        <div
-          ref={deviceMenuRef}
-          className={`fixed bottom-16 left-4 z-50 w-76 ${currentTheme.classes.drawerFlyout} ${currentTheme.cardRadius} p-4 flex flex-col gap-3 animate-in fade-in slide-in-from-bottom-3 duration-200 ${currentTheme.classes.containerFont} backdrop-blur-2xl`}
-          style={{ backgroundColor: getSurfaceRgba(settings.theme, settings.taskbarOpacity, 'popup') }}
-        >
-          <div className={`flex items-center gap-3 p-2.5 ${currentTheme.classes.itemCard} ${currentTheme.cardRadius}`}>
-            <div className={`relative w-11 h-11 ${currentTheme.archetype === 'hud' ? 'rounded-none' : 'rounded-full'} overflow-hidden bg-white/[0.04] border border-white/[0.08] flex items-center justify-center shrink-0`}>
-              {userAvatar ? (
-                <img src={userAvatar} alt="User Avatar" className="w-full h-full object-cover" />
-              ) : (
-                renderDeviceIcon()
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className={`font-bold text-xs truncate ${currentTheme.classes.textPrimary}`}>
-                  {currentTheme.archetype === 'hud' ? `[NODE//${(activeDevice?.name || 'LOCAL').toUpperCase()}]` : (activeDevice?.name || 'Local Node')}
-                </span>
-                <span className="w-2 h-2 rounded-full bg-[#10B981] shrink-0 shadow-[0_0_6px_rgba(16,185,129,0.8)]" />
-              </div>
-              <p className={`text-[10px] ${currentTheme.classes.textSecondary} truncate font-mono`}>
-                {activeDevice?.type || 'Workstation'} • {activeDevice?.ipAddress || '192.168.1.108'}
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <button
-              onClick={() => {
-                audio.playTap();
-                fileInputRef.current?.click();
-              }}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 ${currentTheme.buttonRadius} ${currentTheme.classes.actionButton} text-xs font-semibold`}
-            >
-              <Camera size={14} style={{ color: currentAccent.hex }} />
-              <span>Change Node Avatar</span>
-            </button>
-
-            {userAvatar && (
-              <button
-                onClick={() => {
-                  audio.playTap();
-                  handleResetAvatar();
-                }}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 ${currentTheme.buttonRadius} ${currentTheme.isLight ? 'hover:bg-[#F1F5F9] text-[#64748B] hover:text-[#F43F5E]' : 'hover:bg-white/5 text-[#94A3B8] hover:text-[#F43F5E]'} text-xs font-semibold transition`}
-              >
-                <RotateCcw size={14} />
-                <span>Reset to Hardware Icon</span>
-              </button>
-            )}
-          </div>
-
-          <div className={`pt-2 border-t ${currentTheme.isLight ? 'border-[#E2E8F0]' : 'border-white/[0.06]'}`}>
-            <div className="flex items-center justify-between px-1 mb-2 font-mono">
-              <span className={`text-[10px] font-bold uppercase tracking-wider ${currentTheme.classes.textSecondary} flex items-center gap-1`}>
-                <Wifi size={11} style={{ color: currentAccent.hex }} />
-                Cluster Mesh
-              </span>
-              <span className="text-[10px] text-[#10B981] font-semibold">Active Node</span>
-            </div>
-
-            <div className={`p-2 ${currentTheme.cardRadius} ${currentTheme.classes.itemCard} flex items-center justify-between`}>
-              <div className="flex items-center gap-2">
-                <div className={`p-1 ${currentTheme.buttonRadius} ${currentTheme.isLight ? 'bg-[#F1F5F9]' : 'bg-white/[0.06]'}`} style={{ color: currentAccent.hex }}>
-                  {renderDeviceIcon()}
-                </div>
-                <div>
-                  <div className={`text-xs font-bold ${currentTheme.classes.textPrimary}`}>{activeDevice?.name || 'Local Controller'}</div>
-                  <div className="text-[10px] font-mono" style={{ color: currentAccent.hex }}>Primary Controller</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Modern Workstation Flyout Menu (App Launcher) */}
       {isStartMenuOpen && (
@@ -685,24 +610,39 @@ export const SmartAppTaskbar: React.FC = () => {
         <div className="flex items-center gap-2 flex-1 min-w-0 pr-3">
           <button
             id="nodus-avatar-btn"
-            onClick={() => {
+            onClick={handleAvatarClick}
+            onTouchStart={handleAvatarTouchStart}
+            onTouchEnd={handleAvatarTouchEnd}
+            onTouchCancel={handleAvatarTouchEnd}
+            onMouseDown={handleAvatarTouchStart}
+            onMouseUp={handleAvatarTouchEnd}
+            onMouseLeave={handleAvatarTouchEnd}
+            onContextMenu={(e) => {
+              e.preventDefault();
               audio.playTap();
-              setIsDeviceMenuOpen(!isDeviceMenuOpen);
+              if (fileInputRef.current) {
+                fileInputRef.current.value = '';
+                fileInputRef.current.click();
+              }
             }}
-            className={`relative w-8.5 h-8.5 rounded-full overflow-hidden ${
+            className={`relative ${sizeConfig.btnSize} ${currentTheme.cardRadius} overflow-hidden ${
               currentTheme.isLight ? 'bg-white/85 hover:bg-white border-[#CBD5E1]' : 'bg-white/[0.03] hover:bg-white/[0.08] border-white/[0.06]'
-            } border transition flex items-center justify-center shrink-0 shadow-none`}
+            } border transition flex items-center justify-center shrink-0 shadow-none cursor-pointer`}
             style={{
-              borderColor: isDeviceMenuOpen ? currentAccent.hex : undefined,
+              borderColor: !isSidebarCollapsed ? devColor : undefined,
+              boxShadow: !isSidebarCollapsed ? `0 0 12px ${devColor}50` : undefined,
             }}
-            title="Profile & Node Status"
+            title="Single tap: Expand cluster drawer | Double tap: Toggle device rail | Long press: Change photo"
           >
             {userAvatar ? (
-              <img src={userAvatar} alt="Profile" className="w-full h-full object-cover" />
+              <img src={userAvatar} alt="Profile" className={`w-full h-full object-cover ${currentTheme.cardRadius}`} />
             ) : (
-              renderDeviceIcon()
+              renderDeviceIcon(sizeConfig.iconSize)
             )}
-            <span className="absolute bottom-0.5 right-0.5 w-2 h-2 rounded-full bg-[#10B981] border-2 border-[#090B10]" />
+            <span
+              className="absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full border-2 border-[#090B10]"
+              style={{ backgroundColor: devColor }}
+            />
           </button>
 
           <button

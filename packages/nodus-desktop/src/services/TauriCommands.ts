@@ -48,8 +48,8 @@ export const TauriService = {
         status: 'running' as const,
       }));
     } catch (e) {
-      console.warn('[TauriService] getProcesses error (falling back to mock):', e);
-      return MOCK_PROCESSES;
+      console.error('[TauriService] getProcesses error:', e);
+      return [];
     }
   },
 
@@ -86,8 +86,8 @@ export const TauriService = {
     try {
       return await invoke<SystemStats>('get_system_stats');
     } catch (e) {
-      console.warn('[TauriService] getSystemStats error (falling back to mock):', e);
-      return MOCK_SYSTEM_STATS;
+      console.error('[TauriService] getSystemStats error:', e);
+      return null;
     }
   },
 
@@ -258,4 +258,155 @@ export const TauriService = {
       return false;
     }
   },
+
+  async getInstalledApps(): Promise<any[]> {
+    if (!isTauri()) {
+      try {
+        const res = await fetch('http://localhost:9120/api/shortcuts/installed');
+        if (res.ok) {
+          const data = await res.json();
+          return data.apps || [];
+        }
+      } catch (_) {}
+      return [];
+    }
+    try {
+      return await invoke<any[]>('get_installed_windows_apps');
+    } catch (e) {
+      console.error('[TauriService] getInstalledApps error:', e);
+      return [];
+    }
+  },
+
+  async scanShortcutsFolder(folderPath: string): Promise<any[]> {
+    if (!isTauri()) {
+      try {
+        const res = await fetch('http://localhost:9120/api/shortcuts/folder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: folderPath }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          return data.apps || [];
+        }
+      } catch (_) {}
+      return [];
+    }
+    try {
+      return await invoke<any[]>('scan_shortcuts_folder', { folderPath });
+    } catch (e) {
+      console.error(`[TauriService] scanShortcutsFolder(${folderPath}) error:`, e);
+      return [];
+    }
+  },
+
+  async getSharedShortcuts(): Promise<any[]> {
+    if (!isTauri()) {
+      try {
+        const res = await fetch('http://localhost:9120/api/shortcuts');
+        if (res.ok) {
+          const data = await res.json();
+          return data.apps || data.shortcuts || [];
+        }
+      } catch (_) {}
+      return [];
+    }
+    try {
+      return await invoke<any[]>('get_shared_shortcuts');
+    } catch (e) {
+      console.error('[TauriService] getSharedShortcuts error:', e);
+      return [];
+    }
+  },
+
+  async setSharedShortcuts(shortcuts: any[]): Promise<void> {
+    if (!isTauri()) {
+      try {
+        await fetch('http://localhost:9120/api/shortcuts/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(shortcuts),
+        });
+      } catch (_) {}
+      return;
+    }
+    try {
+      await invoke('set_shared_shortcuts', { shortcuts });
+    } catch (e) {
+      console.error('[TauriService] setSharedShortcuts error:', e);
+    }
+  },
+
+  async addWatchedFolder(path: string): Promise<any[]> {
+    if (!isTauri()) {
+      try {
+        const res = await fetch('http://localhost:9120/api/shortcuts/watched/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          return data.apps || [];
+        }
+      } catch (_) {}
+      return [];
+    }
+    try {
+      return await invoke<any[]>('add_watched_folder', { path });
+    } catch (e) {
+      console.error(`[TauriService] addWatchedFolder(${path}) error:`, e);
+      return [];
+    }
+  },
+
+  async getWatchedFolders(): Promise<string[]> {
+    if (!isTauri()) {
+      try {
+        const res = await fetch('http://localhost:9120/api/shortcuts/watched');
+        if (res.ok) {
+          const data = await res.json();
+          return data.watched_folders || [];
+        }
+      } catch (_) {}
+      return [];
+    }
+    try {
+      return await invoke<string[]>('get_watched_folders');
+    } catch (e) {
+      console.error('[TauriService] getWatchedFolders error:', e);
+      return [];
+    }
+  },
+
+  async removeWatchedFolder(path: string): Promise<string[]> {
+    if (!isTauri()) return [];
+    try {
+      return await invoke<string[]>('remove_watched_folder', { path });
+    } catch (e) {
+      console.error(`[TauriService] removeWatchedFolder(${path}) error:`, e);
+      return [];
+    }
+  },
+
+  async getDiscoveredDevices(): Promise<any[]> {
+    if (!isTauri()) {
+      try {
+        const res = await fetch('http://localhost:9120/api/fleet/devices');
+        if (res.ok) {
+          const data = await res.json();
+          return data.devices || [];
+        }
+      } catch (_) {}
+      return [];
+    }
+    try {
+      return await invoke<any[]>('get_discovered_devices');
+    } catch (e) {
+      console.error('[TauriService] getDiscoveredDevices error:', e);
+      return [];
+    }
+  },
 };
+

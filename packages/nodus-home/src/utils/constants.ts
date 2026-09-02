@@ -209,10 +209,10 @@ export const WALLPAPER_PRESETS = [
 export const INITIAL_SERVER_CONFIG: NetworkServerConfig = {
   role: 'host',
   serverPort: 9120,
-  serverHost: '192.168.1.104',
+  serverHost: '',
   autoDiscover: true,
   heartbeatIntervalMs: 5000,
-  pairingSecret: '748-921',
+  pairingSecret: '',
   encryptionEnabled: true,
   autoStartOnBoot: true,
   broadcastMdns: true,
@@ -222,7 +222,7 @@ export const INITIAL_SERVER_CONFIG: NetworkServerConfig = {
 export const INITIAL_WINDOWS_BRIDGE: WindowsBridgeConfig = {
   agentInstalled: false,
   bridgePort: 9120,
-  authToken: 'win-bridge-sec-token-894',
+  authToken: '',
   allowRemotePower: true,
   allowProcessTermination: true,
   allowElevatedCommands: false,

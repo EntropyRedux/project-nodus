@@ -25,6 +25,8 @@ interface DesktopContextType {
   activeDevice: DeviceInfo | undefined;
   removeDevice: (id: string) => void;
   connectDeviceManual: (device: { name: string; ip: string; port: number; type: DeviceType; os?: string }) => void;
+  pingDevice: (id: string) => Promise<{ ok: boolean; latencyMs: number }>;
+  syncDeviceState: (id: string) => Promise<boolean>;
   
   // Auto-Discovery & Server Config
   isDiscovering: boolean;
@@ -291,6 +293,55 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return () => clearInterval(interval);
   }, []);
 
+  // Real-time Fleet Mesh Discovery Polling (Auto-updates connected Android / companion devices)
+  useEffect(() => {
+    const pollFleetDevices = async () => {
+      try {
+        const discovered = await TauriService.getDiscoveredDevices();
+        if (discovered && discovered.length > 0) {
+          setDevices((prev) => {
+            const devMap = new Map(prev.map((d) => [d.id, d]));
+            let hasChanges = false;
+
+            for (const d of discovered) {
+              const existing = devMap.get(d.id);
+              const updated: DeviceInfo = {
+                id: d.id,
+                name: d.name || existing?.name || 'Companion Node',
+                type: (d.deviceType || d.type || existing?.type || 'tablet') as DeviceType,
+                os: d.os || existing?.os || 'Android 14 (HyperOS)',
+                status: d.status === 'online' ? 'connected' : 'offline',
+                ipAddress: d.ipAddress || existing?.ipAddress || '',
+                resolution: existing?.resolution || '2560 × 1600',
+                battery: d.battery ?? existing?.battery,
+                cpuLoad: d.cpuLoad ?? existing?.cpuLoad ?? 12,
+                ramUsage: d.ramUsage || existing?.ramUsage || '4.0 / 8.0 GB',
+              };
+
+              if (!existing || existing.status !== updated.status || existing.battery !== updated.battery) {
+                devMap.set(d.id, updated);
+                hasChanges = true;
+              }
+            }
+
+            if (hasChanges) {
+              const result = Array.from(devMap.values());
+              if (!activeDeviceId && result.length > 0) {
+                setActiveDeviceId(result[0].id);
+              }
+              return result;
+            }
+            return prev;
+          });
+        }
+      } catch (_) {}
+    };
+
+    pollFleetDevices();
+    const interval = setInterval(pollFleetDevices, 2000);
+    return () => clearInterval(interval);
+  }, [activeDeviceId]);
+
   const selectDevice = useCallback((id: string) => {
     setActiveDeviceId(id);
   }, []);
@@ -349,53 +400,80 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const startAutoDiscovery = useCallback(async () => {
     setIsDiscovering(true);
     try {
-      // Look for active Nodus nodes across standard ports (9120, 8080)
-      const candidateEndpoints = [
-        { ip: '127.0.0.1', port: 9120, type: 'tablet' as DeviceType },
-      ];
-      
-      const discovered: DeviceInfo[] = [];
-
-      for (const cand of candidateEndpoints) {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 1200);
-          const res = await fetch(`http://${cand.ip}:${cand.port}/api/status`, {
-            signal: controller.signal,
-          });
-          clearTimeout(timeoutId);
-          if (res.ok) {
-            const data = await res.json();
-            if (data && data.name) {
-              discovered.push({
-                id: `node-${cand.ip.replace(/\./g, '-')}-${cand.port}`,
-                name: data.name,
-                type: data.type || cand.type,
-                os: data.os || 'Android 14',
-                status: 'online',
-                ipAddress: `${cand.ip}:${cand.port}`,
-                resolution: data.resolution || '2560 × 1600',
-                battery: data.battery,
-                cpuLoad: data.cpuLoad ?? 10,
-                ramUsage: data.ramUsage ?? '3.5 / 8.0 GB',
-              });
-            }
-          }
-        } catch (_) {}
-      }
-
-      // Only add actually reachable nodes
-      if (discovered.length > 0) {
+      const discovered = await TauriService.getDiscoveredDevices();
+      if (discovered && discovered.length > 0) {
         setDevices((prev) => {
-          const existingIds = new Set(prev.map((d) => d.id));
-          const toAdd = discovered.filter((d) => !existingIds.has(d.id));
-          return [...prev, ...toAdd];
+          const devMap = new Map(prev.map((d) => [d.id, d]));
+          for (const d of discovered) {
+            devMap.set(d.id, {
+              id: d.id,
+              name: d.name || 'Companion Node',
+              type: (d.deviceType || d.type || 'tablet') as DeviceType,
+              os: d.os || 'Android 14 (HyperOS)',
+              status: d.status === 'online' ? 'connected' : 'offline',
+              ipAddress: d.ipAddress || '',
+              resolution: '2560 × 1600',
+              battery: d.battery,
+              cpuLoad: d.cpuLoad ?? 12,
+              ramUsage: d.ramUsage || '4.0 / 8.0 GB',
+            });
+          }
+          return Array.from(devMap.values());
         });
       }
     } finally {
       setIsDiscovering(false);
     }
   }, []);
+
+  const pingDevice = useCallback(async (id: string): Promise<{ ok: boolean; latencyMs: number }> => {
+    const target = devices.find((d) => d.id === id);
+    if (!target || !target.ipAddress) return { ok: false, latencyMs: 0 };
+    const rawIp = target.ipAddress.trim();
+    const ip = rawIp.includes(':') ? rawIp : `${rawIp}:9120`;
+    const start = performance.now();
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      const res = await fetch(`http://${ip}/api/status`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      const latencyMs = Math.round(performance.now() - start);
+      return { ok: res.ok, latencyMs };
+    } catch (_) {
+      return { ok: false, latencyMs: Math.round(performance.now() - start) };
+    }
+  }, [devices]);
+
+  const syncDeviceState = useCallback(async (id: string): Promise<boolean> => {
+    const target = devices.find((d) => d.id === id);
+    if (!target || !target.ipAddress) return false;
+    const rawIp = target.ipAddress.trim();
+    const ip = rawIp.includes(':') ? rawIp : `${rawIp}:9120`;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2500);
+      const res = await fetch(`http://${ip}/api/status`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const stats = await res.json();
+        setDevices((prev) =>
+          prev.map((d) =>
+            d.id === id
+              ? {
+                  ...d,
+                  status: 'connected',
+                  cpuLoad: stats.cpuLoad ?? stats.cpu_load_percent ?? d.cpuLoad,
+                  ramUsage: stats.ramUsage ?? (stats.ram_used_mb ? `${(stats.ram_used_mb / 1024).toFixed(1)} / ${(stats.ram_total_mb / 1024).toFixed(1)} GB` : d.ramUsage),
+                  battery: stats.battery ?? d.battery,
+                }
+              : d
+          )
+        );
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  }, [devices]);
 
   const updateServerConfig = useCallback((partial: Partial<ServerConfig>) => {
     setServerConfig((prev) => ({ ...prev, ...partial }));
@@ -636,6 +714,8 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
         activeDevice,
         removeDevice,
         connectDeviceManual,
+        pingDevice,
+        syncDeviceState,
         isDiscovering,
         startAutoDiscovery,
         serverConfig,

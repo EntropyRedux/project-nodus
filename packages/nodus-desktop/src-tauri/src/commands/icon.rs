@@ -59,20 +59,20 @@ pub fn extract_exe_icon(exe_path: &str) -> Result<String, String> {
         let hbm_color = icon_info.hbmColor;
         if hbm_color.is_invalid() {
             if !icon_info.hbmMask.is_invalid() {
-                DeleteObject(icon_info.hbmMask).ok();
+                let _ = DeleteObject(icon_info.hbmMask);
             }
-            DestroyIcon(hicon).ok();
+            let _ = DestroyIcon(hicon);
             return Err("No color bitmap in icon".to_string());
         }
 
         // Create a compatible DC
         let hdc = CreateCompatibleDC(None);
         if hdc.is_invalid() {
-            DeleteObject(hbm_color).ok();
+            let _ = DeleteObject(hbm_color);
             if !icon_info.hbmMask.is_invalid() {
-                DeleteObject(icon_info.hbmMask).ok();
+                let _ = DeleteObject(icon_info.hbmMask);
             }
-            DestroyIcon(hicon).ok();
+            let _ = DestroyIcon(hicon);
             return Err("CreateCompatibleDC failed".to_string());
         }
 
@@ -130,12 +130,12 @@ pub fn extract_exe_icon(exe_path: &str) -> Result<String, String> {
 
         // Clean up GDI objects
         SelectObject(hdc, old_bmp);
-        DeleteDC(hdc).ok();
-        DeleteObject(hbm_color).ok();
+        let _ = DeleteDC(hdc);
+        let _ = DeleteObject(hbm_color);
         if !icon_info.hbmMask.is_invalid() {
-            DeleteObject(icon_info.hbmMask).ok();
+            let _ = DeleteObject(icon_info.hbmMask);
         }
-        DestroyIcon(hicon).ok();
+        let _ = DestroyIcon(hicon);
 
         // Convert BGRA pixels to RGBA
         for chunk in pixels.chunks_exact_mut(4) {

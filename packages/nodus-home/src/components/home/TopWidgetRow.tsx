@@ -445,59 +445,65 @@ export const TopWidgetRow: React.FC = () => {
                 )}
               </div>
             ) : (
-              /* When notes or meetings exist: 2 rows of compact pills scrolling horizontally */
-              <div className="w-full grid grid-rows-2 grid-flow-col auto-cols-max gap-1.5 overflow-x-auto py-1 px-0.5 max-h-[62px] scrollbar-thin select-none items-center">
-                {/* 1. Compact Square +New Button spanning 2 rows */}
-                <button
-                  id="btn-add-note-inline"
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    audio.playTap();
-                    openNotesModal(undefined, 'todo');
-                  }}
-                  className={`row-span-2 flex flex-col items-center justify-center w-9 h-full min-h-[48px] shrink-0 ${squareBtnClass} text-xs font-bold transition hover:scale-105 active:scale-95 group/add shadow-sm`}
-                  style={{
-                    backgroundColor: currentAccent.badgeBg,
-                    borderColor: currentAccent.badgeBorder,
-                    color: currentAccent.hex,
-                  }}
-                  title="Add new task, checklist or sticky note"
-                >
-                  <Plus size={13} className="group-hover/add:rotate-90 transition-transform duration-200 stroke-[2.5]" />
-                  <span className="text-[8px] font-mono uppercase mt-0.5 opacity-90">New</span>
-                </button>
+              /* When notes or meetings exist: Fixed action buttons + 2 rows of compact pills scrolling horizontally */
+              <div className="w-full flex items-center gap-1.5 min-w-0">
+                {/* 1. Fixed Action Buttons: +New and Calendar event counter badge (Never scroll off screen) */}
+                <div className="flex items-center gap-1.5 shrink-0 select-none">
+                  {/* Compact Square +New Button */}
+                  <button
+                    id="btn-add-note-inline"
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      audio.playTap();
+                      openNotesModal(undefined, 'todo');
+                    }}
+                    className={`flex flex-col items-center justify-center w-9 h-[52px] shrink-0 ${squareBtnClass} text-xs font-bold transition hover:scale-105 active:scale-95 group/add shadow-sm`}
+                    style={{
+                      backgroundColor: currentAccent.badgeBg,
+                      borderColor: currentAccent.badgeBorder,
+                      color: currentAccent.hex,
+                    }}
+                    title="Add new task, checklist or sticky note"
+                  >
+                    <Plus size={13} className="group-hover/add:rotate-90 transition-transform duration-200 stroke-[2.5]" />
+                    <span className="text-[8px] font-mono uppercase mt-0.5 opacity-90">New</span>
+                  </button>
 
-                {/* 2. Compact Square Calendar / Events Button spanning 2 rows */}
-                <button
-                  id="btn-calendar-events-inline"
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    audio.playTap();
-                    if (!isCalendarPermissionGranted) {
-                      requestCalendarAccess();
-                    } else {
-                      openNotesModal(undefined, 'calendar');
+                  {/* Compact Square Calendar / Events Button */}
+                  <button
+                    id="btn-calendar-events-inline"
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      audio.playTap();
+                      if (!isCalendarPermissionGranted) {
+                        requestCalendarAccess();
+                      } else {
+                        openNotesModal(undefined, 'calendar');
+                      }
+                    }}
+                    className={`flex flex-col items-center justify-center w-9 h-[52px] shrink-0 ${squareBtnClass} text-xs font-bold transition hover:scale-105 active:scale-95 group/cal shadow-sm`}
+                    style={{
+                      backgroundColor: currentAccent.badgeBg,
+                      borderColor: currentAccent.badgeBorder,
+                      color: currentAccent.hex,
+                    }}
+                    title={
+                      !isCalendarPermissionGranted
+                        ? 'Connect Google Calendar'
+                        : `Google Calendar: ${calendarEvents.length} events (Open Schedule)`
                     }
-                  }}
-                  className={`row-span-2 flex flex-col items-center justify-center w-9 h-full min-h-[48px] shrink-0 ${squareBtnClass} text-xs font-bold transition hover:scale-105 active:scale-95 group/cal shadow-sm`}
-                  style={{
-                    backgroundColor: currentAccent.badgeBg,
-                    borderColor: currentAccent.badgeBorder,
-                    color: currentAccent.hex,
-                  }}
-                  title={
-                    !isCalendarPermissionGranted
-                      ? 'Connect Google Calendar'
-                      : `Google Calendar: ${calendarEvents.length} events (Open Schedule)`
-                  }
-                >
-                  <Calendar size={12} className="group-hover/cal:scale-110 transition-transform duration-200" />
-                  <span className="text-[8px] font-mono uppercase mt-0.5 font-bold">
-                    {!isCalendarPermissionGranted ? '+Sync' : calendarEvents.length}
-                  </span>
-                </button>
+                  >
+                    <Calendar size={12} className="group-hover/cal:scale-110 transition-transform duration-200" />
+                    <span className="text-[8px] font-mono uppercase mt-0.5 font-bold">
+                      {!isCalendarPermissionGranted ? '+Sync' : calendarEvents.length}
+                    </span>
+                  </button>
+                </div>
+
+                {/* 2. Scrollable Pills Container */}
+                <div className="flex-1 min-w-0 grid grid-rows-2 grid-flow-col auto-cols-max gap-1.5 overflow-x-auto py-1 px-0.5 max-h-[62px] scrollbar-thin select-none items-center">
 
                 {/* 3. All Today's Meetings & Scheduled Events */}
                 {displayEvents.map((evt) => {
@@ -626,6 +632,7 @@ export const TopWidgetRow: React.FC = () => {
                     </div>
                   );
                 })}
+                </div>
               </div>
             )}
           </div>

@@ -28,6 +28,8 @@ export const FleetPanel: React.FC = () => {
     activeDevice,
     removeDevice,
     connectDeviceManual,
+    pingDevice,
+    syncDeviceState,
     isDiscovering,
     startAutoDiscovery,
     serverConfig,
@@ -42,6 +44,8 @@ export const FleetPanel: React.FC = () => {
   const [manualType, setManualType] = useState<DeviceType>('tablet');
   const [manualSecret, setManualSecret] = useState('NODUS-FLEET-SECURE');
   const [pairSuccess, setPairSuccess] = useState(false);
+  const [pingStatus, setPingStatus] = useState<{ id: string; msg: string; ok: boolean } | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const getDeviceIcon = (type: DeviceType) => {
     switch (type) {
@@ -220,21 +224,55 @@ export const FleetPanel: React.FC = () => {
                 </div>
               </div>
 
+              {/* Live Ping/Sync Status Badge */}
+              {pingStatus && pingStatus.id === activeDevice.id && (
+                <div
+                  className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center justify-between border ${
+                    pingStatus.ok
+                      ? 'bg-[#34C759]/15 text-[#34C759] border-[#34C759]/30'
+                      : 'bg-[#FF3B30]/15 text-[#FF3B30] border-[#FF3B30]/30'
+                  }`}
+                >
+                  <span>{pingStatus.msg}</span>
+                  <span className="text-[10px]">{pingStatus.ok ? 'ONLINE' : 'UNREACHABLE'}</span>
+                </div>
+              )}
+
               {/* Node Remote Actions */}
               <div className="flex items-center gap-2 pt-1">
                 <button
-                  onClick={() => alert(`Ping request sent to ${activeDevice.name}`)}
+                  onClick={async () => {
+                    setPingStatus({ id: activeDevice.id, msg: 'Pinging node...', ok: true });
+                    const res = await pingDevice(activeDevice.id);
+                    setPingStatus({
+                      id: activeDevice.id,
+                      msg: res.ok ? `Ping Latency: ${res.latencyMs}ms` : 'Node unreachable',
+                      ok: res.ok,
+                    });
+                    setTimeout(() => setPingStatus(null), 3000);
+                  }}
                   className="flex-1 py-2 rounded-xl bg-[#181822] hover:bg-[#222230] border border-white/10 text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-98"
                 >
                   <Zap size={13} className="text-[#34C759]" />
                   <span>Ping Node</span>
                 </button>
                 <button
-                  onClick={() => alert(`Synchronized state with ${activeDevice.name}`)}
-                  className="flex-1 py-2 rounded-xl bg-[#181822] hover:bg-[#222230] border border-white/10 text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-98"
+                  onClick={async () => {
+                    setIsSyncing(true);
+                    const ok = await syncDeviceState(activeDevice.id);
+                    setIsSyncing(false);
+                    setPingStatus({
+                      id: activeDevice.id,
+                      msg: ok ? 'State synced from node' : 'Failed to sync state',
+                      ok,
+                    });
+                    setTimeout(() => setPingStatus(null), 3000);
+                  }}
+                  disabled={isSyncing}
+                  className="flex-1 py-2 rounded-xl bg-[#181822] hover:bg-[#222230] border border-white/10 text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-98 disabled:opacity-50"
                 >
-                  <RefreshCw size={13} className="text-[#007AFF]" />
-                  <span>Sync State</span>
+                  <RefreshCw size={13} className={`text-[#007AFF] ${isSyncing ? 'animate-spin' : ''}`} />
+                  <span>{isSyncing ? 'Syncing...' : 'Sync State'}</span>
                 </button>
                 <button
                   onClick={lockWorkstation}
