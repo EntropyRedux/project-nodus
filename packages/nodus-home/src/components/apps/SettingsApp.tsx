@@ -605,7 +605,7 @@ export const SettingsApp: React.FC = () => {
           const activeWidgetCount = [isClockActive, isDeviceNameActive, isBatteryActive, isNotesActive].filter(Boolean).length;
 
           return (
-            <div className={`p-4 sm:p-5 ${currentTheme.cardRadius} ${currentTheme.classes.itemCard} shadow-sm space-y-3`}>
+            <div className={`relative z-20 p-4 sm:p-5 ${currentTheme.cardRadius} ${currentTheme.classes.itemCard} shadow-sm space-y-3`}>
               <div className={`flex items-center justify-between pb-2 border-b ${currentTheme.isLight ? 'border-[#E2E8F0]' : 'border-white/5'}`}>
                 <div className={`flex items-center gap-2 text-xs font-bold ${currentTheme.classes.textPrimary} tracking-wide uppercase`}>
                   <Clock size={15} style={{ color: currentAccent.hex }} />
@@ -796,7 +796,7 @@ export const SettingsApp: React.FC = () => {
                 </div>
 
                 {/* 5. Dual Clock / Secondary Timezone Selection */}
-                <div className={`col-span-1 sm:col-span-2 p-3 ${currentTheme.cardRadius} ${currentTheme.isLight ? 'bg-[#F8FAFD] border border-[#E2E8F0]' : 'bg-black/20 border border-white/5'} flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5`}>
+                <div className={`relative z-30 col-span-1 sm:col-span-2 p-3 ${currentTheme.cardRadius} ${currentTheme.isLight ? 'bg-[#F8FAFD] border border-[#E2E8F0]' : 'bg-black/20 border border-white/5'} flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5`}>
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div
                       className={`w-7 h-7 ${currentTheme.buttonRadius} flex items-center justify-center shrink-0 border`}
@@ -847,7 +847,7 @@ export const SettingsApp: React.FC = () => {
         })()}
 
         {/* SECTION 7: Nodus Ecosystem Modules */}
-        <div className={`p-4 sm:p-5 ${currentTheme.cardRadius} ${currentTheme.classes.itemCard} shadow-sm space-y-3`}>
+        <div className={`relative z-10 p-4 sm:p-5 ${currentTheme.cardRadius} ${currentTheme.classes.itemCard} shadow-sm space-y-3`}>
           <div className={`flex items-center gap-2 text-xs font-bold ${currentTheme.classes.textPrimary} tracking-wide uppercase pb-2 border-b ${currentTheme.isLight ? 'border-[#E2E8F0]' : 'border-white/5'}`}>
             <Radio size={15} style={{ color: currentAccent.hex }} />
             <span>Nodus Ecosystem Modules</span>

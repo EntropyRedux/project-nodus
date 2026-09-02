@@ -66,7 +66,7 @@ export const ThemedSelect: React.FC<ThemedSelectProps> = ({
   };
 
   return (
-    <div ref={containerRef} className={`relative inline-block ${className}`}>
+    <div ref={containerRef} className={`relative inline-block ${isOpen ? 'z-[60]' : 'z-auto'} ${className}`}>
       {/* Trigger Button */}
       <button
         type="button"
@@ -97,11 +97,12 @@ export const ThemedSelect: React.FC<ThemedSelectProps> = ({
       {isOpen && (
         <div
           style={{
-            backgroundColor: getSurfaceRgba(settings?.theme || 'aurora-dark', 98, 'popup'),
+            backgroundColor: currentTheme.isLight ? '#FFFFFF' : getSurfaceRgba(settings?.theme || 'aurora-dark', 98, 'popup'),
+            borderColor: currentTheme.isLight ? '#CBD5E1' : undefined,
           }}
-          className={`absolute z-[100] mt-1 min-w-[180px] max-w-[280px] max-h-64 overflow-y-auto p-1.5 shadow-2xl ${
+          className={`absolute z-[9999] mt-1.5 w-full min-w-[220px] max-w-[340px] max-h-64 overflow-y-auto p-1.5 shadow-2xl ${
             currentTheme.cardRadius
-          } ${currentTheme.classes.drawerFlyout} backdrop-blur-3xl animate-in fade-in zoom-in-95 duration-150 scrollbar-thin ${
+          } border ${currentTheme.isLight ? 'border-[#CBD5E1]' : 'border-white/10'} backdrop-blur-3xl animate-in fade-in zoom-in-95 duration-150 scrollbar-thin ${
             align === 'right' ? 'right-0' : 'left-0'
           } ${menuClassName}`}
         >
@@ -113,13 +114,13 @@ export const ThemedSelect: React.FC<ThemedSelectProps> = ({
                   key={opt.value}
                   type="button"
                   onClick={() => handleSelect(opt.value)}
-                  className={`w-full flex items-center justify-between gap-2.5 px-2.5 py-2 ${currentTheme.buttonRadius} text-left text-xs transition-colors ${
+                  className={`w-full flex items-center justify-between gap-2.5 px-3 py-2 ${currentTheme.buttonRadius} text-left text-xs transition-colors ${
                     isSelected
                       ? currentTheme.isLight
-                        ? 'bg-white text-[#0F172A] font-bold shadow-xs border border-[#CBD5E1]'
-                        : 'bg-white/10 text-white font-bold'
+                        ? 'bg-[#E2E8F0] text-[#0F172A] font-bold shadow-xs border border-[#CBD5E1]'
+                        : 'bg-white/15 text-white font-bold'
                       : currentTheme.isLight
-                      ? 'hover:bg-[#F1F5F9] text-[#334155]'
+                      ? 'hover:bg-[#F1F5F9] text-[#0F172A]'
                       : 'hover:bg-white/5 text-[#94A3B8] hover:text-white'
                   }`}
                 >
@@ -130,9 +131,11 @@ export const ThemedSelect: React.FC<ThemedSelectProps> = ({
                       </span>
                     )}
                     <div className="min-w-0 truncate">
-                      <span className="block truncate">{opt.label}</span>
+                      <span className={`block truncate ${isSelected ? 'font-bold' : 'font-medium'} ${currentTheme.isLight ? 'text-[#0F172A]' : 'text-white'}`}>
+                        {opt.label}
+                      </span>
                       {opt.sublabel && (
-                        <span className={`block text-[9px] truncate ${currentTheme.classes.textMuted}`}>
+                        <span className={`block text-[9.5px] truncate font-medium ${currentTheme.isLight ? 'text-[#64748B]' : currentTheme.classes.textMuted}`}>
                           {opt.sublabel}
                         </span>
                       )}
@@ -140,7 +143,7 @@ export const ThemedSelect: React.FC<ThemedSelectProps> = ({
                   </div>
 
                   {isSelected && (
-                    <Check size={13} strokeWidth={2.5} style={{ color: currentAccent.hex }} className="shrink-0" />
+                    <Check size={14} strokeWidth={2.5} style={{ color: currentAccent.hex }} className="shrink-0" />
                   )}
                 </button>
               );
