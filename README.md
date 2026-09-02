@@ -4,24 +4,23 @@
 >
 > **Version:** `1.3.0`  
 > **GitHub Repository:** [https://github.com/EntropyRedux/project-nodus](https://github.com/EntropyRedux/project-nodus)  
-> **Latest APK Download:** [📥 Download Nodus Home v1.3.0 APK (Direct GitHub Release)](https://github.com/EntropyRedux/project-nodus/releases/latest/download/nodus-home-v1.3.0-debug.apk)
+> **Latest Release:** [📥 Download Nodus Home v1.3.0 APK](https://github.com/EntropyRedux/project-nodus/releases/latest/download/nodus-home-v1.3.0-debug.apk)
 
 ---
 
-## 📥 Fast Downloads & Automated Builds
+## 📚 Documentation & Quick Links
 
 [![GitHub Release](https://img.shields.io/github/v/release/EntropyRedux/project-nodus?color=007AFF&label=Latest%20Release)](https://github.com/EntropyRedux/project-nodus/releases/latest)
 [![CI & APK Build](https://github.com/EntropyRedux/project-nodus/actions/workflows/build-apk.yml/badge.svg)](https://github.com/EntropyRedux/project-nodus/actions/workflows/build-apk.yml)
 
-| Release | Version | Release Package | Quick Link |
-| :--- | :---: | :--- | :--- |
-| **Nodus Home** | `v1.3.0` | Android Debug APK | [📥 Download v1.3.0 APK](https://github.com/EntropyRedux/project-nodus/releases/download/v1.3.0/nodus-home-v1.3.0-debug.apk) |
-| **GitHub Releases Page** | All Builds | Source & Assets | [🔗 View All Releases](https://github.com/EntropyRedux/project-nodus/releases) |
+- **📖 [User & Operations Guide](USER_GUIDE.md)**: Full instructions for tablet setup, gesture controls, window management, calendar sync & settings.
+- **📝 [Version Changelog](CHANGELOG.md)**: Detailed historical release notes across all ecosystem versions (`v1.0.0` through `v1.3.0`).
+- **📥 [GitHub Releases](https://github.com/EntropyRedux/project-nodus/releases)**: Fast direct downloads for all compiled `.apk` release assets.
 
 ---
 
 ## 🌟 Overview
-**Project Nodus** is a universal cross-device desktop and launcher ecosystem engineered for **all Android tablets** (broadly supporting Android 10–14+, foldable displays, and custom OEM multitasking environments like Xiaomi HyperOS, Samsung One UI, and Lenovo ZUI; primary testing performed on a POCO Pad 12.1" 120Hz display), paired with Windows companion bridges and multi-device workstation control.
+**Project Nodus** is a universal cross-device desktop and launcher ecosystem engineered for **all Android tablets** (supporting Android 10–14+, foldables, and OEM multitasking environments like Xiaomi HyperOS, Samsung One UI, and Lenovo ZUI), paired with Windows companion bridges and multi-device workstation control.
 
 All Nodus subsystem modules live inside this unified workspace repository under `packages/`.
 
@@ -40,53 +39,22 @@ All Nodus subsystem modules live inside this unified workspace repository under 
 
 ---
 
-## 🚀 Key Capabilities & Fixes in v1.3.0
-
-1. **Universal Tablet Windowing & Auto-Stash**:
-   - Designed for any tablet form factor. On OEM environments with a 2-window floating cap (e.g., HyperOS), opening a 3rd floating app automatically stashes the oldest active app into the Taskbar stack with a toast notice.
-2. **Continuous Scroll App Grid**:
-   - Standardized continuous scrolling grid that repacks app icons sequentially on Page 1 before spilling over.
-3. **Google Calendar Sync & Privacy Consent**:
-   - Explicit account & privacy warning notice before granting calendar access.
-   - Synchronizes upcoming meetings, deadlines, and video links (Google Meet, Zoom, Teams) with a 1-tap **Unsync** button in the Calendar header for instant clearing.
-4. **Lifecycle-Aware Poller Throttling**:
-   - Custom `useVisibilityPoller` hook auto-pauses high-frequency background timers (Clipboard, Telemetry, Notifications) when the launcher is backgrounded to conserve battery and CPU.
-5. **0%–100% System Surface Opacity Control**:
-   - System surface opacity slider range expanded from 0% to 100% across all themes (including Material Atmosphere).
-6. **Unified Ecosystem Module Labels**:
-   - Clear, consistent status badges (`"Requires Fleet APK"` / `"Requires Touch APK"`) when companion apps are missing.
-7. **Production CI & Type Safety Gate**:
-   - Automated GitHub Actions workflow with strict `tsc --noEmit` lint and `vitest` unit test gates.
-
----
-
 ## 📁 Repository & Package Structure
 
 ```
 project-nodus/
-├── package.json                        # Root NPM Workspace (v1.1.0)
-├── README.md
+├── README.md                           # Main Entry Point & Portal
+├── USER_GUIDE.md                       # Comprehensive User & Operations Manual
+├── CHANGELOG.md                        # Historical Release Notes & Changelogs
+├── LICENSE                             # GNU AGPLv3 License
+├── package.json                        # Root NPM Workspace
 │
 └── packages/
     ├── nodus-common/                   # Shared TypeScript types, IPC contracts & Kotlin mirrors
-    │   ├── src/ipc/contract.ts         # Single Source of Truth for ContentProviders & Broadcasts
-    │   └── src/utils/iconRegistry.ts   # Curated tree-shakeable Lucide icon registry
-    │
     ├── nodus-desktop/                  # Windows Companion HUD & Fleet Bridge (Tauri v2 + Rust)
-    │   ├── src/                        # React + TypeScript Companion HUD & Process Monitor
-    │   └── src-tauri/                  # Win32 media control, hot corners, HTTP server & UDP beacon
-    │
     ├── nodus-home/                     # Primary Launcher & Desktop Shell (com.nodus.home)
-    │   ├── src/                        # React + TypeScript + TailwindCSS
-    │   └── android-shell/              # Kotlin Android Shell (HomeActivity.kt)
-    │
     ├── nodus-fleet/                    # Multi-Device Mesh Extension (com.nodus.fleet)
-    │   ├── src/                        # Fleet Controller Web Dashboard
-    │   └── android-shell/              # UDP Discovery, Telemetry Poller & FleetDataProvider
-    │
     ├── nodus-assistive/                # System-Wide Assistive Touch Overlay (com.nodus.assistive)
-    │   └── android-shell/              # Floating overlay service & navigation pill
-    │
     └── nodus-legacy/                   # Legacy Monolith Launcher (com.nodus.launcher archive)
 ```
 
@@ -113,47 +81,17 @@ npm run test:desktop  # Cargo test for Tauri Rust backend
 From the workspace root (`project-nodus/`):
 
 ```bash
-# Run Nodus Desktop (Windows companion) in dev mode
-npm run dev:desktop
-
-# Build Nodus Desktop companion (Tauri v2)
-npm run build:desktop
-
 # Run Nodus Home frontend dev server
 npm run dev:home
 
 # Build Nodus Home frontend
 npm run build:home
 
-# Build Nodus Fleet frontend
-npm run build:fleet
-
-# Build all workspace packages
-npm run build:all
-```
-
----
-
-## 📱 Android Shell APK Compilation & Deployment
-
-```bash
-# Compile and Deploy Nodus Home to connected tablet via ADB:
+# Compile and Deploy Nodus Home APK to connected tablet:
 cd packages/nodus-home/android-shell
 ./gradlew assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
-
-# Compile and Deploy Nodus Fleet:
-cd packages/nodus-fleet/android-shell
-./gradlew assembleDebug
-adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
-
----
-
-## 🔒 Security & Zero-Trust Pairing
-- **Signature Permission (`com.nodus.permission.FLEET_ACCESS`)**: Restricts ContentProvider (`content://com.nodus.fleet.provider/`) and broadcast intents exclusively to APKs signed by the Nodus ecosystem key.
-- **Tauri Bearer Token Handshake**: REST API routes on Windows workstation require pairing tokens (`X-Nodus-Auth-Token` / Bearer authorization).
-- **Sanitized CORS**: Enforces trusted origin checks for local desktop webviews and Android asset platforms.
 
 ---
 
