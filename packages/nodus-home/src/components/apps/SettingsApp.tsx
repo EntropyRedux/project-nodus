@@ -132,6 +132,38 @@ export const SettingsApp: React.FC = () => {
       {/* Scrollable Settings Form */}
       <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6 space-y-4 scrollbar-thin">
         
+        {/* SECTION 0: Android System Launcher Integration */}
+        <div className={`p-4 sm:p-5 ${currentTheme.cardRadius} ${currentTheme.classes.itemCard} shadow-sm space-y-3`}>
+          <div className={`flex items-center justify-between pb-2 border-b ${currentTheme.isLight ? 'border-[#E2E8F0]' : 'border-white/5'}`}>
+            <div className={`flex items-center gap-2 text-xs font-bold ${currentTheme.classes.textPrimary} tracking-wide uppercase`}>
+              <LayoutGrid size={15} style={{ color: currentAccent.hex }} />
+              <span>Android Launcher System Status</span>
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="text-xs font-semibold">Default Home App</div>
+              <div className={`text-[11px] ${currentTheme.classes.textSecondary}`}>
+                Set Nodus Home as your default Android Launcher so press of Home key returns to Nodus Home.
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== 'undefined' && (window as any).NodusNativeBridge?.openDefaultLauncherSettings) {
+                  (window as any).NodusNativeBridge.openDefaultLauncherSettings();
+                } else {
+                  showToast('Launcher picker available on Android device shell');
+                }
+              }}
+              className="px-3.5 py-2 rounded-xl text-xs font-bold text-white transition active:scale-95 shrink-0"
+              style={{ backgroundColor: currentAccent.hex }}
+            >
+              Set Default Home App
+            </button>
+          </div>
+        </div>
+
         {/* SECTION 1: Appearance (Accent Colors Row + Compact Theme Cards) */}
         <div className={`p-4 sm:p-5 ${currentTheme.cardRadius} ${currentTheme.classes.itemCard} shadow-sm space-y-3.5`}>
           <div className={`flex items-center justify-between pb-2 border-b ${currentTheme.isLight ? 'border-[#E2E8F0]' : 'border-white/5'}`}>

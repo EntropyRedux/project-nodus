@@ -437,6 +437,49 @@ class HomeActivity : AppCompatActivity() {
         }
 
         @JavascriptInterface
+        fun isDefaultLauncher(): Boolean {
+            return try {
+                val intent = Intent(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_HOME)
+                }
+                val resolveInfo = context.packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
+                resolveInfo?.activityInfo?.packageName == context.packageName
+            } catch (e: Exception) {
+                false
+            }
+        }
+
+        @JavascriptInterface
+        fun openDefaultLauncherSettings(): Boolean {
+            return try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    val intent = Intent(Settings.ACTION_HOME_SETTINGS).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(intent)
+                    true
+                } else {
+                    val intent = Intent(Settings.ACTION_SETTINGS).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(intent)
+                    true
+                }
+            } catch (e: Exception) {
+                try {
+                    val intent = Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(intent)
+                    true
+                } catch (ex: Exception) {
+                    Log.e(TAG, "Error opening home settings", ex)
+                    false
+                }
+            }
+        }
+
+        @JavascriptInterface
         fun isFleetInstalled(): Boolean = NodusModuleDetector.isFleetInstalled(context)
 
         @JavascriptInterface
