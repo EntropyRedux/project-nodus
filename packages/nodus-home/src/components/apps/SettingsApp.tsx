@@ -161,12 +161,13 @@ export const SettingsApp: React.FC = () => {
                   showToast('Launcher picker available on Android device shell');
                 }
               }}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition active:scale-95 shrink-0 flex items-center gap-1.5 ${
-                isDefaultHome
-                  ? 'bg-[#10B981] text-[#090B10] shadow-md shadow-[#10B981]/20'
-                  : 'text-white'
-              }`}
-              style={{ backgroundColor: !isDefaultHome ? currentAccent.hex : undefined }}
+              className="px-3.5 py-2 rounded-xl text-xs font-bold transition active:scale-95 shrink-0 flex items-center gap-1.5 border"
+              style={{
+                backgroundColor: isDefaultHome ? currentAccent.badgeBg : currentAccent.hex,
+                color: isDefaultHome ? currentAccent.hex : '#FFFFFF',
+                borderColor: isDefaultHome ? currentAccent.badgeBorder : 'transparent',
+                boxShadow: `0 4px 12px ${currentAccent.glowRgba}`,
+              }}
             >
               {isDefaultHome ? (
                 <>
