@@ -137,11 +137,11 @@ export const SettingsApp: React.FC = () => {
       <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6 space-y-4 scrollbar-thin">
         
         {/* SECTION 0: Android System Launcher Integration */}
-        <div className={`p-4 sm:p-5 ${currentTheme.cardRadius} ${currentTheme.classes.itemCard} shadow-sm space-y-3.5`}>
+        <div className={`p-4 sm:p-5 ${currentTheme.cardRadius} ${currentTheme.classes.itemCard} shadow-sm space-y-3`}>
           <div className={`flex items-center justify-between pb-2 border-b ${currentTheme.isLight ? 'border-[#E2E8F0]' : 'border-white/5'}`}>
             <div className={`flex items-center gap-2 text-xs font-bold ${currentTheme.classes.textPrimary} tracking-wide uppercase`}>
               <LayoutGrid size={15} style={{ color: currentAccent.hex }} />
-              <span>Android Launcher System Status & Gesture Workaround</span>
+              <span>Android System Launcher</span>
             </div>
           </div>
 
@@ -149,7 +149,7 @@ export const SettingsApp: React.FC = () => {
             <div>
               <div className="text-xs font-semibold">Default Home App</div>
               <div className={`text-[11px] ${currentTheme.classes.textSecondary}`}>
-                Set Nodus Home as default launcher. <i>(Note: Xiaomi HyperOS disables stock full-screen swipe gestures when using 3rd-party launchers)</i>.
+                Set Nodus Home as your default Android Launcher so pressing the Home key returns to Nodus Home.
               </div>
             </div>
             <button
@@ -177,23 +177,6 @@ export const SettingsApp: React.FC = () => {
                 <span>Set Default Home App</span>
               )}
             </button>
-          </div>
-
-          <div className={`p-3 rounded-xl border ${currentTheme.isLight ? 'bg-amber-50 border-amber-200 text-amber-900' : 'bg-amber-500/10 border-amber-500/20 text-amber-200'} space-y-2 text-xs`}>
-            <div className="font-bold flex items-center gap-1.5">
-              <span>💡 Xiaomi HyperOS / MIUI Recommended Workaround Options</span>
-            </div>
-            <ul className="list-disc list-inside space-y-1 text-[11px] opacity-90 leading-relaxed">
-              <li>
-                <strong>Option A (3-Button Navigation)</strong>: Switch to 3-Button Navigation in System Settings to keep hardware/software Home, Back, and Recents buttons active without relying on Xiaomi gesture services.
-              </li>
-              <li>
-                <strong>Option B (Keep Stock Launcher + Nodus Assistant / Floating HUD)</strong>: Keep System Launcher as default for gestures, and use Nodus Home as a floating desktop app or launch via Nodus Assistive Touch overlay.
-              </li>
-              <li>
-                <strong>Option C (Nodus Accessibility Navigation Service)</strong>: Enable Nodus Accessibility Service in System Settings to restore hardware Recents/Home/Back actions across all floating windows.
-              </li>
-            </ul>
           </div>
         </div>
 
