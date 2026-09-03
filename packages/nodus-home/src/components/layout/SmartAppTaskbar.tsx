@@ -717,8 +717,8 @@ export const SmartAppTaskbar: React.FC = () => {
           <div className={`h-4 w-[1px] ${currentTheme.isLight ? 'bg-[#CBD5E1]' : 'bg-white/[0.06]'} shrink-0 mx-0.5`} />
 
           {/* Running & Recent App Icons Strip */}
-          <div className="flex items-center gap-2 overflow-x-auto scrollbar-none py-1 flex-1 min-w-0">
-            <div className="flex items-center gap-2 shrink-0 py-1">
+          <div className="flex items-center gap-2 overflow-x-auto scrollbar-none py-1.5 px-1 flex-1 min-w-0">
+            <div className="flex items-center gap-2 shrink-0 py-0.5 px-0.5">
               {openAppItems.map((app) => {
                 const isFloatingActive = (floatingWindows || []).some((w) => w.appId === app.id && !w.minimized);
                 const isForeground = (foregroundAppId === app.id && !(minimizedAppIds || []).includes(app.id));

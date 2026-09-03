@@ -43,6 +43,7 @@ export const SettingsApp: React.FC = () => {
   const currentAccent = getAccentColor(settings.accentColor);
   const { isFleetInstalled, isTouchInstalled } = useFleetDetection();
   const [deviceIconPacks, setDeviceIconPacks] = useState<Array<{ packageName: string; label: string }>>([]);
+  const [isDefaultHome, setIsDefaultHome] = useState<boolean>(false);
 
   useEffect(() => {
     try {
@@ -52,6 +53,9 @@ export const SettingsApp: React.FC = () => {
         if (Array.isArray(parsed)) {
           setDeviceIconPacks(parsed);
         }
+      }
+      if (typeof window !== 'undefined' && (window as any).NodusNativeBridge?.isDefaultLauncher) {
+        setIsDefaultHome(Boolean((window as any).NodusNativeBridge.isDefaultLauncher()));
       }
     } catch (_) {}
   }, []);
@@ -157,10 +161,21 @@ export const SettingsApp: React.FC = () => {
                   showToast('Launcher picker available on Android device shell');
                 }
               }}
-              className="px-3.5 py-2 rounded-xl text-xs font-bold text-white transition active:scale-95 shrink-0"
-              style={{ backgroundColor: currentAccent.hex }}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition active:scale-95 shrink-0 flex items-center gap-1.5 ${
+                isDefaultHome
+                  ? 'bg-[#10B981] text-[#090B10] shadow-md shadow-[#10B981]/20'
+                  : 'text-white'
+              }`}
+              style={{ backgroundColor: !isDefaultHome ? currentAccent.hex : undefined }}
             >
-              Set Default Home App
+              {isDefaultHome ? (
+                <>
+                  <Check size={14} strokeWidth={3} />
+                  <span>Current Default Launcher</span>
+                </>
+              ) : (
+                <span>Set Default Home App</span>
+              )}
             </button>
           </div>
 
