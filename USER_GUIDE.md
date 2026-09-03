@@ -72,6 +72,14 @@ Open **Settings App** from your desktop or app drawer to customize:
 
 ## 7. Troubleshooting & FAQs
 
+- **Q: Why do full-screen swipe gestures stop working on Xiaomi HyperOS / MIUI when setting Nodus Home as default launcher?**  
+  This is an intentional vendor restriction by Xiaomi in HyperOS/MIUI: Xiaomi ties its full-screen gesture navigation service exclusively to System Launcher (`com.miui.home`). When any 3rd-party launcher is selected as default, HyperOS automatically disables system swipe gestures.
+  
+  **Workarounds**:
+  - **Option 1 (3-Button Navigation)**: In System Settings > Home Screen > System Navigation, select **Buttons**. 3-button navigation (Home, Back, Recents) works flawlessly with 3rd-party launchers.
+  - **Option 2 (Nodus Assistive Touch / Floating Overlay)**: Keep Xiaomi System Launcher as default to preserve swipe gestures, and use Nodus Home as a floating desktop app or trigger it via the Nodus Assistive Touch ball.
+  - **Option 3 (Accessibility Gesture Service)**: Enable `Nodus Accessibility Service` in System Settings to trigger Home/Back/Recents actions via software hot corners or floating bars.
+
 - **Q: How do I reset settings to default?**  
   Open **Settings** > scroll to the bottom > tap **Reset to Default**. This restores default theme, surface opacity, and clears secondary timezone settings without deleting your installed apps.
 - **Q: How do I report a bug or request a feature?**  
