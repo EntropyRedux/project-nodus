@@ -1,4 +1,4 @@
-// Nodus Desktop — Core Type Definitions
+// Nodus Desktop -- Core Type Definitions
 
 export type DeviceType = 'tablet' | 'desktop' | 'phone' | 'laptop';
 export type DeviceOS = 'android' | 'windows' | 'linux' | 'macos';
@@ -10,22 +10,29 @@ export interface DeviceInfo {
   os: string;
   status: 'online' | 'connected' | 'idle' | 'offline' | 'rebooting';
   ipAddress: string;
-  resolution: string;
+  resolution?: string;
   battery?: number;
+  batteryPercent?: number;
   cpuLoad?: number;
+  cpuUsagePercent?: number;
   ramUsage?: string;
+  ramTotalMb?: number;
   storage?: string;
   isCustom?: boolean;
+  isLocal?: boolean;
+  latencyMs?: number;
 }
 
 export interface DeviceProcess {
   pid: number;
+  parentPid?: number;
+  parentName?: string;
   name: string;
   user?: string;
   cpu?: number;
   memoryMb?: number;
   status?: 'running' | 'sleeping' | 'stopped' | 'zombie';
-  category?: 'user' | 'daemon' | 'system' | 'service';
+  category?: 'user' | 'daemon' | 'system' | 'service' | 'browser' | 'dev' | 'media' | 'productivity';
   description?: string;
 }
 
@@ -39,7 +46,7 @@ export interface ClipboardItem {
   type: 'text' | 'link' | 'code' | 'snippet' | 'image';
   timestamp: string;
   pinned?: boolean;
-  imageData?: string; // base64 data URL e.g. "data:image/png;base64,..."
+  imageData?: string;
 }
 
 export interface RemoteExecutable {
@@ -77,6 +84,7 @@ export interface ServerConfig {
   port: number;
   status: 'running' | 'idle' | 'scanning';
   pairingSecret: string;
+  auth_token?: string;
   autoDiscover: boolean;
   autoStartOnBoot: boolean;
   broadcastMdns: boolean;
@@ -115,4 +123,14 @@ export interface HotCornerConfig {
   corners: Record<'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight', string>;
 }
 
-export type ActiveTab = 'fleet' | 'remotedeck' | 'config' | 'clipboard' | 'shortcuts' | 'hotcorners' | 'processes';
+export type ActiveTab =
+  | 'fleet'
+  | 'topology'
+  | 'control'
+  | 'terminal'
+  | 'clipboard'
+  | 'shortcuts'
+  | 'remotedeck'
+  | 'processes'
+  | 'config'
+  | 'hotcorners';

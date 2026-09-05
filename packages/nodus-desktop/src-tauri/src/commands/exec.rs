@@ -2,7 +2,7 @@
 // Executes native Windows binaries, powershell scripts, UWP AppIDs, or URLs with permission checks.
 
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -13,9 +13,168 @@ pub struct ExecRequest {
     pub run_as_admin: Option<bool>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TerminalExecResult {
+    pub stdout: String,
+    pub stderr: String,
+    pub exit_code: i32,
+    pub success: bool,
+    pub cwd: Option<String>,
+}
+
 #[tauri::command]
 pub fn execute_local_command(req: ExecRequest) -> Result<bool, String> {
     execute_shortcut(&req.command_or_path, req.args.as_deref(), req.working_dir.as_deref(), req.run_as_admin.unwrap_or(false))
+}
+
+#[tauri::command]
+pub fn get_default_working_dir() -> String {
+    if let Ok(profile) = std::env::var("USERPROFILE") {
+        if Path::new(&profile).is_dir() {
+            return profile;
+        }
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        if Path::new(&home).is_dir() {
+            return home;
+        }
+    }
+    std::env::current_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|_| "C:\\".to_string())
+}
+
+#[tauri::command]
+pub fn run_terminal_command(command: String, cwd: Option<String>) -> Result<TerminalExecResult, String> {
+    let trimmed = command.trim();
+    let default_dir = get_default_working_dir();
+
+    if trimmed.is_empty() {
+        let current_dir = match &cwd {
+            Some(d) if Path::new(d).is_dir() => d.clone(),
+            _ => default_dir,
+        };
+        return Ok(TerminalExecResult {
+            stdout: String::new(),
+            stderr: String::new(),
+            exit_code: 0,
+            success: true,
+            cwd: Some(current_dir),
+        });
+    }
+
+    #[cfg(windows)]
+    {
+        let valid_cwd = match &cwd {
+            Some(d) if Path::new(d).is_dir() => d.clone(),
+            _ => default_dir,
+        };
+
+        // Form PowerShell execution script that executes command and outputs resulting working directory
+        let mut script = format!("Set-Location -LiteralPath '{}'; ", valid_cwd.replace('\'', "''"));
+        script.push_str(&format!("{}; $__nodus_cwd = (Get-Location).Path; [Console]::Out.Write([Environment]::NewLine + \"__NODUS_CWD__:\" + $__nodus_cwd)", trimmed));
+
+        let mut cmd = Command::new("powershell");
+        cmd.args(["-NoProfile", "-NonInteractive", "-Command", &script]);
+        if Path::new(&valid_cwd).is_dir() {
+            cmd.current_dir(&valid_cwd);
+        }
+
+        let output = cmd.output().map_err(|e| format!("Failed to execute terminal command: {}", e))?;
+        let raw_stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        let exit_code = output.status.code().unwrap_or(-1);
+
+        let (stdout, resulting_cwd) = if let Some(idx) = raw_stdout.rfind("__NODUS_CWD__:") {
+            let out = raw_stdout[..idx].trim_end().to_string();
+            let new_dir = raw_stdout[idx + "__NODUS_CWD__:".len()..].trim().to_string();
+            (out, if !new_dir.is_empty() && Path::new(&new_dir).is_dir() { Some(new_dir) } else { Some(valid_cwd) })
+        } else {
+            (raw_stdout.trim_end().to_string(), Some(valid_cwd))
+        };
+
+        Ok(TerminalExecResult {
+            stdout,
+            stderr: stderr.trim_end().to_string(),
+            exit_code,
+            success: output.status.success() && stderr.trim().is_empty(),
+            cwd: resulting_cwd,
+        })
+    }
+    #[cfg(not(windows))]
+    {
+        let valid_cwd = match &cwd {
+            Some(d) if Path::new(d).is_dir() => d.clone(),
+            _ => default_dir,
+        };
+
+        let script = format!("cd '{}'; {}; echo \"__NODUS_CWD__:$(pwd)\"", valid_cwd.replace('\'', "''"), trimmed);
+        let mut cmd = Command::new("sh");
+        cmd.args(["-c", &script]);
+        if Path::new(&valid_cwd).is_dir() {
+            cmd.current_dir(&valid_cwd);
+        }
+
+        let output = cmd.output().map_err(|e| format!("Failed to execute terminal command: {}", e))?;
+        let raw_stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        let exit_code = output.status.code().unwrap_or(-1);
+
+        let (stdout, resulting_cwd) = if let Some(idx) = raw_stdout.rfind("__NODUS_CWD__:") {
+            let out = raw_stdout[..idx].trim_end().to_string();
+            let new_dir = raw_stdout[idx + "__NODUS_CWD__:".len()..].trim().to_string();
+            (out, if !new_dir.is_empty() { Some(new_dir) } else { Some(valid_cwd) })
+        } else {
+            (raw_stdout.trim_end().to_string(), Some(valid_cwd))
+        };
+
+        Ok(TerminalExecResult {
+            stdout,
+            stderr: stderr.trim_end().to_string(),
+            exit_code,
+            success: output.status.success(),
+            cwd: resulting_cwd,
+        })
+    }
+}
+
+fn get_default_allowed_roots() -> Vec<PathBuf> {
+    let mut roots = vec![
+        PathBuf::from("C:\\Program Files"),
+        PathBuf::from("C:\\Program Files (x86)"),
+        PathBuf::from("C:\\Windows\\System32"),
+        PathBuf::from("C:\\Windows"),
+        PathBuf::from("C:\\Projects"),
+    ];
+
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        roots.push(PathBuf::from(appdata));
+    }
+    if let Ok(local_appdata) = std::env::var("LOCALAPPDATA") {
+        roots.push(PathBuf::from(local_appdata));
+    }
+
+    roots
+}
+
+fn is_path_whitelisted(target: &Path) -> bool {
+    let canonical = match target.canonicalize() {
+        Ok(c) => c,
+        Err(_) => target.to_path_buf(),
+    };
+
+    let allowed = get_default_allowed_roots();
+    for root in &allowed {
+        let canonical_root = root.canonicalize().unwrap_or_else(|_| root.clone());
+        if canonical.starts_with(&canonical_root) {
+            return true;
+        }
+    }
+    false
+}
+
+fn contains_dangerous_shell_chars(s: &str) -> bool {
+    s.chars().any(|c| matches!(c, '&' | '|' | ';' | '`' | '$' | '\n' | '\r'))
 }
 
 pub fn execute_shortcut(
@@ -29,9 +188,16 @@ pub fn execute_shortcut(
         return Err("Command or path cannot be empty".to_string());
     }
 
-    // Disallow dangerous shell concatenation chars if executing raw command string
+    // Disallow dangerous null bytes
     if trimmed.contains('\0') {
         return Err("Null byte detected in command".to_string());
+    }
+
+    // Reject dangerous shell metacharacters in args
+    if let Some(a) = args {
+        if contains_dangerous_shell_chars(a) {
+            return Err("Disallowed shell metacharacter detected in arguments".to_string());
+        }
     }
 
     // 1. If elevated execution is requested on Windows
@@ -59,8 +225,14 @@ pub fn execute_shortcut(
         }
     }
 
-    // 2. If it's a URL or protocol handler, open with default system handler
-    if trimmed.starts_with("http://") || trimmed.starts_with("https://") || trimmed.contains("://") {
+    // 2. If it's a URL or protocol handler, open with default system handler only for safe registered schemes
+    if trimmed.contains("://") || trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        let safe_schemes = ["http://", "https://", "steam://", "vscode://", "spotify://", "mailto:"];
+        let is_safe = safe_schemes.iter().any(|&scheme| trimmed.to_lowercase().starts_with(scheme));
+        if !is_safe {
+            return Err(format!("Unsafe or disallowed protocol handler scheme in '{}'", trimmed));
+        }
+
         #[cfg(windows)]
         {
             Command::new("cmd")
@@ -73,6 +245,10 @@ pub fn execute_shortcut(
 
     // 2b. If it's a Windows .lnk or .url shortcut file (PWAs, desktop shortcuts)
     if trimmed.ends_with(".lnk") || trimmed.ends_with(".url") {
+        let p = Path::new(trimmed);
+        if p.is_absolute() && !is_path_whitelisted(p) {
+            return Err(format!("Execution blocked: Shortcut path '{}' is outside allowed directories", trimmed));
+        }
         #[cfg(windows)]
         {
             Command::new("cmd")
@@ -85,6 +261,10 @@ pub fn execute_shortcut(
 
     // 3. If it's a PowerShell command or script
     if trimmed.ends_with(".ps1") {
+        let p = Path::new(trimmed);
+        if p.is_absolute() && !is_path_whitelisted(p) {
+            return Err(format!("Execution blocked: PowerShell script '{}' is outside allowed directories", trimmed));
+        }
         let mut cmd = Command::new("powershell");
         cmd.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", trimmed]);
         if let Some(a) = args {
@@ -114,6 +294,10 @@ pub fn execute_shortcut(
 
     // 5. Batch files
     if trimmed.ends_with(".bat") || trimmed.ends_with(".cmd") {
+        let p = Path::new(trimmed);
+        if p.is_absolute() && !is_path_whitelisted(p) {
+            return Err(format!("Execution blocked: Batch file '{}' is outside allowed directories", trimmed));
+        }
         let mut c = Command::new("cmd");
         c.args(["/c", trimmed]);
         if let Some(wd) = working_dir {
@@ -125,6 +309,10 @@ pub fn execute_shortcut(
     }
 
     // 6. Standard executable binary or system path
+    if p.is_absolute() && !is_path_whitelisted(p) {
+        return Err(format!("Execution blocked: Binary '{}' is outside allowed directory roots", trimmed));
+    }
+
     let mut cmd = Command::new(trimmed);
     if let Some(a) = args {
         if !a.trim().is_empty() {

@@ -1,71 +1,467 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&family=Roboto+Mono:wght@400;500;700&family=Sora:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,1,0&display=swap');
 @import "tailwindcss";
 
-/* ─── Nodus Desktop — Obsidian Glass Design System ──────────────── */
-
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+@theme {
+  --font-sans: var(--app-font-sans);
+  --font-mono: var(--app-font-mono);
 }
 
-:root {
-  --nodus-bg-primary: #121218;
-  --nodus-bg-secondary: #181822;
-  --nodus-bg-tertiary: #20202C;
-  --nodus-text-primary: #F0F0F2;
-  --nodus-text-secondary: #8E8E93;
-  --nodus-accent-green: #34C759;
-  --nodus-accent-blue: #007AFF;
-  --nodus-accent-orange: #FF9500;
-  --nodus-accent-purple: #BF5AF2;
-  --nodus-accent-red: #FF3B30;
-  --nodus-border: rgba(255, 255, 255, 0.08);
+/* ==========================================================================
+   Google Material 3 / Nodus Theme Engine Tokens
+   ========================================================================== */
 
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, sans-serif;
-  font-size: 14px;
-  line-height: 1.5;
-  color: #F0F0F2;
-  background-color: #0A0A0E;
-  -webkit-font-smoothing: antialiased;
+:root {
+  /* Default Fallback (Midnight Dark) */
+  --app-font-sans: 'Geist', system-ui, -apple-system, sans-serif;
+  --app-font-mono: 'Geist Mono', monospace;
+  --app-bg: #111318;
+  --surface-base: #191C20;
+  --surface-container: #1D2024;
+  --surface-elevated: #282A2F;
+  --surface-header: rgba(17, 19, 24, 0.95);
+  --surface-modal: #1D2024;
+  --text-heading: #FFFFFF;
+  --text-body: #E2E2E9;
+  --text-muted: #8E9199;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-active: rgba(168, 199, 250, 0.35);
+  --accent-primary: #A8C7FA;
+  --accent-container: #0842A0;
+  --accent-on-container: #D3E3FD;
+  --chip-bg: #282A2F;
+  --chip-text: #E2E2E9;
+  --card-bg: #1D2024;
+  --card-hover: #282A2F;
+  --input-bg: #111318;
+  --input-border: rgba(255, 255, 255, 0.1);
+  --control-btn-bg: #282A2F;
+  --control-btn-hover: #33353A;
+  --control-btn-text: #E2E2E9;
+
+  /* Semantic Status & Button Tokens */
+  --btn-success-bg: rgba(16, 185, 129, 0.15);
+  --btn-success-hover: rgba(16, 185, 129, 0.25);
+  --btn-success-text: #6EE7B7;
+  --btn-success-border: rgba(16, 185, 129, 0.35);
+
+  --btn-danger-bg: rgba(239, 68, 68, 0.15);
+  --btn-danger-hover: rgba(239, 68, 68, 0.25);
+  --btn-danger-text: #FCA5A5;
+  --btn-danger-border: rgba(239, 68, 68, 0.35);
+
+  --status-online-bg: rgba(16, 185, 129, 0.15);
+  --status-online-text: #6EE7B7;
+  --status-online-border: rgba(16, 185, 129, 0.3);
+
+  --status-offline-bg: rgba(239, 68, 68, 0.15);
+  --status-offline-text: #FCA5A5;
+  --status-offline-border: rgba(239, 68, 68, 0.3);
+
+  --badge-agent-bg: rgba(16, 185, 129, 0.2);
+  --badge-agent-text: #6EE7B7;
+  --badge-warn-bg: rgba(245, 158, 11, 0.15);
+  --badge-warn-text: #FBBF24;
+  --badge-warn-border: rgba(245, 158, 11, 0.35);
+  --badge-trusted-bg: rgba(56, 189, 248, 0.15);
+  --badge-trusted-text: #7DD3FC;
+  --badge-trusted-border: rgba(56, 189, 248, 0.35);
+
+  /* Terminal Theme Engine Tokens (Default / Midnight) */
+  --terminal-bg: #0D1117;
+  --terminal-text: #E6EDF3;
+  --terminal-text-muted: #8B949E;
+  --terminal-prompt: #7EE787;
+  --terminal-border: rgba(255, 255, 255, 0.08);
+  --terminal-system-bg: rgba(56, 139, 253, 0.12);
+  --terminal-system-text: #79C0FF;
+  --terminal-system-border: #388BFD;
+  --terminal-error-bg: rgba(248, 81, 73, 0.12);
+  --terminal-error-text: #FFA198;
+  --terminal-error-border: #F85149;
+  --terminal-warn-bg: rgba(210, 153, 34, 0.12);
+  --terminal-warn-text: #E3B341;
+  --terminal-warn-border: #D29922;
+  --terminal-cursor: #A8C7FA;
+  --terminal-macro-bg: #1D2024;
+  --terminal-macro-hover: #282A2F;
+  --terminal-input-bg: #161B22;
+
+  /* Material 3 Token Bridge */
+  --m3-primary: var(--accent-primary);
+  --m3-on-primary: #062E6F;
+  --m3-primary-container: var(--accent-container);
+  --m3-on-primary-container: var(--accent-on-container);
+  --m3-surface: var(--surface-base);
+  --m3-on-surface: var(--text-heading);
+  --m3-on-surface-variant: var(--text-muted);
+  --m3-surface-variant: var(--surface-elevated);
+  --m3-outline: var(--border-subtle);
+  --m3-surface-container-lowest: var(--app-bg);
+  --m3-surface-container-low: var(--surface-base);
+  --m3-surface-container: var(--surface-container);
+  --m3-surface-container-high: var(--surface-elevated);
+  --m3-surface-container-highest: var(--card-hover);
+  --m3-on-background: var(--text-heading);
+}
+
+/* --- Theme 1: Material Light (Google M3 Baseline) --- */
+.theme-light {
+  --app-font-sans: 'Outfit', system-ui, -apple-system, sans-serif;
+  --app-font-mono: 'Roboto Mono', monospace;
+  --app-bg: #F4F6FB;
+  --surface-base: #FFFFFF;
+  --surface-container: #EBF1FA;
+  --surface-elevated: #DFE7F4;
+  --surface-header: rgba(244, 246, 251, 0.95);
+  --surface-modal: #FFFFFF;
+  --text-heading: #111827;
+  --text-body: #2D3748;
+  --text-muted: #525D6E;
+  --border-subtle: rgba(0, 0, 0, 0.09);
+  --border-active: rgba(11, 87, 208, 0.45);
+  --accent-primary: #0B57D0;
+  --accent-container: #D3E3FD;
+  --accent-on-container: #041E49;
+  --chip-bg: #E6EDF8;
+  --chip-text: #1A2436;
+  --card-bg: #FFFFFF;
+  --card-hover: #F0F4FA;
+  --input-bg: #EEF2F9;
+  --input-border: rgba(0, 0, 0, 0.14);
+  --control-btn-bg: #E2E8F4;
+  --control-btn-hover: #D3DDF0;
+  --control-btn-text: #191C20;
+
+  /* Semantic Status & Button Tokens (High Contrast for Light Mode) */
+  --btn-success-bg: #ECFDF5;
+  --btn-success-hover: #D1FAE5;
+  --btn-success-text: #047857;
+  --btn-success-border: #A7F3D0;
+
+  --btn-danger-bg: #FEF2F2;
+  --btn-danger-hover: #FEE2E2;
+  --btn-danger-text: #B91C1C;
+  --btn-danger-border: #FECACA;
+
+  --status-online-bg: #ECFDF5;
+  --status-online-text: #047857;
+  --status-online-border: #A7F3D0;
+
+  --status-offline-bg: #FEF2F2;
+  --status-offline-text: #B91C1C;
+  --status-offline-border: #FECACA;
+
+  --badge-agent-bg: #D1FAE5;
+  --badge-agent-text: #065F46;
+  --badge-warn-bg: #FEF3C7;
+  --badge-warn-text: #B45309;
+  --badge-warn-border: #FDE68A;
+  --badge-trusted-bg: #E0F2FE;
+  --badge-trusted-text: #0369A1;
+  --badge-trusted-border: #BAE6FD;
+
+  /* Terminal Light Tokens (Comfortable Darkened Slate M3 Look) */
+  --terminal-bg: #E2E8F0;
+  --terminal-text: #0F172A;
+  --terminal-text-muted: #475569;
+  --terminal-prompt: #047857;
+  --terminal-border: rgba(0, 0, 0, 0.12);
+  --terminal-system-bg: #DBEAFE;
+  --terminal-system-text: #1E40AF;
+  --terminal-system-border: #2563EB;
+  --terminal-error-bg: #FEE2E2;
+  --terminal-error-text: #B91C1C;
+  --terminal-error-border: #DC2626;
+  --terminal-warn-bg: #FEF3C7;
+  --terminal-warn-text: #B45309;
+  --terminal-warn-border: #D97706;
+  --terminal-cursor: #0B57D0;
+  --terminal-macro-bg: #DCE3EE;
+  --terminal-macro-hover: #CBD5E1;
+  --terminal-input-bg: #E2E8F0;
+
+  /* M3 Light Bridge */
+  --m3-primary: #0B57D0;
+  --m3-on-primary: #FFFFFF;
+  --m3-primary-container: #D3E3FD;
+  --m3-on-primary-container: #041E49;
+  --m3-surface: #FFFFFF;
+  --m3-on-surface: #111827;
+  --m3-on-surface-variant: #525D6E;
+  --m3-surface-variant: #DFE7F4;
+  --m3-outline: rgba(0, 0, 0, 0.14);
+  --m3-surface-container-lowest: #FFFFFF;
+  --m3-surface-container-low: #F8F9FF;
+  --m3-surface-container: #EBF1FA;
+  --m3-surface-container-high: #DFE7F4;
+  --m3-surface-container-highest: #D3DDF0;
+  --m3-on-background: #111827;
+}
+
+/* --- Theme 2: Midnight Dark (High-Contrast Slate/Navy) --- */
+.theme-midnight {
+  --app-font-sans: 'Geist', system-ui, -apple-system, sans-serif;
+  --app-font-mono: 'Geist Mono', monospace;
+  --app-bg: #111318;
+  --surface-base: #191C20;
+  --surface-container: #1D2024;
+  --surface-elevated: #282A2F;
+  --surface-header: rgba(17, 19, 24, 0.95);
+  --surface-modal: #1D2024;
+  --text-heading: #FFFFFF;
+  --text-body: #E2E2E9;
+  --text-muted: #8E9199;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-active: rgba(168, 199, 250, 0.35);
+  --accent-primary: #A8C7FA;
+  --accent-container: #0842A0;
+  --accent-on-container: #D3E3FD;
+  --chip-bg: #282A2F;
+  --chip-text: #E2E2E9;
+  --card-bg: #1D2024;
+  --card-hover: #282A2F;
+  --input-bg: #111318;
+  --input-border: rgba(255, 255, 255, 0.1);
+  --control-btn-bg: #282A2F;
+  --control-btn-hover: #33353A;
+  --control-btn-text: #E2E2E9;
+
+  /* Semantic Status & Button Tokens */
+  --btn-success-bg: rgba(16, 185, 129, 0.15);
+  --btn-success-hover: rgba(16, 185, 129, 0.25);
+  --btn-success-text: #6EE7B7;
+  --btn-success-border: rgba(16, 185, 129, 0.35);
+
+  --btn-danger-bg: rgba(239, 68, 68, 0.15);
+  --btn-danger-hover: rgba(239, 68, 68, 0.25);
+  --btn-danger-text: #FCA5A5;
+  --btn-danger-border: rgba(239, 68, 68, 0.35);
+
+  --status-online-bg: rgba(16, 185, 129, 0.15);
+  --status-online-text: #6EE7B7;
+  --status-online-border: rgba(16, 185, 129, 0.3);
+
+  --status-offline-bg: rgba(239, 68, 68, 0.15);
+  --status-offline-text: #FCA5A5;
+  --status-offline-border: rgba(239, 68, 68, 0.3);
+
+  --badge-agent-bg: rgba(16, 185, 129, 0.2);
+  --badge-agent-text: #6EE7B7;
+
+  /* Terminal Midnight Tokens */
+  --terminal-bg: #0D1117;
+  --terminal-text: #E6EDF3;
+  --terminal-text-muted: #8B949E;
+  --terminal-prompt: #7EE787;
+  --terminal-border: rgba(255, 255, 255, 0.08);
+  --terminal-system-bg: rgba(56, 139, 253, 0.12);
+  --terminal-system-text: #79C0FF;
+  --terminal-system-border: #388BFD;
+  --terminal-error-bg: rgba(248, 81, 73, 0.12);
+  --terminal-error-text: #FFA198;
+  --terminal-error-border: #F85149;
+  --terminal-warn-bg: rgba(210, 153, 34, 0.12);
+  --terminal-warn-text: #E3B341;
+  --terminal-warn-border: #D29922;
+  --terminal-cursor: #A8C7FA;
+  --terminal-macro-bg: #1D2024;
+  --terminal-macro-hover: #282A2F;
+  --terminal-input-bg: #161B22;
+
+  /* M3 Midnight Bridge */
+  --m3-primary: #A8C7FA;
+  --m3-on-primary: #062E6F;
+  --m3-primary-container: #0842A0;
+  --m3-on-primary-container: #D3E3FD;
+  --m3-surface: #111318;
+  --m3-on-surface: #FFFFFF;
+  --m3-on-surface-variant: #8E9199;
+  --m3-surface-variant: #282A2F;
+  --m3-outline: rgba(255, 255, 255, 0.1);
+  --m3-surface-container-lowest: #0C0E12;
+  --m3-surface-container-low: #191C20;
+  --m3-surface-container: #1D2024;
+  --m3-surface-container-high: #282A2F;
+  --m3-surface-container-highest: #33353A;
+  --m3-on-background: #FFFFFF;
+}
+
+/* --- Theme 3: Obsidian Glass (Deep Frosted Glassmorphism) --- */
+.theme-obsidian {
+  --app-font-sans: 'Sora', system-ui, -apple-system, sans-serif;
+  --app-font-mono: 'Space Mono', monospace;
+  --app-bg: #030305;
+  --surface-base: rgba(14, 14, 22, 0.72);
+  --surface-container: rgba(22, 22, 34, 0.75);
+  --surface-elevated: rgba(32, 32, 48, 0.82);
+  --surface-header: rgba(5, 5, 8, 0.90);
+  --surface-modal: rgba(20, 20, 32, 0.95);
+  --text-heading: #F8FAFC;
+  --text-body: #CBD5E1;
+  --text-muted: #94A3B8;
+  --border-subtle: rgba(167, 139, 250, 0.14);
+  --border-active: rgba(167, 139, 250, 0.45);
+  --accent-primary: #A78BFA;
+  --accent-container: rgba(124, 58, 237, 0.35);
+  --accent-on-container: #F5F3FF;
+  --chip-bg: rgba(255, 255, 255, 0.08);
+  --chip-text: #F1F5F9;
+  --card-bg: rgba(22, 22, 34, 0.70);
+  --card-hover: rgba(34, 34, 52, 0.85);
+  --input-bg: rgba(10, 10, 18, 0.85);
+  --input-border: rgba(167, 139, 250, 0.22);
+  --control-btn-bg: rgba(40, 42, 62, 0.75);
+  --control-btn-hover: rgba(55, 58, 86, 0.90);
+  --control-btn-text: #F1F5F9;
+
+  /* Semantic Status & Button Tokens */
+  --btn-success-bg: rgba(16, 185, 129, 0.18);
+  --btn-success-hover: rgba(16, 185, 129, 0.28);
+  --btn-success-text: #6EE7B7;
+  --btn-success-border: rgba(16, 185, 129, 0.4);
+
+  --btn-danger-bg: rgba(239, 68, 68, 0.18);
+  --btn-danger-hover: rgba(239, 68, 68, 0.28);
+  --btn-danger-text: #FCA5A5;
+  --btn-danger-border: rgba(239, 68, 68, 0.4);
+
+  --status-online-bg: rgba(16, 185, 129, 0.18);
+  --status-online-text: #6EE7B7;
+  --status-online-border: rgba(16, 185, 129, 0.35);
+
+  --status-offline-bg: rgba(239, 68, 68, 0.18);
+  --status-offline-text: #FCA5A5;
+  --status-offline-border: rgba(239, 68, 68, 0.35);
+
+  --badge-agent-bg: rgba(16, 185, 129, 0.25);
+  --badge-agent-text: #A7F3D0;
+  --badge-warn-bg: rgba(245, 158, 11, 0.2);
+  --badge-warn-text: #FDE68A;
+  --badge-warn-border: rgba(245, 158, 11, 0.4);
+  --badge-trusted-bg: rgba(167, 139, 250, 0.2);
+  --badge-trusted-text: #DDD6FE;
+  --badge-trusted-border: rgba(167, 139, 250, 0.4);
+
+  /* Terminal Obsidian Glass Tokens */
+  --terminal-bg: rgba(10, 10, 18, 0.88);
+  --terminal-text: #F1F5F9;
+  --terminal-text-muted: #94A3B8;
+  --terminal-prompt: #A78BFA;
+  --terminal-border: rgba(167, 139, 250, 0.18);
+  --terminal-system-bg: rgba(124, 58, 237, 0.18);
+  --terminal-system-text: #DDD6FE;
+  --terminal-system-border: #8B5CF6;
+  --terminal-error-bg: rgba(239, 68, 68, 0.18);
+  --terminal-error-text: #FCA5A5;
+  --terminal-error-border: #EF4444;
+  --terminal-warn-bg: rgba(245, 158, 11, 0.18);
+  --terminal-warn-text: #FDE68A;
+  --terminal-warn-border: #F59E0B;
+  --terminal-cursor: #C084FC;
+  --terminal-macro-bg: rgba(22, 22, 34, 0.75);
+  --terminal-macro-hover: rgba(34, 34, 52, 0.85);
+  --terminal-input-bg: rgba(14, 14, 22, 0.85);
+
+  /* M3 Obsidian Bridge */
+  --m3-primary: #A78BFA;
+  --m3-on-primary: #1E1035;
+  --m3-primary-container: rgba(124, 58, 237, 0.35);
+  --m3-on-primary-container: #F5F3FF;
+  --m3-surface: rgba(14, 14, 22, 0.72);
+  --m3-on-surface: #F8FAFC;
+  --m3-on-surface-variant: #94A3B8;
+  --m3-surface-variant: rgba(32, 32, 48, 0.82);
+  --m3-outline: rgba(167, 139, 250, 0.22);
+  --m3-surface-container-lowest: #030305;
+  --m3-surface-container-low: rgba(14, 14, 22, 0.72);
+  --m3-surface-container: rgba(22, 22, 34, 0.75);
+  --m3-surface-container-high: rgba(32, 32, 48, 0.82);
+  --m3-surface-container-highest: rgba(45, 45, 68, 0.9);
+  --m3-on-background: #F8FAFC;
+}
+
+.theme-obsidian .glass-panel {
+  background: var(--surface-container);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-subtle);
 }
 
 html, body, #root {
-  width: 100%;
   height: 100%;
-  background-color: #0A0A0E;
-  color: #F0F0F2;
-  overflow: hidden;
-  user-select: none;
+  font-family: var(--app-font-sans);
+  background-color: var(--app-bg);
+  color: var(--text-body);
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  transition: background-color 200ms ease, color 200ms ease, font-family 200ms ease;
 }
 
-/* ─── Panel Glass Base ─────────────────────────────────────────── */
-.nodus-glass {
-  background: rgba(18, 18, 24, 0.92);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-subtle) transparent;
 }
 
-/* ─── Scrollbar ────────────────────────────────────────────────── */
+/* Custom Scrollbar for desktop */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: var(--app-bg);
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 4px;
+  background: var(--border-subtle);
+  border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--accent-primary);
 }
 
-/* ─── Truncate Utility ─────────────────────────────────────────── */
-.truncate {
-  overflow: hidden;
-  text-overflow: ellipsis;
+.font-mono {
+  font-family: var(--app-font-mono);
+}
+
+button, input, select, textarea {
+  font-family: inherit;
+}
+
+.m3-surface {
+  background-color: var(--app-bg);
+}
+
+.m3-surface-low {
+  background-color: var(--surface-base);
+}
+
+.m3-surface-container {
+  background-color: var(--surface-container);
+}
+
+.m3-surface-high {
+  background-color: var(--surface-elevated);
+}
+
+.m3-card {
+  background: var(--card-bg);
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  transition: background 200ms cubic-bezier(0.2, 0, 0, 1), box-shadow 200ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.m3-card:hover {
+  background: var(--card-hover);
+}
+
+.material-symbols-rounded {
+  font-family: 'Material Symbols Rounded';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  display: inline-block;
   white-space: nowrap;
+  -webkit-font-smoothing: antialiased;
 }

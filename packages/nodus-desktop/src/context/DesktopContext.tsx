@@ -13,6 +13,8 @@ import {
   ActiveTab
 } from '../types/desktop';
 import { TauriService } from '../services/TauriCommands';
+import { ClipboardBroadcastService } from '../services/ClipboardBroadcastService';
+import { INITIAL_SHORTCUTS as FIXTURE_SHORTCUTS } from '../__fixtures__/desktopFixtures';
 
 interface DesktopContextType {
   activeTab: ActiveTab;
@@ -74,6 +76,7 @@ const DEFAULT_SERVER_CONFIG: ServerConfig = {
   port: 9120,
   status: 'running',
   pairingSecret: 'NODUS-FLEET-SECURE',
+  auth_token: 'NODUS-FLEET-SECURE',
   autoDiscover: true,
   autoStartOnBoot: true,
   broadcastMdns: true,
@@ -99,83 +102,10 @@ const INITIAL_DEVICES: DeviceInfo[] = [];
 
 const INITIAL_TRUSTED_DEVICES: TrustedDevice[] = [];
 
-const INITIAL_SHORTCUTS: RemoteExecutable[] = [
-  {
-    id: 'exec-vscode',
-    deviceId: 'this-pc',
-    deviceName: 'This PC',
-    deviceType: 'desktop',
-    deviceOs: 'windows',
-    name: 'Visual Studio Code',
-    description: 'Launch VS Code workspace in C:\\Projects',
-    category: 'productivity',
-    iconName: 'Code',
-    iconColor: '#007ACC',
-    execType: 'command',
-    commandOrPackage: 'code .',
-    workingDir: 'C:\\Projects',
-    enabled: true,
-    pinnedToDrawer: true,
-    lastExecuted: '10m ago',
-  },
-  {
-    id: 'exec-terminal',
-    deviceId: 'this-pc',
-    deviceName: 'This PC',
-    deviceType: 'desktop',
-    deviceOs: 'windows',
-    name: 'Windows Terminal (Admin)',
-    description: 'Elevated PowerShell CLI prompt',
-    category: 'tools',
-    iconName: 'Terminal',
-    iconColor: '#4E75F8',
-    execType: 'command',
-    commandOrPackage: 'wt.exe -p "PowerShell"',
-    runAsAdmin: true,
-    enabled: true,
-    pinnedToDrawer: true,
-    lastExecuted: '45m ago',
-  },
-  {
-    id: 'exec-steam',
-    deviceId: 'this-pc',
-    deviceName: 'This PC',
-    deviceType: 'desktop',
-    deviceOs: 'windows',
-    name: 'Steam Big Picture',
-    description: 'Console Gamepad UI for couch gaming',
-    category: 'games',
-    iconName: 'Gamepad2',
-    iconColor: '#1B2838',
-    execType: 'url_protocol',
-    commandOrPackage: 'steam://open/bigpicture',
-    enabled: true,
-    pinnedToDrawer: true,
-    lastExecuted: 'Yesterday',
-  },
-  {
-    id: 'exec-taskmgr',
-    deviceId: 'this-pc',
-    deviceName: 'This PC',
-    deviceType: 'desktop',
-    deviceOs: 'windows',
-    name: 'Task Manager',
-    description: 'Launch Windows Task Manager',
-    category: 'system',
-    iconName: 'Activity',
-    iconColor: '#FF9500',
-    execType: 'command',
-    commandOrPackage: 'taskmgr.exe',
-    enabled: true,
-    pinnedToDrawer: true,
-    lastExecuted: 'Just now',
-  },
-];
-
 const DesktopContext = createContext<DesktopContextType | undefined>(undefined);
 
 export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('fleet');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('topology');
   
   // Devices & Fleet (Strictly active verified connections only)
   const [devices, setDevices] = useState<DeviceInfo[]>(() => {
@@ -202,7 +132,7 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const saved = localStorage.getItem('nodus_desktop_shortcuts');
       if (saved) return JSON.parse(saved);
     } catch (_) {}
-    return INITIAL_SHORTCUTS;
+    return import.meta.env.DEV ? FIXTURE_SHORTCUTS : [];
   });
 
   // Server Configuration
@@ -265,25 +195,41 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } catch (_) {}
   }, [remoteExecutables]);
 
-  // Real-time Windows Clipboard Watcher
+  // Real-time Windows Clipboard Watcher & Automatic Mesh Broadcast
   const lastLocalClipRef = React.useRef<string>('');
 
   useEffect(() => {
     const pollClipboard = async () => {
       try {
         const content = await TauriService.getClipboardContent();
+        let newClipText: string | null = null;
+        let newClipImage: string | undefined = undefined;
+
         if (content.content_type === 'image' && content.image_data) {
           const imgKey = content.image_data.substring(0, 80); // unique signature of base64
           if (imgKey && imgKey !== lastLocalClipRef.current) {
             lastLocalClipRef.current = imgKey;
-            addClipboardItem(content.text || 'Image', 'this-pc', content.image_data);
+            newClipText = content.text || 'Image';
+            newClipImage = content.image_data;
+            addClipboardItem(newClipText, 'this-pc', newClipImage);
           }
         } else if (content.text) {
           const trimmed = content.text.trim();
           if (trimmed && trimmed !== lastLocalClipRef.current) {
             lastLocalClipRef.current = trimmed;
+            newClipText = trimmed;
             addClipboardItem(trimmed, 'this-pc');
           }
+        }
+
+        // Automatic Mesh Broadcast to connected remote devices via ClipboardBroadcastService
+        if (newClipText || newClipImage) {
+          ClipboardBroadcastService.queueBroadcast(
+            newClipText || null,
+            newClipImage || undefined,
+            devices,
+            serverConfig?.auth_token || serverConfig?.pairingSecret || 'NODUS-FLEET-SECURE'
+          );
         }
       } catch (_) {}
     };
@@ -291,7 +237,10 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
     pollClipboard();
     const interval = setInterval(pollClipboard, 1500);
     return () => clearInterval(interval);
-  }, []);
+  }, [devices]);
+
+  // Track explicitly removed devices so UDP background discovery does not auto-readd them
+  const removedDeviceIdsRef = React.useRef<Set<string>>(new Set());
 
   // Real-time Fleet Mesh Discovery Polling (Auto-updates connected Android / companion devices)
   useEffect(() => {
@@ -304,6 +253,10 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
             let hasChanges = false;
 
             for (const d of discovered) {
+              if (removedDeviceIdsRef.current.has(d.id)) {
+                continue; // Skip explicitly deleted nodes
+              }
+
               const existing = devMap.get(d.id);
               const updated: DeviceInfo = {
                 id: d.id,
@@ -347,6 +300,8 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
 
   const removeDevice = useCallback((id: string) => {
+    removedDeviceIdsRef.current.add(id);
+    TauriService.unregisterNode(id).catch(() => {});
     setDevices((prev) => {
       const remaining = prev.filter((d) => d.id !== id);
       if (activeDeviceId === id) {

@@ -190,6 +190,36 @@ fn cors_headers_for(origin: Option<&str>) -> Vec<Header> {
     ]
 }
 
+#[tauri::command]
+pub fn get_server_status() -> serde_json::Value {
+    json!({
+        "running": SERVER_RUNNING.load(Ordering::SeqCst),
+        "port": 9120,
+    })
+}
+
+#[tauri::command]
+pub fn set_server_running(running: bool, port: Option<u16>) -> bool {
+    let p = port.unwrap_or(9120);
+    if running {
+        start_server(p);
+        crate::discovery::start_discovery(p);
+    } else {
+        stop_server();
+        crate::discovery::stop_discovery();
+    }
+    SERVER_RUNNING.load(Ordering::SeqCst)
+}
+
+pub fn stop_server() {
+    if !SERVER_RUNNING.swap(false, Ordering::SeqCst) {
+        return;
+    }
+    crate::discovery::stop_discovery();
+    let _ = std::net::TcpStream::connect("127.0.0.1:9120");
+    println!("[NodusFleetServer] Server stopped.");
+}
+
 pub fn start_server(port: u16) {
     if SERVER_RUNNING.swap(true, Ordering::SeqCst) {
         return; // Already running
@@ -223,6 +253,9 @@ pub fn start_server(port: u16) {
         };
 
         for mut request in server.incoming_requests() {
+            if !SERVER_RUNNING.load(Ordering::SeqCst) {
+                break;
+            }
             let url = request.url().to_string();
             let method = request.method().clone();
 
@@ -251,7 +284,7 @@ pub fn start_server(port: u16) {
                 || path == "/api/fleet/register"
                 || path == "/api/fleet/devices"
                 || path == "/api/fleet/peers"
-                || path.starts_with("/api/shortcuts");
+                || (method == Method::Get && path == "/api/shortcuts");
 
             let (status_code, json_body) = if !is_public && !is_authorized(&request) {
                 (401, json!({ "status": "error", "message": "Unauthorized: Missing or invalid X-Nodus-Auth-Token / Bearer token" }))
@@ -283,6 +316,7 @@ pub fn start_server(port: u16) {
                                     cpu_load: Some(15),
                                     ram_usage: Some("4.2 / 8.0 GB".to_string()),
                                     last_seen: now,
+                                    is_local: false,
                                 });
                             }
                         }
@@ -316,8 +350,11 @@ pub fn start_server(port: u16) {
                         }
                     }
 
-                    // Process Monitor
-                    (Method::Get, "/api/processes") => {
+                    // Process Monitor (Local & Remote Mesh RPC)
+                    (Method::Get, "/api/processes")
+                    | (Method::Post, "/api/processes")
+                    | (Method::Get, "/rpc/processes")
+                    | (Method::Post, "/rpc/processes") => {
                         match get_processes() {
                             Ok(procs) => (200, json!({ "status": "success", "processes": procs })),
                             Err(e) => (500, json!({ "status": "error", "message": e })),
@@ -325,7 +362,10 @@ pub fn start_server(port: u16) {
                     }
 
                     // Process Terminate
-                    (Method::Post, "/api/process/kill") | (Method::Post, "/api/processes/kill") => {
+                    (Method::Post, "/api/process/kill")
+                    | (Method::Post, "/api/processes/kill")
+                    | (Method::Post, "/rpc/process/kill")
+                    | (Method::Post, "/rpc/processes/kill") => {
                         if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
                             if let Ok(req) = serde_json::from_str::<KillProcReq>(&body_str) {
                                 match crate::commands::process::kill_process(req.pid) {
@@ -697,6 +737,131 @@ pub fn start_server(port: u16) {
                                 (200, json!({ "status": "success", "message": "Shortcuts updated" }))
                             } else {
                                 (400, json!({ "status": "error", "message": "Invalid shortcuts array payload" }))
+                            }
+                        } else {
+                            (400, json!({ "status": "error", "message": "Body exceeds maximum size" }))
+                        }
+                    }
+
+                    // Execute / Launch Shared Shortcut
+                    (Method::Post, "/api/shortcuts/launch") => {
+                        if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
+                            if let Ok(req) = serde_json::from_str::<ExecReq>(&body_str) {
+                                let cmd = req.command_or_path.or(req.command).unwrap_or_default();
+                                match crate::commands::exec::execute_local_command(crate::commands::exec::ExecRequest {
+                                    command_or_path: cmd,
+                                    args: req.args,
+                                    working_dir: req.working_dir,
+                                    run_as_admin: req.run_as_admin,
+                                }) {
+                                    Ok(_) => (200, json!({ "status": "success", "message": "Command executed successfully" })),
+                                    Err(e) => (500, json!({ "status": "error", "message": e })),
+                                }
+                            } else {
+                                (400, json!({ "status": "error", "message": "Invalid JSON body" }))
+                            }
+                        } else {
+                            (400, json!({ "status": "error", "message": "Body exceeds maximum size" }))
+                        }
+                    }
+
+                    // Remote Terminal Execution Engine
+                    (Method::Post, "/api/terminal/exec") | (Method::Post, "/rpc/terminal/exec") => {
+                        if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
+                            if let Ok(req) = serde_json::from_str::<serde_json::Value>(&body_str) {
+                                let cmd = req.get("command").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                                let cwd = req.get("cwd").and_then(|v| v.as_str()).map(|s| s.to_string());
+                                match crate::commands::exec::run_terminal_command(cmd, cwd) {
+                                    Ok(res) => (200, json!({
+                                        "status": "success",
+                                        "stdout": res.stdout,
+                                        "stderr": res.stderr,
+                                        "exit_code": res.exit_code,
+                                        "success": res.success
+                                    })),
+                                    Err(e) => (500, json!({ "status": "error", "message": e })),
+                                }
+                            } else {
+                                (400, json!({ "status": "error", "message": "Invalid JSON body" }))
+                            }
+                        } else {
+                            (400, json!({ "status": "error", "message": "Body exceeds maximum size" }))
+                        }
+                    }
+
+                    // Remote Terminal PTY Spawn
+                    (Method::Post, "/api/terminal/pty/spawn") => {
+                        if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
+                            if let Ok(req) = serde_json::from_str::<serde_json::Value>(&body_str) {
+                                let session_id = req.get("session_id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                                let shell = req.get("shell").and_then(|v| v.as_str()).map(|s| s.to_string());
+                                let cwd = req.get("cwd").and_then(|v| v.as_str()).map(|s| s.to_string());
+                                let cols = req.get("cols").and_then(|v| v.as_u64()).map(|n| n as u16);
+                                let rows = req.get("rows").and_then(|v| v.as_u64()).map(|n| n as u16);
+                                match crate::commands::pty::spawn_pty_session(crate::commands::pty::PtySpawnRequest {
+                                    session_id: session_id.clone(),
+                                    cols,
+                                    rows,
+                                    cwd,
+                                    shell,
+                                }, None) {
+                                    Ok(_) => (200, json!({ "status": "success", "session_id": session_id })),
+                                    Err(e) => (500, json!({ "status": "error", "message": e })),
+                                }
+                            } else {
+                                (400, json!({ "status": "error", "message": "Invalid JSON body" }))
+                            }
+                        } else {
+                            (400, json!({ "status": "error", "message": "Body exceeds maximum size" }))
+                        }
+                    }
+                    (Method::Post, "/api/terminal/pty/write") => {
+                        if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
+                            if let Ok(req) = serde_json::from_str::<serde_json::Value>(&body_str) {
+                                let session_id = req.get("session_id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                                let data = req.get("data").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                                match crate::commands::pty::write_pty(session_id, data) {
+                                    Ok(_) => (200, json!({ "status": "success" })),
+                                    Err(e) => (500, json!({ "status": "error", "message": e })),
+                                }
+                            } else {
+                                (400, json!({ "status": "error", "message": "Invalid JSON body" }))
+                            }
+                        } else {
+                            (400, json!({ "status": "error", "message": "Body exceeds maximum size" }))
+                        }
+                    }
+
+                    // Remote Terminal PTY Resize
+                    (Method::Post, "/api/terminal/pty/resize") => {
+                        if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
+                            if let Ok(req) = serde_json::from_str::<serde_json::Value>(&body_str) {
+                                let session_id = req.get("session_id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                                let cols = req.get("cols").and_then(|v| v.as_u64()).unwrap_or(80) as u16;
+                                let rows = req.get("rows").and_then(|v| v.as_u64()).unwrap_or(24) as u16;
+                                match crate::commands::pty::resize_pty(session_id, cols, rows) {
+                                    Ok(_) => (200, json!({ "status": "success" })),
+                                    Err(e) => (500, json!({ "status": "error", "message": e })),
+                                }
+                            } else {
+                                (400, json!({ "status": "error", "message": "Invalid JSON body" }))
+                            }
+                        } else {
+                            (400, json!({ "status": "error", "message": "Body exceeds maximum size" }))
+                        }
+                    }
+
+                    // Remote Terminal PTY Kill
+                    (Method::Post, "/api/terminal/pty/kill") => {
+                        if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
+                            if let Ok(req) = serde_json::from_str::<serde_json::Value>(&body_str) {
+                                let session_id = req.get("session_id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                                match crate::commands::pty::kill_pty(session_id) {
+                                    Ok(res) => (200, json!({ "status": "success", "killed": res })),
+                                    Err(e) => (500, json!({ "status": "error", "message": e })),
+                                }
+                            } else {
+                                (400, json!({ "status": "error", "message": "Invalid JSON body" }))
                             }
                         } else {
                             (400, json!({ "status": "error", "message": "Body exceeds maximum size" }))

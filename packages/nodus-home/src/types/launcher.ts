@@ -43,6 +43,7 @@ export interface DeviceInfo {
   ramUsage?: string;
   storage?: string;
   isCustom?: boolean;
+  isLocal?: boolean;
   isRebooting?: boolean;
   customAvatar?: string;
 }

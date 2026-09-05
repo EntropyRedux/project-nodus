@@ -143,6 +143,10 @@ class FleetDaemonService : Service() {
                     val cpu = stats.optInt("cpuLoad", stats.optInt("cpu", dev.optInt("cpuLoad", 15)))
                     val ram = stats.optString("ramUsage", dev.optString("ramUsage", "Active"))
                     val battery = stats.optInt("battery", dev.optInt("battery", 100))
+                    val realName = stats.optString("name", stats.optString("hostname", ""))
+                    if (realName.isNotBlank()) {
+                        dev.put("name", realName)
+                    }
 
                     dev.put("cpuLoad", cpu)
                     dev.put("ramUsage", ram)
@@ -151,6 +155,7 @@ class FleetDaemonService : Service() {
                     dev.put("lastSeen", System.currentTimeMillis())
 
                     connectedDevices[id] = dev
+                    notifyStateChanged()
                 },
                 onError = {
                     // Node did not respond to this poll

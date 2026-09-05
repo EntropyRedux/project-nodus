@@ -28,6 +28,12 @@ pub fn run() {
             commands::clipboard::set_clipboard_image,
             commands::clipboard::get_clipboard_content,
             commands::exec::execute_local_command,
+            commands::exec::run_terminal_command,
+            commands::exec::get_default_working_dir,
+            commands::pty::spawn_pty,
+            commands::pty::write_pty,
+            commands::pty::resize_pty,
+            commands::pty::kill_pty,
             commands::input::simulate_mouse_move,
             commands::input::simulate_mouse_click,
             commands::input::simulate_mouse_scroll,
@@ -41,34 +47,24 @@ pub fn run() {
             commands::shortcuts::get_watched_folders,
             commands::shortcuts::remove_watched_folder,
             discovery::get_discovered_devices,
+            discovery::unregister_node,
+            discovery::scan_subnet,
+            discovery::get_lan_device_count,
+            server::get_server_status,
+            server::set_server_running,
             hotcorners::get_hotcorner_config,
             hotcorners::set_hotcorner_enabled,
         ])
         .setup(|app| {
-            // ─── 1. Configure / Create Main Window First ─────────────
-            let window = match app.get_webview_window("main") {
-                Some(w) => {
-                    let _ = w.show();
-                    let _ = w.unminimize();
-                    let _ = w.set_focus();
-                    w
-                }
-                None => {
-                    tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::default())
-                        .title("Nodus Desktop Companion")
-                        .inner_size(1100.0, 720.0)
-                        .min_inner_size(800.0, 550.0)
-                        .center()
-                        .resizable(true)
-                        .always_on_top(false)
-                        .visible(true)
-                        .build()?
-                }
-            };
-            let _ = window.show();
-            let _ = window.unminimize();
-            let _ = window.set_focus();
-            println!("[NodusDesktop] Main window ready and focused.");
+            // ─── 1. Access Main Window Defined in tauri.conf.json ────
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+                println!("[NodusDesktop] Main window ready, shown and focused.");
+            } else {
+                println!("[NodusDesktop] Warning: 'main' window not found in tauri.conf.json!");
+            }
 
             // ─── 2. System Tray Setup (Safe with Icon) ────────────────
             let quit_item = MenuItem::with_id(app, "quit", "Quit Nodus Desktop", true, None::<&str>)?;
@@ -160,3 +156,4 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running Nodus Desktop");
 }
+

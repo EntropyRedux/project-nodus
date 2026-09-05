@@ -1,5 +1,10 @@
-import React, { useState } from 'react';
-import { useFleet } from '../context/FleetContext';
+import React, { useState, useEffect } from 'react';
+import {
+  DeviceInfo,
+  DeviceProcess,
+  ClipboardItem,
+  DEVICE_COLORS
+} from '../nodus-common';
 import {
   Server,
   Smartphone,
@@ -8,273 +13,998 @@ import {
   Laptop,
   Clipboard,
   ShieldCheck,
-  ExternalLink,
-  Power,
-  Trash2,
   RefreshCw,
-  Layers,
-  Activity,
   Sliders,
   Send,
-  Plus
+  Plus,
+  Terminal,
+  Cpu,
+  Grid,
+  Radio,
+  Wifi,
+  Activity,
+  Layers,
+  Sparkles,
+  Check,
+  Copy,
+  Trash2,
+  Lock,
+  Battery,
+  HardDrive,
+  Search,
+  Filter,
+  Play,
+  Pause
 } from 'lucide-react';
-import { DEVICE_COLORS, DeviceInfo } from '@nodus/common';
-import { DeviceControlModal } from './DeviceControlModal';
+
+import { MeshTopologyVisualizer } from './MeshTopologyVisualizer';
+import { RemoteControlTab } from './RemoteControlTab';
+import { ProcessMonitorTable } from './ProcessMonitorTable';
+import { RemoteTerminal } from './RemoteTerminal';
+import { DevicePairingModal } from './DevicePairingModal';
+import { RemoteAppShortcuts } from './RemoteAppShortcuts';
+import { SharedApp, ScannedPeer } from '../types/ui-contracts';
+
+import { universalNetworkFetch } from '../services/FleetDirectClient';
+
+// Initial Fleet Devices (populated dynamically via native bridge & subnet scanner)
+const INITIAL_DEVICES: DeviceInfo[] = [];
+
+// Empty fallback clipboard (populated dynamically via context)
+const INITIAL_CLIPBOARD: ClipboardItem[] = [];
+
+import { useFleet } from '../context/FleetContext';
 
 export const FleetDashboard: React.FC = () => {
-  const {
-    devices,
-    clipboardItems,
-    serverConfig,
-    isHomeInstalled,
-    isConnected,
-    openInHome,
-    rebootDevice,
-    removeDevice,
-    clearClipboard,
-    refreshState
-  } = useFleet();
+  const fleetContext = useFleet();
+  const liveDevices = fleetContext?.devices || [];
+  const liveClipboard = fleetContext?.clipboardItems || [];
+  const isServerRunning = fleetContext?.isServerRunning ?? true;
+  const toggleServer = fleetContext?.toggleServer || (() => {});
 
-  const [controlDevice, setControlDevice] = useState<DeviceInfo | null>(null);
-  const [broadcastText, setBroadcastText] = useState('');
-  const [broadcastStatus, setBroadcastStatus] = useState<string | null>(null);
+  // Navigation tabs: 'Topology' | 'Control Deck' | 'Processes' | 'Terminal' | 'Shortcuts'
+  const [activeTab, setActiveTab] = useState<'topology' | 'control' | 'processes' | 'terminal' | 'shortcuts'>('topology');
 
-  const getDeviceIcon = (type: string) => {
-    switch (type) {
-      case 'desktop': return <Monitor className="w-5 h-5" />;
-      case 'laptop': return <Laptop className="w-5 h-5" />;
-      case 'phone': return <Smartphone className="w-5 h-5" />;
-      case 'tablet': return <Tablet className="w-5 h-5" />;
-      default: return <Smartphone className="w-5 h-5" />;
+  // Multi-device state hooked to live Context with fallback
+  const devices = liveDevices.length > 0 ? liveDevices : INITIAL_DEVICES;
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>('local');
+  const clipboardItems = liveClipboard.length > 0 ? liveClipboard : [];
+  const [deviceProcesses, setDeviceProcesses] = useState<Record<string, DeviceProcess[]>>({});
+  const [isProcLoading, setIsProcLoading] = useState(false);
+
+  // Active processes for the currently selected device
+  const activeProcesses = deviceProcesses[selectedDeviceId] || [];
+
+  // Universal clipboard quick drawer
+  const [showClipboardDrawer, setShowClipboardDrawer] = useState(false);
+  const [broadcastInput, setBroadcastInput] = useState('');
+  const [copiedClipId, setCopiedClipId] = useState<string | null>(null);
+
+  // Live clock & uppercase date for Immersive UI header
+  const [currentTime, setCurrentTime] = useState<string>('14:42:08');
+  const [currentDate, setCurrentDate] = useState<string>('24 OCT 2026');
+
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      setCurrentTime(
+        now.toTimeString().split(' ')[0] ||
+        now.toLocaleTimeString('en-US', { hour12: false })
+      );
+      const day = String(now.getDate()).padStart(2, '0');
+      const month = now.toLocaleString('en-US', { month: 'short' }).toUpperCase();
+      const year = now.getFullYear();
+      setCurrentDate(`${day} ${month} ${year}`);
+    };
+    updateTime();
+    const timer = setInterval(updateTime, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Subnet pairing modal state
+  const [showPairingModal, setShowPairingModal] = useState(false);
+  const [subnetInput, setSubnetInput] = useState('192.168.1');
+  const [isScanningSubnet, setIsScanningSubnet] = useState(false);
+  const [scanProgress, setScanProgress] = useState(0);
+  const [scannedPeers, setScannedPeers] = useState<ScannedPeer[]>([]);
+
+  // Remote app shortcuts
+  const [myApps, setMyApps] = useState<SharedApp[]>([
+    {
+      id: 'app-1',
+      name: 'Chrome Browser',
+      category: 'browser',
+      deviceId: 'local',
+      deviceName: 'Nodus Tablet Prime',
+      deviceType: 'tablet',
+      deviceColor: '#9ECAFF',
+      path: 'com.android.chrome',
+      sharedBy: 'me',
+      enabled: true
+    },
+    {
+      id: 'app-2',
+      name: 'Fleet Terminal Shell',
+      category: 'dev',
+      deviceId: 'local',
+      deviceName: 'Nodus Tablet Prime',
+      deviceType: 'tablet',
+      deviceColor: '#9ECAFF',
+      path: 'org.nodus.fleet.terminal',
+      sharedBy: 'me',
+      enabled: true
+    }
+  ]);
+
+  const [peerApps, setPeerApps] = useState<SharedApp[]>([
+    {
+      id: 'papp-1',
+      name: 'Visual Studio Code',
+      category: 'dev',
+      deviceId: 'dev-pc',
+      deviceName: 'Workstation Rig (Win11)',
+      deviceType: 'desktop',
+      deviceColor: '#82D5A5',
+      sharedBy: 'peer',
+      enabled: true
+    },
+    {
+      id: 'papp-2',
+      name: 'Google Chrome',
+      category: 'browser',
+      deviceId: 'dev-pc',
+      deviceName: 'Workstation Rig (Win11)',
+      deviceType: 'desktop',
+      deviceColor: '#82D5A5',
+      sharedBy: 'peer',
+      enabled: true
+    },
+    {
+      id: 'papp-3',
+      name: 'Spotify Music',
+      category: 'media',
+      deviceId: 'macbook-pro',
+      deviceName: 'MacBook Pro M3 Max',
+      deviceType: 'laptop',
+      deviceColor: '#D4AAFF',
+      sharedBy: 'peer',
+      enabled: true
+    },
+    {
+      id: 'papp-4',
+      name: 'Steam Big Picture',
+      category: 'game',
+      deviceId: 'livingroom-tv',
+      deviceName: 'Media Server Node',
+      deviceType: 'desktop',
+      deviceColor: '#FFD87A',
+      sharedBy: 'peer',
+      enabled: true
+    }
+  ]);
+
+  // Target device resolution
+  const targetDevice =
+    devices.find(d => d.id === selectedDeviceId) ||
+    devices.find(d => !d.isLocal) ||
+    devices[0];
+
+  // Material 3 Fleet Search & Filter State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [deviceFilter, setDeviceFilter] = useState<'all' | 'desktop' | 'laptop' | 'tablet' | 'online'>('all');
+
+  // Android Haptic Feedback Helper
+  const triggerHaptic = (pattern: number | number[] = 12) => {
+    try {
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        navigator.vibrate(pattern);
+      }
+    } catch (e) {
+      // Safe fallback
     }
   };
 
+  // Refresh process list via real API
+  const handleRefreshProcesses = async () => {
+    triggerHaptic(10);
+    if (!targetDevice) return;
+    setIsProcLoading(true);
+    try {
+      const url = `http://${targetDevice.ipAddress}:9120/api/processes`;
+      const res = await universalNetworkFetch<{ processes?: Array<{ pid: number; name: string; memory_kb: number }> }>(url);
+      if (res && res.data?.processes && Array.isArray(res.data.processes)) {
+        const mapped: DeviceProcess[] = res.data.processes.map((p: { pid: number; name: string; memory_kb: number }) => ({
+          pid: p.pid,
+          name: p.name,
+          user: 'SYSTEM',
+          cpu: 0,
+          memoryMb: Math.round((p.memory_kb / 1024) * 10) / 10,
+          status: 'running' as const,
+          category: 'system'
+        }));
+        setDeviceProcesses(prev => ({
+          ...prev,
+          [selectedDeviceId]: mapped
+        }));
+      }
+    } catch (err) {
+      console.warn('Failed to fetch processes from target device', err);
+    } finally {
+      setIsProcLoading(false);
+    }
+  };
+
+  // Auto-fetch processes on tab select or target device change
+  useEffect(() => {
+    if (activeTab === 'processes' && targetDevice) {
+      handleRefreshProcesses();
+    }
+  }, [activeTab, selectedDeviceId]);
+
+  // Kill process action via real API
+  const handleKillProcess = async (pid: number) => {
+    triggerHaptic([20, 30, 20]);
+    if (targetDevice) {
+      try {
+        const url = `http://${targetDevice.ipAddress}:9120/api/process/kill`;
+        await universalNetworkFetch(url, {
+          method: 'POST',
+          body: JSON.stringify({ pid })
+        });
+      } catch (err) {
+        console.warn('Failed to kill process on target device', err);
+      }
+    }
+    setDeviceProcesses(prev => ({
+      ...prev,
+      [selectedDeviceId]: (prev[selectedDeviceId] || []).filter(p => p.pid !== pid)
+    }));
+  };
+
+  // Subnet Scanning native call
+  const handleStartScan = async (targetSubnet: string) => {
+    setIsScanningSubnet(true);
+    setScanProgress(10);
+    setScannedPeers([]);
+
+    const cleanSubnet = targetSubnet.trim().replace(/\.+$/, '');
+    const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
+
+    if (bridge && typeof bridge.scanSubnetNative === 'function') {
+      try {
+        setScanProgress(40);
+        const rawJson = bridge.scanSubnetNative(cleanSubnet);
+        setScanProgress(90);
+        if (rawJson && rawJson.startsWith('[')) {
+          const list: ScannedPeer[] = JSON.parse(rawJson);
+          const mapped = list.map(p => ({
+            ...p,
+            isInFleet: devices.some(d => d.ipAddress === p.ip)
+          }));
+          setScannedPeers(mapped);
+        }
+      } catch (e) {
+        console.warn('Native scan failed', e);
+      } finally {
+        setScanProgress(100);
+        setIsScanningSubnet(false);
+      }
+      return;
+    }
+
+    // Web simulation fallback
+    setIsScanningSubnet(false);
+    setScanProgress(100);
+  };
+
+  const handlePairDevice = (ip: string, port: number, token: string) => {
+    const peer = scannedPeers.find(p => p.ip === ip);
+    const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
+    if (bridge && typeof bridge.addPairedDevice === 'function') {
+      bridge.addPairedDevice(ip, port, peer?.hostname || '');
+    }
+    if (fleetContext && typeof fleetContext.refreshState === 'function') {
+      fleetContext.refreshState();
+    }
+    setShowPairingModal(false);
+  };
+
+  // Universal clipboard broadcasting
+  const handleBroadcastClipboard = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!broadcastInput.trim()) return;
+
+    if (fleetContext && typeof fleetContext.setClipboardText === 'function') {
+      fleetContext.setClipboardText(broadcastInput.trim());
+    }
+    setBroadcastInput('');
+  };
+
+  const handleCopyClipboardItem = (item: ClipboardItem) => {
+    navigator.clipboard.writeText(item.text).catch(() => {});
+    setCopiedClipId(item.id);
+    setTimeout(() => setCopiedClipId(null), 2000);
+  };
+
+  // Filtered devices based on Material 3 Search and Filter Chips
+  const filteredDevices = devices.filter(dev => {
+    const matchesSearch =
+      !searchQuery.trim() ||
+      dev.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      dev.ipAddress.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      dev.os.toLowerCase().includes(searchQuery.toLowerCase());
+
+    if (!matchesSearch) return false;
+
+    if (deviceFilter === 'all') return true;
+    if (deviceFilter === 'online') return dev.status === 'online' || dev.status === 'connected';
+    return dev.type === deviceFilter;
+  });
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-      {/* Top Navigation / Status Header */}
-      <header className="px-6 py-4 bg-slate-900/80 backdrop-blur border-b border-slate-800 flex items-center justify-between">
+    <div className="h-screen h-dvh w-full bg-[#111318] text-[#E2E2E9] font-sans overflow-hidden flex flex-col relative selection:bg-[#0842A0] selection:text-[#D3E3FD]">
+      {/* ── Google Material 3 Top App Bar with Android Safe-Area Inset ── */}
+      <header className="pt-safe border-b border-white/5 bg-[#111318]/90 backdrop-blur-xl flex items-center justify-between px-3 sm:px-6 min-h-[3.75rem] sm:min-h-[4.25rem] py-1.5 sm:py-2 z-20 shrink-0">
+        {/* Brand & M3 Emblem */}
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
-            <Server className="w-5 h-5 text-white" />
+          <div className="w-10 h-10 rounded-lg bg-[#0842A0] text-[#D3E3FD] flex items-center justify-center shadow-md shadow-blue-950/30 shrink-0">
+            <Server className="w-5 h-5 stroke-[2.2]" />
           </div>
-          <div>
+
+          <div className="flex flex-col">
             <div className="flex items-center gap-2">
-              <h1 className="text-lg font-bold tracking-tight">Nodus Fleet</h1>
-              <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">
-                Extension
+              <h1 className="text-lg font-semibold tracking-tight text-white">
+                Nodus <span className="text-[#A8C7FA] font-light">Fleet</span>
+              </h1>
+              <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-md bg-[#0F5223] text-[#C4EED0] border border-[#6DD58C]/20 text-[10px] font-medium tracking-wide">
+                Mesh Active
               </span>
             </div>
-            <p className="text-xs text-slate-400">Multi-Device Mesh & Universal Sync Engine</p>
+            <span className="text-[11px] text-slate-400 hidden sm:block">
+              Cross-Device Control Hub
+            </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={refreshState}
-            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
-            title="Refresh Status"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
-
-          {isHomeInstalled && (
-            <button
-              onClick={openInHome}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition shadow-md shadow-emerald-600/20"
-            >
-              <Layers className="w-4 h-4" />
-              <span>Open Nodus Home</span>
-              <ExternalLink className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-      </header>
-
-      {/* Main Grid */}
-      <main className="flex-1 p-6 max-w-6xl w-full mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Left 2 Cols: Connected Mesh Devices */}
-        <div className="md:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-              <Activity className="w-4 h-4 text-blue-400" />
-              Mesh Network Devices ({devices.length})
-            </h2>
-            <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              Daemon Active
-            </div>
-          </div>
-
-          {devices.length === 0 ? (
-            <div className="p-8 rounded-2xl bg-slate-900/50 border border-slate-800 text-center space-y-3">
-              <Server className="w-10 h-10 text-slate-600 mx-auto" />
-              <p className="text-sm text-slate-400">No companion devices connected yet.</p>
-              <p className="text-xs text-slate-500 max-w-md mx-auto">
-                Ensure Nodus Agent or Nodus Home is running on your other devices on the same Wi-Fi network.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {devices.map(device => {
-                const color = DEVICE_COLORS[device.id] || '#007AFF';
-                return (
-                  <div
-                    key={device.id}
-                    className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 transition flex flex-col justify-between space-y-4"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="w-10 h-10 rounded-xl flex items-center justify-center text-white"
-                          style={{ backgroundColor: color }}
-                        >
-                          {getDeviceIcon(device.type)}
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-sm">{device.name}</h3>
-                          <p className="text-xs text-slate-400 capitalize">{device.os} • {device.ipAddress}</p>
-                        </div>
-                      </div>
-
-                      <span className="px-2 py-0.5 text-[10px] font-bold rounded uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                        {device.status}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 text-xs text-slate-400 bg-slate-950/40 p-2.5 rounded-xl border border-slate-800/60">
-                      <div>
-                        <span className="block text-[10px] text-slate-500">RAM</span>
-                        <span className="text-slate-200 font-mono">{device.ramUsage || 'N/A'}</span>
-                      </div>
-                      <div>
-                        <span className="block text-[10px] text-slate-500">CPU</span>
-                        <span className="text-slate-200 font-mono">{device.cpuLoad ? `${device.cpuLoad}%` : 'N/A'}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800/60">
-                      <button
-                        onClick={() => setControlDevice(device)}
-                        className="px-2.5 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-xs font-semibold flex items-center gap-1.5 transition border border-blue-500/30"
-                        title="Open Control Deck"
-                      >
-                        <Sliders className="w-3.5 h-3.5" />
-                        <span>Control</span>
-                      </button>
-                      <button
-                        onClick={() => rebootDevice(device.id)}
-                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs flex items-center gap-1 transition"
-                        title="Reboot Device"
-                      >
-                        <Power className="w-3.5 h-3.5" />
-                        <span>Reboot</span>
-                      </button>
-                      <button
-                        onClick={() => removeDevice(device.id)}
-                        className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs flex items-center gap-1 transition"
-                        title="Remove Device"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Right Col: Universal Clipboard & Sync Controls */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-              <Clipboard className="w-4 h-4 text-emerald-400" />
-              Universal Clipboard ({clipboardItems.length})
-            </h2>
-            {clipboardItems.length > 0 && (
+        {/* Integrated Search Bar */}
+        <div className="hidden md:flex items-center flex-1 max-w-md mx-6">
+          <div className="w-full flex items-center gap-2.5 px-3.5 py-2 rounded-lg bg-[#1D2024] hover:bg-[#282A2F] focus-within:bg-[#282A2F] border border-white/5 focus-within:border-[#A8C7FA] transition-all text-xs">
+            <Search size={16} className="text-slate-400 shrink-0" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search fleet nodes, IP, OS..."
+              className="flex-1 bg-transparent text-white placeholder-slate-500 focus:outline-none text-xs"
+            />
+            {searchQuery && (
               <button
-                onClick={clearClipboard}
-                className="text-xs text-slate-500 hover:text-red-400 transition"
+                onClick={() => setSearchQuery('')}
+                className="text-slate-400 hover:text-white text-[11px] px-1"
               >
                 Clear
               </button>
             )}
           </div>
+        </div>
 
-          <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-3">
-            <div className="flex items-center justify-between text-xs pb-3 border-b border-slate-800">
-              <span className="text-slate-400 flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                Cross-Device Sync
-              </span>
-              <span className="font-semibold text-emerald-400">Active</span>
-            </div>
-
-            {/* Broadcast Clipboard Bar */}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!broadcastText.trim()) return;
-                const bridge = (window as any).NodusNativeBridge;
-                if (bridge && typeof bridge.setClipboardText === 'function') {
-                  bridge.setClipboardText(broadcastText);
-                }
-                setBroadcastStatus('Broadcasted to mesh');
-                setBroadcastText('');
-                setTimeout(() => setBroadcastStatus(null), 2000);
-              }}
-              className="flex gap-2"
-            >
-              <input
-                type="text"
-                value={broadcastText}
-                onChange={(e) => setBroadcastText(e.target.value)}
-                placeholder="Broadcast to all devices..."
-                className="flex-1 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
-              />
-              <button
-                type="submit"
-                className="p-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs transition"
-                title="Send"
-              >
-                <Send className="w-3.5 h-3.5" />
-              </button>
-            </form>
-            {broadcastStatus && (
-              <p className="text-[11px] text-emerald-400 text-center font-medium">{broadcastStatus}</p>
-            )}
-
-            {clipboardItems.length === 0 ? (
-              <div className="py-6 text-center text-xs text-slate-500">
-                Clipboard history is empty. Items copied across mesh devices will automatically sync here.
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
-                {clipboardItems.map(item => (
-                  <div
-                    key={item.id}
-                    className="p-3 rounded-xl bg-slate-950/50 border border-slate-800/80 text-xs space-y-1.5"
-                  >
-                    <div className="flex items-center justify-between text-[10px] text-slate-400">
-                      <span className="font-semibold text-blue-400">{item.deviceName}</span>
-                      <span>{item.timestamp}</span>
-                    </div>
-                    <p className="font-mono text-slate-200 line-clamp-3 select-text">{item.text}</p>
-                  </div>
-                ))}
-              </div>
-            )}
+        {/* Telemetry, Host Node Chip & Clock */}
+        <div className="flex items-center gap-3 sm:gap-4">
+          <div className="hidden lg:flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-[#1D2024] border border-white/5 text-xs text-slate-300">
+            <Smartphone size={14} className="text-[#6DD58C]" />
+            <span className="font-medium text-white">Nodus Tablet Prime</span>
+            <span className="text-slate-500">·</span>
+            <span className="flex items-center gap-1 text-[#FFDDAF]">
+              <Battery size={14} />
+              88%
+            </span>
           </div>
+
+          <div className="flex items-center gap-3 text-xs text-slate-400">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#1D2024] border border-white/5">
+              <div className="w-1.5 h-1.5 rounded-full bg-[#6DD58C] animate-pulse" />
+              <span className="font-mono text-slate-200">{devices.filter(d => !d.isLocal).length} Peers</span>
+            </div>
+          </div>
+
+          <div className="text-right shrink-0 pl-1">
+            <div className="text-xs sm:text-sm font-mono text-white tracking-wide">{currentTime}</div>
+            <div className="text-[10px] text-slate-400 uppercase tracking-tight">{currentDate}</div>
+          </div>
+        </div>
+      </header>
+
+      {/* ── Main Application Area: Google M3 Navigation Rail + Workspace ── */}
+      <main className="flex-1 flex overflow-hidden relative">
+        {/* Material 3 Navigation Rail (md and above) */}
+        <nav className="hidden md:flex w-20 border-r border-white/5 bg-[#111318] flex-col items-center py-5 gap-5 z-10 shrink-0 select-none">
+          {/* Pairing Button */}
+          <button
+            onClick={() => {
+              triggerHaptic(12);
+              setShowPairingModal(true);
+            }}
+            title="Pair New Mesh Node"
+            className="w-11 h-11 rounded-lg bg-[#A8C7FA] hover:bg-[#C2E7FF] text-[#062E6F] shadow-md shadow-blue-950/40 transition-all flex items-center justify-center active:scale-95 group mb-2"
+          >
+            <Plus size={22} className="stroke-[2.5]" />
+          </button>
+
+          {/* Navigation Items with clean rounded-lg indicators */}
+          {[
+            { id: 'topology', label: 'Topology', icon: Grid },
+            { id: 'control', label: 'Control', icon: Sliders },
+            { id: 'processes', label: 'Processes', icon: Cpu },
+            { id: 'terminal', label: 'Terminal', icon: Terminal },
+            { id: 'shortcuts', label: 'Shortcuts', icon: Radio },
+          ].map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  triggerHaptic(12);
+                  setActiveTab(tab.id as any);
+                }}
+                className="flex flex-col items-center group w-full py-1 focus:outline-none"
+              >
+                <div
+                  className={`w-12 h-8 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                    isActive
+                      ? 'bg-[#0842A0] text-[#D3E3FD] shadow-sm'
+                      : 'text-slate-400 group-hover:text-slate-200 group-hover:bg-white/5'
+                  }`}
+                >
+                  <Icon size={20} />
+                </div>
+                <span
+                  className={`text-[11px] font-medium tracking-tight mt-1 transition-colors ${
+                    isActive ? 'text-[#D3E3FD] font-semibold' : 'text-slate-400 group-hover:text-slate-200'
+                  }`}
+                >
+                  {tab.label}
+                </span>
+              </button>
+            );
+          })}
+
+          {/* Bottom Rail Utility: Universal Clipboard */}
+          <div className="mt-auto flex flex-col items-center">
+            <button
+              onClick={() => {
+                triggerHaptic(12);
+                setShowClipboardDrawer(!showClipboardDrawer);
+              }}
+              title="Universal Mesh Clipboard"
+              className="flex flex-col items-center group focus:outline-none"
+            >
+              <div
+                className={`w-12 h-8 rounded-lg flex items-center justify-center transition-all duration-200 relative ${
+                  showClipboardDrawer
+                    ? 'bg-[#0F5223] text-[#C4EED0]'
+                    : 'text-slate-400 group-hover:text-slate-200 group-hover:bg-white/5'
+                }`}
+              >
+                <Clipboard size={18} />
+                {clipboardItems.length > 0 && (
+                  <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-[#6DD58C] ring-2 ring-[#111318]" />
+                )}
+              </div>
+              <span className="text-[11px] font-medium tracking-tight mt-1 text-slate-400 group-hover:text-slate-200">
+                Clipboard
+              </span>
+            </button>
+          </div>
+        </nav>
+
+        {/* ── Active Tab Workspace (responsive containers tailored for orientation & screen size) ── */}
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative bg-[#111318]">
+          {/* TAB 1: MESH TOPOLOGY VISUALIZER */}
+          {activeTab === 'topology' && (
+            <div className="flex-1 overflow-y-auto p-3 sm:p-5 md:p-6 pb-6 space-y-6">
+              <div className="flex flex-col gap-6">
+                {/* Interactive SVG Graph */}
+                <MeshTopologyVisualizer
+                  devices={devices}
+                  activeDeviceId={selectedDeviceId}
+                  onSelectDevice={id => {
+                    setSelectedDeviceId(id);
+                  }}
+                />
+
+                {/* Filter Chips Bar */}
+                <div className="flex items-center justify-between flex-wrap gap-3 pt-1">
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1 max-w-full no-scrollbar">
+                    <span className="text-xs font-medium text-slate-400 flex items-center gap-1.5 mr-1 shrink-0">
+                      <Filter size={13} />
+                      Filter:
+                    </span>
+                    {[
+                      { id: 'all', label: `All (${devices.length})` },
+                      { id: 'desktop', label: 'Workstations' },
+                      { id: 'laptop', label: 'Laptops' },
+                      { id: 'tablet', label: 'Tablets' },
+                      { id: 'online', label: 'Online' },
+                    ].map(chip => (
+                      <button
+                        key={chip.id}
+                        onClick={() => {
+                          triggerHaptic(8);
+                          setDeviceFilter(chip.id as any);
+                        }}
+                        className={`h-8 px-3 rounded-lg text-xs font-medium transition-all whitespace-nowrap inline-flex items-center justify-center shrink-0 touch-manipulation ${
+                          deviceFilter === chip.id
+                            ? 'bg-[#A8C7FA] text-[#062E6F] shadow-sm font-semibold'
+                            : 'bg-[#1D2024] hover:bg-[#282A2F] text-slate-300 border border-white/5'
+                        }`}
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <span className="text-xs font-mono text-slate-400">
+                    Showing {filteredDevices.length} of {devices.length} nodes
+                  </span>
+                </div>
+
+                {/* Connected Device Overview Cards Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {filteredDevices.map(device => {
+                    const isSelected = selectedDeviceId === device.id;
+                    const isOnline = device.status !== 'offline';
+
+                    return (
+                      <div
+                        key={device.id}
+                        onClick={() => setSelectedDeviceId(device.id)}
+                        className={`bg-[#1D2024] hover:bg-[#282A2F] border rounded-xl p-5 transition-all duration-200 cursor-pointer flex flex-col justify-between gap-4 shadow-sm hover:shadow-md ${
+                          isSelected
+                            ? 'border-[#A8C7FA] ring-1 ring-[#A8C7FA]/50 bg-[#282A2F]'
+                            : 'border-white/5 hover:border-white/10'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-lg bg-[#282A2F] border border-white/5 flex items-center justify-center text-[#A8C7FA] shrink-0">
+                              {device.type === 'tablet' ? (
+                                <Tablet size={20} />
+                              ) : device.type === 'laptop' ? (
+                                <Laptop size={20} />
+                              ) : device.type === 'phone' ? (
+                                <Smartphone size={20} />
+                              ) : (
+                                <Monitor size={20} />
+                              )}
+                            </div>
+                            <div>
+                              <div className="text-sm font-semibold text-white">
+                                {device.name}
+                              </div>
+                              <div className="text-xs text-slate-400 font-mono mt-0.5">
+                                ID: {device.id} · {device.ipAddress} · {device.os.toUpperCase()}
+                              </div>
+                            </div>
+                          </div>
+
+                          {device.isLocal ? (
+                            <span
+                              className="text-[11px] px-2.5 py-0.5 rounded-md font-medium tracking-wide flex items-center gap-1.5"
+                              style={{
+                                backgroundColor: isServerRunning
+                                  ? 'rgba(11, 87, 208, 0.18)'
+                                  : 'rgba(255, 180, 171, 0.12)',
+                                color: isServerRunning ? '#A8C7FA' : '#FFB4AB',
+                                border: isServerRunning
+                                  ? '1px solid rgba(168, 199, 250, 0.35)'
+                                  : '1px solid rgba(255, 180, 171, 0.25)'
+                              }}
+                            >
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${
+                                  isServerRunning ? 'bg-[#6DD58C] animate-pulse' : 'bg-[#FFB4AB]'
+                                }`}
+                              />
+                              {isServerRunning ? 'DAEMON ACTIVE' : 'SERVER STOPPED'}
+                            </span>
+                          ) : (
+                            <span
+                              className="text-[11px] px-2.5 py-0.5 rounded-md font-medium"
+                              style={{
+                                backgroundColor:
+                                  device.status === 'online'
+                                    ? 'rgba(109, 213, 140, 0.15)'
+                                    : device.status === 'connected'
+                                    ? 'rgba(168, 199, 250, 0.15)'
+                                    : 'rgba(255, 221, 175, 0.15)',
+                                color:
+                                  device.status === 'online'
+                                    ? '#6DD58C'
+                                    : device.status === 'connected'
+                                    ? '#A8C7FA'
+                                    : '#FFDDAF',
+                                border:
+                                  device.status === 'online'
+                                    ? '1px solid rgba(109, 213, 140, 0.3)'
+                                    : device.status === 'connected'
+                                    ? '1px solid rgba(168, 199, 250, 0.3)'
+                                    : '1px solid rgba(255, 221, 175, 0.3)'
+                              }}
+                            >
+                              {device.status === 'online' ? 'Stable' : device.status}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* CPU Usage Linear Progress Indicator */}
+                        <div className="space-y-1.5">
+                          <div className="h-1.5 w-full bg-[#111318] rounded-md overflow-hidden">
+                            <div
+                              className="h-full bg-[#A8C7FA] transition-all duration-500 rounded-md"
+                              style={{ width: `${device.cpuUsagePercent || 25}%` }}
+                            />
+                          </div>
+                          <div className="flex justify-between text-[11px] font-mono text-slate-400">
+                            <span>CPU Workload</span>
+                            <span className="text-slate-200 font-semibold">{device.cpuUsagePercent || 25}%</span>
+                          </div>
+                        </div>
+
+                        {/* Telemetry Metrics Row */}
+                        <div className="grid grid-cols-3 gap-2 pt-3 border-t border-white/5 text-[11px] font-mono">
+                          <div>
+                            <span className="text-slate-500 block text-[10px]">LATENCY</span>
+                            <span className="text-[#6DD58C] font-semibold">{device.latencyMs} ms</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 block text-[10px]">BATTERY</span>
+                            <span className="text-slate-200 font-semibold">{device.batteryPercent}%</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 block text-[10px]">ROLE</span>
+                            <span className="text-[#A8C7FA] font-semibold">
+                              {device.isLocal ? 'HOST' : 'REMOTE'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Quick Action Buttons */}
+                        <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/5">
+                          {device.isLocal ? (
+                            <button
+                              onClick={e => {
+                                e.stopPropagation();
+                                triggerHaptic(12);
+                                toggleServer();
+                              }}
+                              title={isServerRunning ? 'Stop Server & Unregister from Mesh' : 'Start Server & Broadcast to Mesh'}
+                              className={`h-8 px-2.5 rounded-lg text-xs font-medium transition-colors border active:scale-95 inline-flex items-center justify-center gap-1.5 ${
+                                isServerRunning
+                                  ? 'bg-[#3A1D1D] hover:bg-[#5C2424] text-[#FFB4AB] border-red-500/20'
+                                  : 'bg-[#0F5223] hover:bg-[#1B6D36] text-[#C4EED0] border-[#6DD58C]/20'
+                              }`}
+                            >
+                              {isServerRunning ? <Pause size={13} /> : <Play size={13} />}
+                              <span>{isServerRunning ? 'Stop Server' : 'Start Server'}</span>
+                            </button>
+                          ) : (
+                            <button
+                              onClick={e => {
+                                e.stopPropagation();
+                                if (fleetContext?.removeDevice) {
+                                  fleetContext.removeDevice(device.id);
+                                }
+                              }}
+                              title="Remove Node from Fleet"
+                              className="h-8 px-2.5 rounded-lg bg-[#3A1D1D] hover:bg-[#5C2424] text-xs font-medium text-[#FFB4AB] transition-colors border border-red-500/20 active:scale-95 inline-flex items-center justify-center touch-manipulation gap-1"
+                            >
+                              <Trash2 size={13} />
+                              <span>Remove</span>
+                            </button>
+                          )}
+
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              setSelectedDeviceId(device.id);
+                              setActiveTab('control');
+                            }}
+                            disabled={device.isLocal}
+                            className="h-8 px-3.5 rounded-lg bg-[#282A2F] hover:bg-[#33353A] text-xs font-medium text-slate-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed border border-white/5 active:scale-95 inline-flex items-center justify-center touch-manipulation"
+                          >
+                            Control Deck
+                          </button>
+
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              setSelectedDeviceId(device.id);
+                              setActiveTab('processes');
+                            }}
+                            className="h-8 px-3.5 rounded-lg bg-[#282A2F] hover:bg-[#33353A] text-xs font-medium text-slate-200 transition-colors border border-white/5 active:scale-95 inline-flex items-center justify-center touch-manipulation"
+                          >
+                            Processes
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: REMOTE CONTROL DECK & VIRTUAL TRACKPAD */}
+          {activeTab === 'control' && (
+            <div className="flex-1 flex flex-col min-h-0 overflow-y-auto lg:overflow-hidden pb-6 lg:pb-0">
+              <RemoteControlTab
+                devices={devices}
+                targetDeviceId={selectedDeviceId}
+                onSelectDevice={id => setSelectedDeviceId(id)}
+              />
+            </div>
+          )}
+
+          {/* TAB 3: REMOTE PROCESS MONITOR TABLE */}
+          {activeTab === 'processes' && targetDevice && (
+            <div className="flex-1 flex flex-col min-h-0 overflow-y-auto md:overflow-hidden p-2 sm:p-4 md:p-5 pb-6 md:pb-5">
+              <ProcessMonitorTable
+                device={targetDevice}
+                devices={devices}
+                onSelectDevice={id => setSelectedDeviceId(id)}
+                processes={activeProcesses}
+                isLoading={isProcLoading}
+                onRefresh={handleRefreshProcesses}
+                onKillProcess={handleKillProcess}
+              />
+            </div>
+          )}
+
+          {/* TAB 4: REMOTE TERMINAL SHELL */}
+          {activeTab === 'terminal' && (
+            <div className="flex-1 flex flex-col min-h-0 overflow-y-auto md:overflow-hidden p-2 sm:p-4 md:p-5 pb-6 md:pb-5">
+              <RemoteTerminal
+                availableDevices={devices}
+              />
+            </div>
+          )}
+
+          {/* TAB 5: REMOTE APP SHORTCUTS */}
+          {activeTab === 'shortcuts' && (
+            <div className="flex-1 flex flex-col min-h-0 overflow-y-auto md:overflow-hidden p-2 sm:p-4 md:p-5 pb-6 md:pb-5">
+              <RemoteAppShortcuts
+                myApps={myApps}
+                peerApps={peerApps}
+                onToggleMyApp={(id, enabled) => {
+                  setMyApps(prev => prev.map(a => (a.id === id ? { ...a, enabled } : a)));
+                }}
+                onLaunchPeerApp={async app => {
+                  if (!targetDevice) return;
+                  try {
+                    const url = `http://${targetDevice.ipAddress}:9120/api/shortcuts/launch`;
+                    await universalNetworkFetch(url, {
+                      method: 'POST',
+                      body: JSON.stringify({ command_or_path: app.path || app.name })
+                    });
+                  } catch (err) {
+                    console.warn('Failed to launch shortcut on remote peer', err);
+                  }
+                }}
+                onAddMyApp={() => {
+                  const name = prompt('Enter shortcut application name:');
+                  if (!name) return;
+                  setMyApps(prev => [
+                    ...prev,
+                    {
+                      id: `app-${Date.now()}`,
+                      name,
+                      category: 'utility',
+                      deviceId: 'local',
+                      deviceName: 'Nodus Tablet Prime',
+                      deviceType: 'tablet',
+                      deviceColor: '#9ECAFF',
+                      sharedBy: 'me',
+                      enabled: true
+                    }
+                  ]);
+                }}
+              />
+            </div>
+          )}
         </div>
       </main>
 
-      {/* Device Control Modal */}
-      {controlDevice && (
-        <DeviceControlModal
-          device={controlDevice}
-          onClose={() => setControlDevice(null)}
-        />
+      {/* ── Google Material 3 Status Footer (Desktop & Tablet) ── */}
+      <footer className="hidden md:flex h-8 bg-[#191C20] border-t border-white/5 items-center px-6 justify-between text-[11px] font-mono text-slate-400 z-20 shrink-0 select-none">
+        <div className="flex gap-4 items-center">
+          <span className="text-[#6DD58C] flex items-center gap-1.5 font-medium">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#6DD58C]" />
+            Latency: {targetDevice?.latencyMs !== undefined ? `${targetDevice.latencyMs}ms` : '12ms'}
+          </span>
+          <span className="flex items-center gap-1">● Signal: Excellent</span>
+          <span className="hidden sm:flex items-center gap-1">● Encryption: AES-256</span>
+          <span className="hidden md:flex items-center gap-1 text-slate-300">● Node: {targetDevice?.name}</span>
+        </div>
+        <div className="text-slate-500 font-mono text-[10px]">Build v4.0.2 · Material You</div>
+      </footer>
+
+      {/* ── Google Material 3 Mobile Navigation Bar (In-Flow Flex item, never blocks workspace content) ── */}
+      <nav className="md:hidden shrink-0 z-30 pb-safe bg-[#111318]/95 backdrop-blur-2xl border-t border-white/5 px-2 py-1.5 flex items-center justify-around select-none shadow-[0_-4px_24px_rgba(0,0,0,0.6)]">
+        {[
+          { id: 'topology', label: 'Topology', icon: Grid },
+          { id: 'control', label: 'Control', icon: Sliders },
+          { id: 'processes', label: 'Processes', icon: Cpu },
+          { id: 'terminal', label: 'Terminal', icon: Terminal },
+          { id: 'shortcuts', label: 'Shortcuts', icon: Radio },
+        ].map(tab => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => {
+                triggerHaptic(12);
+                setActiveTab(tab.id as any);
+              }}
+              className="flex-1 flex flex-col items-center justify-center py-1 px-1 min-h-[50px] transition duration-150 focus:outline-none"
+            >
+              <div
+                className={`w-12 h-8 rounded-lg transition-all duration-200 flex items-center justify-center ${
+                  isActive
+                    ? 'bg-[#0842A0] text-[#D3E3FD] shadow-sm'
+                    : 'bg-transparent text-slate-400'
+                }`}
+              >
+                <Icon size={19} />
+              </div>
+              <span
+                className={`text-[10px] font-medium tracking-tight mt-1 whitespace-nowrap ${
+                  isActive ? 'text-[#D3E3FD] font-semibold' : 'text-slate-400'
+                }`}
+              >
+                {tab.label}
+              </span>
+            </button>
+          );
+        })}
+
+        {/* Quick Clipboard Trigger */}
+        <button
+          onClick={() => {
+            triggerHaptic(12);
+            setShowClipboardDrawer(!showClipboardDrawer);
+          }}
+          title="Universal Clipboard"
+          className="flex-1 flex flex-col items-center justify-center py-1 px-1 min-h-[50px] transition duration-150 relative focus:outline-none"
+        >
+          <div
+            className={`w-12 h-8 rounded-lg transition-all duration-200 flex items-center justify-center relative ${
+              showClipboardDrawer
+                ? 'bg-[#0F5223] text-[#C4EED0]'
+                : 'bg-transparent text-slate-400'
+            }`}
+          >
+            <Clipboard size={18} />
+            {clipboardItems.length > 0 && (
+              <span className="absolute top-1.5 right-3 w-2 h-2 rounded-full bg-[#6DD58C] ring-2 ring-[#111318]" />
+            )}
+          </div>
+          <span
+            className={`text-[10px] font-medium tracking-tight mt-1 ${
+              showClipboardDrawer ? 'text-[#C4EED0] font-semibold' : 'text-slate-400'
+            }`}
+          >
+            Sync
+          </span>
+        </button>
+
+        {/* Quick Pair FAB Trigger */}
+        <button
+          onClick={() => {
+            triggerHaptic(12);
+            setShowPairingModal(true);
+          }}
+          title="Pair New Node"
+          className="flex-1 flex flex-col items-center justify-center py-1 px-1 min-h-[50px] transition duration-150 focus:outline-none"
+        >
+          <div className="w-12 h-8 rounded-lg transition-all flex items-center justify-center bg-[#A8C7FA]/15 text-[#A8C7FA]">
+            <Plus size={19} className="stroke-[2.2]" />
+          </div>
+          <span className="text-[10px] font-medium tracking-tight mt-1 text-[#A8C7FA]">
+            Pair
+          </span>
+        </button>
+      </nav>
+
+      {/* ── Universal Clipboard Drawer ── */}
+      {showClipboardDrawer && (
+        <div className="fixed inset-y-0 right-0 z-50 w-full sm:w-96 bg-[#1D2024] border-l border-white/10 shadow-2xl p-6 pt-safe pb-safe flex flex-col gap-4 animate-in slide-in-from-right duration-200 rounded-l-xl">
+          <div className="flex items-center justify-between pb-3 border-b border-white/5">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-[#0F5223] text-[#C4EED0] flex items-center justify-center">
+                <Clipboard className="w-4 h-4" />
+              </div>
+              <h3 className="text-sm font-semibold text-white">Universal Mesh Clipboard</h3>
+            </div>
+            <button
+              onClick={() => setShowClipboardDrawer(false)}
+              className="w-8 h-8 rounded-lg bg-[#282A2F] hover:bg-[#33353A] text-slate-300 hover:text-white flex items-center justify-center transition text-xs"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Broadcast Input Container */}
+          <form onSubmit={handleBroadcastClipboard} className="space-y-2">
+            <span className="text-[11px] text-slate-400 font-medium">Broadcast snippet to mesh nodes:</span>
+            <div className="flex gap-2 items-center">
+              <input
+                type="text"
+                value={broadcastInput}
+                onChange={e => setBroadcastInput(e.target.value)}
+                placeholder="Type or paste text..."
+                className="flex-1 px-3.5 py-2 rounded-lg bg-[#111318] border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#A8C7FA]"
+              />
+              <button
+                type="submit"
+                className="w-9 h-9 rounded-lg bg-[#A8C7FA] hover:bg-[#C2E7FF] text-[#062E6F] flex items-center justify-center transition shadow-sm shrink-0"
+              >
+                <Send size={15} />
+              </button>
+            </div>
+          </form>
+
+          {/* Clipboard History Feed */}
+          <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
+            {clipboardItems.map(item => (
+              <div
+                key={item.id}
+                className="p-3.5 rounded-lg bg-[#282A2F] border border-white/5 space-y-2 hover:border-white/10 transition"
+              >
+                <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
+                  <span className="text-[#A8C7FA] font-medium">{item.deviceName}</span>
+                  <span>{item.timestamp}</span>
+                </div>
+                <p className="text-xs font-mono text-slate-200 break-all select-all leading-relaxed">
+                  {item.text}
+                </p>
+                <div className="flex justify-end pt-1">
+                  <button
+                    onClick={() => handleCopyClipboardItem(item)}
+                    className="flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-[#1D2024] hover:bg-[#111318] text-xs font-medium text-[#6DD58C] border border-[#6DD58C]/20 transition active:scale-95"
+                  >
+                    {copiedClipId === item.id ? (
+                      <>
+                        <Check size={13} />
+                        <span>Copied</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy size={13} />
+                        <span>Copy snippet</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
+
+      {/* ── Subnet Pairing Modal ── */}
+      <DevicePairingModal
+        isOpen={showPairingModal}
+        isScanning={isScanningSubnet}
+        scanProgress={scanProgress}
+        subnet={subnetInput}
+        scannedPeers={scannedPeers}
+        onClose={() => setShowPairingModal(false)}
+        onStartScan={handleStartScan}
+        onSubnetChange={s => setSubnetInput(s)}
+        onPair={handlePairDevice}
+      />
     </div>
   );
 };

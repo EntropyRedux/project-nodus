@@ -1,45 +1,31 @@
 import React, { useState } from 'react';
-import { 
-  Clipboard, 
-  Copy, 
-  Check, 
-  Pin, 
-  Trash2, 
-  Search, 
-  Send, 
-  X, 
-  Tablet, 
-  Monitor,
-  Sparkles,
-  Link,
-  Code,
-  FileText,
-  Image as ImageIcon
-} from 'lucide-react';
-import { useDesktop } from '../../context/DesktopContext';
+import { useClipboardStore } from '../../stores/useClipboardStore';
 import { ClipboardItem } from '../../types/desktop';
 import { TauriService } from '../../services/TauriCommands';
 
+function Icon({ name, size = 18, style }: { name: string; size?: number; style?: React.CSSProperties }) {
+  return (
+    <span className="material-symbols-rounded" style={{ fontSize: size, lineHeight: 1, ...style }}>
+      {name}
+    </span>
+  );
+}
+
 export const ClipboardPanel: React.FC = () => {
-  const { 
-    clipboardItems, 
-    addClipboardItem, 
-    removeClipboardItem, 
-    togglePinClipboardItem, 
-    clearClipboardHistory, 
-    setActiveTab 
-  } = useDesktop();
+  const {
+    items: clipboardItems,
+    deleteClip: removeClipboardItem,
+    togglePin: togglePinClipboardItem,
+    clearUnpinned: clearClipboardHistory,
+  } = useClipboardStore();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterDevice, setFilterDevice] = useState<string>('all');
   const [inputText, setInputText] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const filteredItems = clipboardItems.filter((item) => {
-    const matchesSearch = item.text.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesDevice = filterDevice === 'all' || item.deviceId === filterDevice;
-    return matchesSearch && matchesDevice;
-  });
+  const filteredItems = clipboardItems.filter((item) =>
+    item.text.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const handleCopy = async (item: ClipboardItem) => {
     try {
@@ -66,172 +52,257 @@ export const ClipboardPanel: React.FC = () => {
     setInputText('');
   };
 
-  const getItemIcon = (type: ClipboardItem['type']) => {
+  const getItemTypeBadge = (type: ClipboardItem['type']) => {
     switch (type) {
-      case 'link': return <Link size={12} className="text-[#007AFF]" />;
-      case 'code': return <Code size={12} className="text-[#34C759]" />;
-      case 'image': return <ImageIcon size={12} className="text-[#FF9500]" />;
-      default: return <FileText size={12} className="text-[#8E8E93]" />;
+      case 'link':
+        return { label: 'LINK', bg: '#0078D4', color: '#FFFFFF' };
+      case 'code':
+        return { label: 'CODE', bg: '#34A853', color: '#FFFFFF' };
+      case 'image':
+        return { label: 'IMAGE', bg: '#F57C00', color: '#FFFFFF' };
+      default:
+        return { label: 'TEXT', bg: 'var(--m3-surface-container-high)', color: 'var(--m3-on-surface-variant)' };
     }
   };
 
   return (
-    <aside
-      className="w-full h-full bg-[#121218] border border-white/10 rounded-3xl flex flex-col overflow-hidden select-none shadow-2xl"
-    >
-
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Header */}
-      <div className="p-4 border-b border-white/10 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-[#007AFF]/20 border border-[#007AFF]/40 flex items-center justify-center text-[#007AFF]">
-            <Clipboard size={16} />
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+          <div style={{ width: 30, height: 30, borderRadius: 10, background: 'var(--m3-primary-container)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Icon name="content_paste" size={16} style={{ color: 'var(--m3-on-primary-container)' }} />
           </div>
-          <div>
-            <h2 className="text-sm font-semibold tracking-wide text-[#F0F0F2]">Universal Clipboard</h2>
-            <p className="text-[11px] text-[#8E8E93]">Sync Across Windows & Tablet</p>
-          </div>
+          <h1 style={{ fontSize: 18, fontWeight: 400, color: 'var(--m3-on-background)' }}>
+            Universal Clipboard Hub
+          </h1>
         </div>
-        <button
-          onClick={() => setActiveTab('fleet')}
-          className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 text-[#8E8E93] hover:text-white flex items-center justify-center transition-colors"
-        >
-          <X size={15} />
-        </button>
+        <p style={{ fontSize: 12, color: 'var(--m3-on-surface-variant)', marginLeft: 40 }}>
+          Real-time bi-directional clipboard sync between Windows host and connected tablet fleet
+        </p>
       </div>
 
-      {/* Quick Input Bar */}
-      <form onSubmit={handleBroadcast} className="p-3 border-b border-white/10 flex gap-2">
-        <input
-          type="text"
-          placeholder="Broadcast text or clip..."
-          value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
-          className="flex-1 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-xs text-[#F0F0F2] placeholder-[#8E8E93] outline-none focus:border-[#007AFF] transition-colors"
-        />
-        <button
-          type="submit"
-          disabled={!inputText.trim()}
-          className="px-3 py-1.5 rounded-xl bg-[#007AFF] hover:bg-[#007AFF]/90 disabled:opacity-40 text-white text-xs font-semibold flex items-center gap-1 transition-all"
-        >
-          <Send size={12} />
-        </button>
-      </form>
-
-      {/* Search & Filters */}
-      <div className="px-3 pt-2.5 pb-1.5 flex items-center gap-2">
-        <div className="flex-1 relative flex items-center">
-          <Search size={12} className="absolute left-2.5 text-[#8E8E93]" />
+      {/* Broadcast Bar */}
+      <div
+        style={{
+          background: 'var(--m3-surface-container-lowest)',
+          border: '1px solid var(--m3-surface-container-high)',
+          borderRadius: 12,
+          padding: '12px',
+        }}
+      >
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: 'var(--m3-on-surface-variant)', marginBottom: 8 }}>BROADCAST TO FLEET</div>
+        <form onSubmit={handleBroadcast} style={{ display: 'flex', gap: 8 }}>
           <input
-            type="text"
-            placeholder="Filter clips..."
+            value={inputText}
+            onChange={e => setInputText(e.target.value)}
+            placeholder="Type or paste text to broadcast to tablet..."
+            style={{
+              flex: 1,
+              background: 'var(--m3-surface-container-low)',
+              border: '1px solid var(--m3-outline-variant)',
+              borderRadius: 10,
+              padding: '9px 12px',
+              fontSize: 13,
+              fontFamily: 'Roboto, sans-serif',
+              color: 'var(--m3-on-surface)',
+              outline: 'none',
+            }}
+          />
+          <button
+            type="submit"
+            disabled={!inputText.trim()}
+            style={{
+              background: 'var(--m3-primary)',
+              color: 'var(--m3-on-primary)',
+              border: 'none',
+              borderRadius: 10,
+              padding: '0 16px',
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              fontFamily: 'Roboto, sans-serif',
+              opacity: !inputText.trim() ? 0.5 : 1,
+            }}
+          >
+            <Icon name="send" size={15} />
+            Broadcast
+          </button>
+        </form>
+      </div>
+
+      {/* Search & Actions */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <div style={{ position: 'relative', flex: 1 }}>
+          <Icon name="search" size={15} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--m3-on-surface-variant)', pointerEvents: 'none' }} />
+          <input
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-7 pr-2 py-1 rounded-lg bg-white/5 text-[11px] text-[#F0F0F2] placeholder-[#8E8E93] border border-white/10 outline-none"
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Filter clips..."
+            style={{
+              width: '100%',
+              background: 'var(--m3-surface-container-low)',
+              border: '1px solid var(--m3-outline-variant)',
+              borderRadius: 10,
+              padding: '8px 12px 8px 30px',
+              fontSize: 13,
+              fontFamily: 'Roboto, sans-serif',
+              color: 'var(--m3-on-surface)',
+              outline: 'none',
+              boxSizing: 'border-box',
+            }}
           />
         </div>
         <button
           onClick={clearClipboardHistory}
-          title="Clear unpinned clips"
-          className="px-2 py-1 rounded-lg bg-white/5 hover:bg-[#FF3B30]/20 text-[#8E8E93] hover:text-[#FF3B30] text-[10px] flex items-center gap-1 transition-colors"
+          style={{
+            background: 'transparent',
+            border: '1px solid var(--m3-outline-variant)',
+            borderRadius: 10,
+            padding: '8px 14px',
+            fontSize: 12,
+            fontWeight: 500,
+            color: 'var(--m3-error)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+            fontFamily: 'Roboto, sans-serif',
+          }}
         >
-          <Trash2 size={11} /> Clear
+          <Icon name="delete" size={15} />
+          Clear Unpinned
         </button>
       </div>
 
-      {/* Clips List */}
-      <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
+      {/* Clip Cards List */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {filteredItems.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center p-6 text-[#8E8E93]">
-            <Clipboard size={32} className="mb-2 opacity-30" />
-            <p className="text-xs font-medium">No clipboard items yet</p>
-            <p className="text-[11px] opacity-70 mt-0.5">Copy text on Windows or POCO Pad to see it here</p>
+          <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--m3-on-surface-variant)' }}>
+            <Icon name="content_paste_off" size={40} style={{ opacity: 0.25, display: 'block', margin: '0 auto 8px' }} />
+            <span style={{ fontSize: 14 }}>No clipboard items found</span>
           </div>
         ) : (
-          filteredItems.map((item) => (
-            <div
-              key={item.id}
-              className={`p-3 rounded-2xl bg-white/5 border border-white/10 hover:border-white/20 flex flex-col gap-2 transition-all ${
-                item.pinned ? 'ring-1 ring-[#FF9500]/50' : ''
-              }`}
-            >
-              {/* Card Header */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  {getItemIcon(item.type)}
-                  <span
-                    className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
-                    style={{
-                      backgroundColor: `${item.deviceColor}22`,
-                      color: item.deviceColor,
-                    }}
-                  >
-                    {item.deviceName}
+          filteredItems.map(item => {
+            const badge = getItemTypeBadge(item.type);
+            return (
+              <div
+                key={item.id}
+                style={{
+                  background: 'var(--m3-surface-container-lowest)',
+                  border: item.pinned
+                    ? '1px solid var(--m3-primary)'
+                    : '1px solid var(--m3-surface-container-high)',
+                  borderRadius: 12,
+                  padding: '14px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 10,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        padding: '2px 6px',
+                        borderRadius: 4,
+                        background: badge.bg,
+                        color: badge.color,
+                        fontFamily: 'Space Mono, monospace',
+                      }}
+                    >
+                      {badge.label}
+                    </span>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--m3-on-surface)' }}>
+                      {item.deviceName || 'Local PC'}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: 11, fontFamily: 'Space Mono, monospace', color: 'var(--m3-on-surface-variant)' }}>
+                    {item.timestamp} &bull; {item.text.length} chars
                   </span>
                 </div>
-                <span className="text-[10px] text-[#8E8E93] font-mono">{item.timestamp}</span>
-              </div>
 
-              {/* Clip Body */}
-              {item.type === 'image' && item.imageData ? (
-                <div className="relative rounded-xl overflow-hidden border border-white/10 bg-black/40 max-h-48 flex items-center justify-center p-1">
-                  <img
-                    src={item.imageData}
-                    alt="Clipboard clip"
-                    className="max-h-44 w-auto object-contain rounded-lg shadow-md"
-                  />
+                {item.type === 'image' && item.imageData ? (
+                  <div style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid var(--m3-surface-container-high)', maxHeight: 180, display: 'flex', justifyContent: 'center', background: 'black' }}>
+                    <img src={item.imageData} alt="clip" style={{ maxHeight: 180, objectFit: 'contain' }} />
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      fontFamily: item.type === 'code' ? 'Space Mono, monospace' : 'Roboto, sans-serif',
+                      fontSize: 13,
+                      color: 'var(--m3-on-surface)',
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-all',
+                      background: 'var(--m3-surface-container-low)',
+                      padding: '10px 12px',
+                      borderRadius: 8,
+                      border: '1px solid var(--m3-outline-variant)',
+                    }}
+                  >
+                    {item.text}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+                  <button
+                    onClick={() => togglePinClipboardItem(item.id)}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: item.pinned ? 'var(--m3-primary)' : 'var(--m3-on-surface-variant)',
+                      padding: 6,
+                      borderRadius: 6,
+                    }}
+                  >
+                    <Icon name={item.pinned ? 'push_pin' : 'keep'} size={18} />
+                  </button>
+                  <button
+                    onClick={() => removeClipboardItem(item.id)}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: 'var(--m3-on-surface-variant)',
+                      padding: 6,
+                      borderRadius: 6,
+                    }}
+                  >
+                    <Icon name="delete" size={18} />
+                  </button>
+                  <button
+                    onClick={() => handleCopy(item)}
+                    style={{
+                      background: copiedId === item.id ? 'var(--m3-tertiary-container)' : 'var(--m3-secondary-container)',
+                      color: copiedId === item.id ? 'var(--m3-on-tertiary-container)' : 'var(--m3-on-secondary-container)',
+                      border: 'none',
+                      borderRadius: 8,
+                      padding: '6px 14px',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      fontFamily: 'Roboto, sans-serif',
+                    }}
+                  >
+                    <Icon name={copiedId === item.id ? 'check' : 'content_copy'} size={14} />
+                    {copiedId === item.id ? 'Copied' : 'Copy'}
+                  </button>
                 </div>
-              ) : (
-                <p className="text-xs text-[#F0F0F2] line-clamp-3 font-mono break-all whitespace-pre-wrap select-text">
-                  {item.text}
-                </p>
-              )}
-
-              {/* Actions */}
-              <div className="flex items-center justify-end gap-1.5 pt-1.5 border-t border-white/5">
-                <button
-                  onClick={() => togglePinClipboardItem(item.id)}
-                  title={item.pinned ? 'Unpin' : 'Pin'}
-                  className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${
-                    item.pinned ? 'bg-[#FF9500]/20 text-[#FF9500]' : 'hover:bg-white/10 text-[#8E8E93]'
-                  }`}
-                >
-                  <Pin size={12} />
-                </button>
-                <button
-                  onClick={() => removeClipboardItem(item.id)}
-                  title="Delete"
-                  className="w-6 h-6 rounded-lg hover:bg-[#FF3B30]/20 text-[#8E8E93] hover:text-[#FF3B30] flex items-center justify-center transition-colors"
-                >
-                  <Trash2 size={12} />
-                </button>
-                <button
-                  onClick={() => handleCopy(item)}
-                  className="px-2 py-1 rounded-lg bg-white/10 hover:bg-[#007AFF] text-white text-[11px] font-medium flex items-center gap-1 transition-all"
-                >
-                  {copiedId === item.id ? (
-                    <>
-                      <Check size={11} className="text-[#34C759]" /> Copied
-                    </>
-                  ) : (
-                    <>
-                      <Copy size={11} /> Copy
-                    </>
-                  )}
-                </button>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
-
-      {/* Footer */}
-      <div className="p-3 border-t border-white/10 flex items-center justify-between text-[10px] text-[#8E8E93]">
-        <div className="flex items-center gap-1">
-          <Sparkles size={11} className="text-[#007AFF]" />
-          <span>Hot-Corner: ↗ Top-Right</span>
-        </div>
-        <span>{clipboardItems.length} items in sync</span>
-      </div>
-    </aside>
+    </div>
   );
 };
+

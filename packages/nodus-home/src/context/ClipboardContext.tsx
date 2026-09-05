@@ -214,10 +214,8 @@ export const ClipboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
   }, [addClipboardItem]);
 
-  // Poller for remote Windows PC and local Android tablet clipboard changes
-  useEffect(() => {
-    const checkClipboard = async () => {
-      // 1. Check local Android tablet clipboard
+  useVisibilityPoller(
+    useCallback(() => {
       try {
         const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
         if (bridge && typeof bridge.getPrimaryClipboard === 'function') {
@@ -233,7 +231,7 @@ export const ClipboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 lastLocalTabletClipRef.current = clipKey;
                 addClipboardItem({
                   text: isImage ? 'Image' : text,
-                  deviceId: 'this-tablet',
+                  deviceId: 'poco-pad',
                   type: isImage ? 'image' : 'text',
                   imageData: isImage ? parsed.imageData : undefined,
                 });
@@ -242,105 +240,8 @@ export const ClipboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           }
         }
       } catch (_) {}
-
-      // 2. Check remote desktop/laptop nodes
-      for (const dev of devices) {
-        if (
-          dev.ipAddress &&
-          (dev.type === 'desktop' || dev.type === 'laptop' || dev.id === 'this-pc' || dev.id === 'tab-pc' || dev.id === 'desktop-pc')
-        ) {
-          try {
-            const clipRes = await universalNetworkFetch(`http://${dev.ipAddress}/api/clipboard`, {
-              method: 'GET',
-              timeoutMs: 2000,
-            });
-            if (clipRes.ok && clipRes.data) {
-              const rawData = clipRes.data.data || clipRes.data;
-              const isImage = (rawData.type === 'image' || rawData.content_type === 'image') && 
-                typeof (rawData.imageData || rawData.image_data) === 'string';
-              const text = (rawData.text || '').trim();
-              const imgData = rawData.imageData || rawData.image_data;
-              const clipKey = isImage ? imgData.substring(0, 80) : text;
-              const lastRemoteKey = lastRemoteClipsRef.current[dev.id] || '';
-
-              if (clipKey && clipKey !== lastRemoteKey) {
-                lastRemoteClipsRef.current[dev.id] = clipKey;
-
-                let inferredType: 'text' | 'link' | 'code' | 'snippet' | 'image' = isImage ? 'image' : 'text';
-                if (!isImage) {
-                  if (text.startsWith('http://') || text.startsWith('https://')) {
-                    inferredType = 'link';
-                  } else if (
-                    text.includes(';') ||
-                    text.includes('&&') ||
-                    text.startsWith('adb') ||
-                    text.startsWith('curl') ||
-                    text.startsWith('git')
-                  ) {
-                    inferredType = 'code';
-                  } else if (text.length > 80) {
-                    inferredType = 'snippet';
-                  }
-                }
-
-                const devColor = getDeviceColor(dev.id, dev.type, dev.os);
-
-                const newItem: ClipboardItem = {
-                  id: `clip-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-                  text: isImage ? 'Image' : text,
-                  deviceId: dev.id,
-                  deviceName: dev.name,
-                  deviceType: dev.type,
-                  deviceColor: devColor,
-                  type: inferredType,
-                  imageData: isImage ? clipRes.data.imageData : undefined,
-                  timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                  pinned: false,
-                };
-                setClipboardItems((prev) => {
-                  if (prev.length > 0 && prev[0].text === newItem.text) {
-                    return prev;
-                  }
-                  return [newItem, ...prev].slice(0, 100);
-                });
-              }
-            }
-          } catch (_) {}
-        }
-      }
-    };
-
-    checkClipboard();
-  }, [devices, addClipboardItem]);
-
-  useVisibilityPoller(
-    useCallback(() => {
-      try {
-        const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
-        if (bridge?.getClipboardText) {
-          const text = bridge.getClipboardText();
-          if (text && typeof text === 'string' && text.trim()) {
-            setClipboardItems((prev) => {
-              const top = prev[0];
-              if (top?.text === text) return prev;
-              const newItem: ClipboardItem = {
-                id: `clip-native-${Date.now()}`,
-                text,
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                deviceId: 'poco-pad',
-                deviceName: 'This Device',
-                deviceType: 'tablet',
-                deviceColor: '#007AFF',
-                pinned: false,
-                type: 'text',
-              };
-              return [newItem, ...prev].slice(0, 100);
-            });
-          }
-        }
-      } catch (_) {}
-    }, []),
-    1000,
+    }, [addClipboardItem]),
+    4000,
     true
   );
 

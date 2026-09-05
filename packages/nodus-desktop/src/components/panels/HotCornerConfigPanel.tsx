@@ -1,242 +1,329 @@
 import React, { useState } from 'react';
-import { useDesktop } from '../../context/DesktopContext';
-import { 
-  Crosshair, 
-  Sparkles, 
-  MousePointer, 
-  Lock, 
-  Check, 
-  AppWindow, 
-  Clipboard, 
-  Radio, 
-  Zap, 
-  ToggleLeft, 
-  ToggleRight,
-  Sliders
-} from 'lucide-react';
+import { useHotCornerStore } from '../../stores/useHotCornerStore';
+import { TauriService } from '../../services/TauriCommands';
 
-const CORNER_ACTION_OPTIONS = [
-  { id: 'fleet', label: 'Open Fleet Mesh', icon: Radio, color: '#34C759' },
-  { id: 'remotedeck', label: 'Open Remote Deck & Touch', icon: MousePointer, color: '#30D158' },
-  { id: 'clipboard', label: 'Show Clipboard Hub', icon: Clipboard, color: '#007AFF' },
-  { id: 'shortcuts', label: 'Remote Shortcuts', icon: Zap, color: '#BF5AF2' },
-  { id: 'processes', label: 'Process Manager', icon: Crosshair, color: '#FF9500' },
-  { id: 'lock', label: 'Lock Workstation', icon: Lock, color: '#FF3B30' },
-  { id: 'none', label: 'Disabled (None)', icon: Crosshair, color: '#636366' },
+function Icon({ name, size = 18, style }: { name: string; size?: number; style?: React.CSSProperties }) {
+  return (
+    <span className="material-symbols-rounded" style={{ fontSize: size, lineHeight: 1, ...style }}>
+      {name}
+    </span>
+  );
+}
+
+function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      style={{
+        width: 52,
+        height: 32,
+        borderRadius: 100,
+        border: 'none',
+        background: checked ? 'var(--m3-primary)' : 'var(--m3-surface-variant)',
+        cursor: 'pointer',
+        position: 'relative',
+        transition: 'background 200ms ease',
+        flexShrink: 0,
+      }}
+    >
+      <span
+        style={{
+          position: 'absolute',
+          top: 4,
+          left: checked ? 24 : 4,
+          width: 24,
+          height: 24,
+          borderRadius: '50%',
+          background: checked ? 'var(--m3-on-primary)' : 'var(--m3-outline)',
+          transition: 'left 200ms ease',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+        }}
+      />
+    </button>
+  );
+}
+
+type Corner = 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight';
+
+const ACTIONS = [
+  { id: 'fleet', label: 'Fleet Mesh Scanner', icon: 'radar' },
+  { id: 'remotedeck', label: 'Remote Touch Deck', icon: 'mouse' },
+  { id: 'clipboard', label: 'Clipboard Hub', icon: 'content_paste' },
+  { id: 'shortcuts', label: 'Quick Shortcuts', icon: 'bolt' },
+  { id: 'processes', label: 'Process Manager', icon: 'monitoring' },
+  { id: 'lock', label: 'Lock Workstation', icon: 'lock' },
+  { id: 'none', label: 'Disabled (None)', icon: 'block' },
 ];
 
+const CORNER_LABELS: Record<Corner, string> = {
+  topLeft: 'TOP-LEFT',
+  topRight: 'TOP-RIGHT',
+  bottomLeft: 'BOTTOM-LEFT',
+  bottomRight: 'BOTTOM-RIGHT',
+};
+
 export const HotCornerConfigPanel: React.FC = () => {
-  const { hotCornerConfig, updateHotCornerConfig, lockWorkstation } = useDesktop();
-  const [selectedCorner, setSelectedCorner] = useState<'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight'>('topLeft');
-  const [toast, setToast] = useState(false);
+  const { config: hotCornerConfig, updateConfig: updateHotCornerConfig } = useHotCornerStore();
+  const [selectedCorner, setSelectedCorner] = useState<Corner>('topLeft');
 
-  const triggerToast = () => {
-    setToast(true);
-    setTimeout(() => setToast(false), 2000);
+  const getActionLabel = (id: string) => ACTIONS.find(a => a.id === id)?.label ?? 'Disabled';
+
+  const setAction = (actionId: string) => {
+    updateHotCornerConfig({
+      corners: {
+        ...hotCornerConfig.corners,
+        [selectedCorner]: actionId,
+      },
+    });
   };
 
-  const getActionObj = (actionId: string) => {
-    return CORNER_ACTION_OPTIONS.find((opt) => opt.id === actionId) || CORNER_ACTION_OPTIONS[0];
-  };
+  const corners: { id: Corner; posStyle: React.CSSProperties }[] = [
+    { id: 'topLeft', posStyle: { top: 0, left: 0 } },
+    { id: 'topRight', posStyle: { top: 0, right: 0 } },
+    { id: 'bottomLeft', posStyle: { bottom: 0, left: 0 } },
+    { id: 'bottomRight', posStyle: { bottom: 0, right: 0 } },
+  ];
 
   return (
-    <div className="w-full h-full flex flex-col gap-5 overflow-y-auto pr-1">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-white/10 shrink-0">
-        <div>
-          <h2 className="text-lg font-bold text-white flex items-center gap-2">
-            <Crosshair size={20} className="text-[#FF9500]" />
-            <span>Hot-Corner Gestures & Assistive Triggers</span>
-          </h2>
-          <p className="text-xs text-[#8E8E93]">
-            Trigger instant cross-device actions by moving the cursor to display corners.
-          </p>
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+          <div style={{ width: 30, height: 30, borderRadius: 10, background: 'var(--m3-primary-container)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Icon name="rounded_corner" size={16} style={{ color: 'var(--m3-on-primary-container)' }} />
+          </div>
+          <h1 style={{ fontSize: 18, fontWeight: 400, color: 'var(--m3-on-background)' }}>
+            Hot-Corner Gestures &amp; Edge Sensors
+          </h1>
         </div>
-        {toast && (
-          <span className="px-3 py-1 rounded-xl bg-[#34C759]/20 text-[#34C759] text-xs font-bold border border-[#34C759]/40 flex items-center gap-1.5">
-            <Check size={13} />
-            <span>Config Updated</span>
-          </span>
-        )}
+        <p style={{ fontSize: 12, color: 'var(--m3-on-surface-variant)', marginLeft: 40 }}>
+          Trigger cross-device actions and workstation commands by moving your cursor to physical display boundaries
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* ─── Left: Interactive Visual Display Map (7 cols) ───────── */}
-        <section className="lg:col-span-7 bg-[#121218] border border-white/10 rounded-3xl p-5 flex flex-col gap-4 shadow-xl">
-          <div className="flex items-center justify-between pb-2 border-b border-white/10">
-            <h3 className="text-sm font-bold text-white">Visual Screen Interactive Map</h3>
-            <span className="text-[11px] text-[#8E8E93]">Click a corner to map actions</span>
-          </div>
+      {/* Display matrix */}
+      <div
+        style={{
+          background: 'var(--m3-surface-container-lowest)',
+          border: '1px solid var(--m3-surface-container-high)',
+          borderRadius: 12,
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '12px 16px',
+            borderBottom: '1px solid var(--m3-surface-container-high)',
+            background: 'var(--m3-surface-container-low)',
+          }}
+        >
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--m3-on-surface)' }}>Visual Display Boundary Matrix</span>
+          <span style={{ fontSize: 11, color: 'var(--m3-on-surface-variant)' }}>Click corner to assign trigger action</span>
+        </div>
 
-          {/* Monitor Graphic Frame */}
-          <div className="p-4 bg-black/50 border border-white/10 rounded-2xl flex flex-col items-center justify-center relative min-h-[280px]">
-            {/* Screen Inner Bezel */}
-            <div className="w-full max-w-lg aspect-[16/10] bg-[#0E0E14] border-2 border-[#2C2C34] rounded-2xl relative shadow-2xl overflow-hidden flex flex-col justify-between p-3">
-              {/* Screen Top Row */}
-              <div className="flex justify-between items-start">
-                {/* Top-Left Corner */}
-                <button
-                  onClick={() => setSelectedCorner('topLeft')}
-                  className={`p-3 rounded-2xl border-2 transition-all flex flex-col items-start gap-1 ${
-                    selectedCorner === 'topLeft'
-                      ? 'border-[#34C759] bg-[#34C759]/20 shadow-[0_0_15px_#34C759]'
-                      : 'border-white/20 bg-white/5 hover:border-white/40'
-                  }`}
-                >
-                  <span className="text-[10px] font-bold uppercase text-[#8E8E93]">Top-Left ↖</span>
-                  <span className="text-xs font-bold text-white">
-                    {getActionObj(hotCornerConfig.corners.topLeft).label}
-                  </span>
-                </button>
-
-                {/* Top-Right Corner */}
-                <button
-                  onClick={() => setSelectedCorner('topRight')}
-                  className={`p-3 rounded-2xl border-2 transition-all flex flex-col items-end gap-1 ${
-                    selectedCorner === 'topRight'
-                      ? 'border-[#007AFF] bg-[#007AFF]/20 shadow-[0_0_15px_#007AFF]'
-                      : 'border-white/20 bg-white/5 hover:border-white/40'
-                  }`}
-                >
-                  <span className="text-[10px] font-bold uppercase text-[#8E8E93]">Top-Right ↗</span>
-                  <span className="text-xs font-bold text-white">
-                    {getActionObj(hotCornerConfig.corners.topRight).label}
-                  </span>
-                </button>
-              </div>
-
-              {/* Center Screen Mock Content */}
-              <div className="flex flex-col items-center justify-center gap-1.5 opacity-60">
-                <MousePointer size={24} className="text-white animate-pulse" />
-                <span className="text-[11px] font-mono text-[#8E8E93]">
-                  Dwell Time: {hotCornerConfig.dwellTimeMs}ms
-                </span>
-              </div>
-
-              {/* Screen Bottom Row */}
-              <div className="flex justify-between items-end">
-                {/* Bottom-Left Corner */}
-                <button
-                  onClick={() => setSelectedCorner('bottomLeft')}
-                  className={`p-3 rounded-2xl border-2 transition-all flex flex-col items-start gap-1 ${
-                    selectedCorner === 'bottomLeft'
-                      ? 'border-[#BF5AF2] bg-[#BF5AF2]/20 shadow-[0_0_15px_#BF5AF2]'
-                      : 'border-white/20 bg-white/5 hover:border-white/40'
-                  }`}
-                >
-                  <span className="text-[10px] font-bold uppercase text-[#8E8E93]">Bottom-Left ↙</span>
-                  <span className="text-xs font-bold text-white">
-                    {getActionObj(hotCornerConfig.corners.bottomLeft).label}
-                  </span>
-                </button>
-
-                {/* Bottom-Right Corner */}
-                <button
-                  onClick={() => setSelectedCorner('bottomRight')}
-                  className={`p-3 rounded-2xl border-2 transition-all flex flex-col items-end gap-1 ${
-                    selectedCorner === 'bottomRight'
-                      ? 'border-[#FF3B30] bg-[#FF3B30]/20 shadow-[0_0_15px_#FF3B30]'
-                      : 'border-white/20 bg-white/5 hover:border-white/40'
-                  }`}
-                >
-                  <span className="text-[10px] font-bold uppercase text-[#8E8E93]">Bottom-Right ↘</span>
-                  <span className="text-xs font-bold text-white">
-                    {getActionObj(hotCornerConfig.corners.bottomRight).label}
-                  </span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ─── Right: Action Selector & Timing Sliders (5 cols) ────── */}
-        <section className="lg:col-span-5 bg-[#121218] border border-white/10 rounded-3xl p-5 flex flex-col gap-4 shadow-xl">
-          <div className="flex items-center justify-between pb-2 border-b border-white/10">
-            <h3 className="text-sm font-bold text-white">
-              Selected: <span className="text-[#34C759] uppercase">{selectedCorner}</span>
-            </h3>
-            <span className="text-[11px] text-[#8E8E93]">Choose action to bind</span>
-          </div>
-
-          {/* Action Options List */}
-          <div className="space-y-2">
-            {CORNER_ACTION_OPTIONS.map((option) => {
-              const Icon = option.icon;
-              const isSelected = hotCornerConfig.corners[selectedCorner] === option.id;
-              return (
-                <button
-                  key={option.id}
-                  onClick={() => {
-                    updateHotCornerConfig({
-                      corners: {
-                        ...hotCornerConfig.corners,
-                        [selectedCorner]: option.id,
-                      },
-                    });
-                    triggerToast();
-                  }}
-                  className={`w-full p-2.5 px-3 rounded-2xl border flex items-center justify-between transition-all ${
-                    isSelected
-                      ? 'bg-white/10 border-[#34C759] text-white shadow-md'
-                      : 'bg-[#181822] hover:bg-[#20202C] border-white/5 text-[#8E8E93] hover:text-white'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div
-                      className="w-7 h-7 rounded-xl flex items-center justify-center"
-                      style={{ backgroundColor: `${option.color}25`, color: option.color }}
-                    >
-                      <Icon size={14} />
-                    </div>
-                    <span className="text-xs font-bold">{option.label}</span>
-                  </div>
-                  {isSelected && <Check size={14} className="text-[#34C759]" />}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Timing & Exemption Sliders */}
-          <div className="pt-3 border-t border-white/10 space-y-3">
-            <div>
-              <div className="flex justify-between text-xs font-bold text-[#8E8E93] mb-1">
-                <span>Dwell Delay Trigger</span>
-                <span className="text-white font-mono">{hotCornerConfig.dwellTimeMs} ms</span>
-              </div>
-              <input
-                type="range"
-                min="100"
-                max="500"
-                step="20"
-                value={hotCornerConfig.dwellTimeMs}
-                onChange={(e) => {
-                  updateHotCornerConfig({ dwellTimeMs: parseInt(e.target.value, 10) });
-                  triggerToast();
+        <div
+          style={{
+            position: 'relative',
+            height: 210,
+            background: `repeating-linear-gradient(
+              0deg, transparent, transparent 32px,
+              color-mix(in srgb, var(--m3-outline-variant) 20%, transparent) 32px,
+              color-mix(in srgb, var(--m3-outline-variant) 20%, transparent) 33px
+            ), repeating-linear-gradient(
+              90deg, transparent, transparent 32px,
+              color-mix(in srgb, var(--m3-outline-variant) 20%, transparent) 32px,
+              color-mix(in srgb, var(--m3-outline-variant) 20%, transparent) 33px
+            )`,
+          }}
+        >
+          {corners.map(({ id, posStyle }) => {
+            const isSelected = selectedCorner === id;
+            const action = hotCornerConfig.corners[id];
+            const label = getActionLabel(action);
+            return (
+              <button
+                key={id}
+                onClick={() => setSelectedCorner(id)}
+                style={{
+                  position: 'absolute',
+                  ...posStyle,
+                  width: 140,
+                  height: 58,
+                  background: isSelected
+                    ? 'var(--m3-primary-container)'
+                    : 'color-mix(in srgb, var(--m3-surface-container) 80%, transparent)',
+                  border: isSelected
+                    ? '2px solid var(--m3-primary)'
+                    : '1px solid var(--m3-surface-container-high)',
+                  cursor: 'pointer',
+                  padding: 8,
+                  textAlign: 'left',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'flex-start',
                 }}
-                className="w-full accent-[#34C759] cursor-pointer"
-              />
-            </div>
+              >
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, color: isSelected ? 'var(--m3-primary)' : 'var(--m3-on-surface-variant)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  {CORNER_LABELS[id]}
+                  <Icon name="edit" size={10} style={{ color: isSelected ? 'var(--m3-primary)' : 'var(--m3-on-surface-variant)' }} />
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: isSelected ? 'var(--m3-on-primary-container)' : 'var(--m3-on-surface)', lineHeight: 1.2 }}>
+                  {label}
+                </div>
+              </button>
+            );
+          })}
 
-            <div 
-              onClick={() => {
-                updateHotCornerConfig({ disableInFullscreen: !hotCornerConfig.disableInFullscreen });
-                triggerToast();
-              }}
-              className="p-3 rounded-2xl bg-[#181822] hover:bg-[#1E1E2A] border border-white/5 flex items-center justify-between cursor-pointer transition"
-            >
-              <div>
-                <h4 className="text-xs font-bold text-white">Disable in Fullscreen / Gaming</h4>
-                <p className="text-[10.5px] text-[#8E8E93]">Avoid accidental triggers during full-screen apps</p>
-              </div>
-              {hotCornerConfig.disableInFullscreen ? (
-                <ToggleRight size={26} className="text-[#34C759]" />
-              ) : (
-                <ToggleLeft size={26} className="text-[#636366]" />
-              )}
+          <div
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            <Icon name="arrow_selector_tool" size={28} style={{ color: 'var(--m3-on-surface-variant)', opacity: 0.5 }} />
+            <div style={{ fontSize: 12, color: 'var(--m3-on-surface-variant)', fontFamily: 'Space Mono, monospace', textAlign: 'center' }}>
+              Dwell: {hotCornerConfig.dwellTimeMs}ms &bull; Margin: 8px
             </div>
+            <button
+              onClick={() => {
+                if (selectedCorner === 'topLeft') TauriService.lockWorkstation();
+              }}
+              style={{
+                background: 'var(--m3-tertiary-container)',
+                color: 'var(--m3-on-tertiary-container)',
+                border: 'none',
+                borderRadius: 100,
+                padding: '6px 14px',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                fontFamily: 'Roboto, sans-serif',
+              }}
+            >
+              <Icon name="play_arrow" size={14} />
+              Simulate {CORNER_LABELS[selectedCorner]}
+            </button>
           </div>
-        </section>
+        </div>
+      </div>
+
+      {/* Binding editor */}
+      <div
+        style={{
+          background: 'var(--m3-surface-container-lowest)',
+          border: '1px solid var(--m3-surface-container-high)',
+          borderRadius: 12,
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '12px 16px',
+            background: 'var(--m3-surface-container-low)',
+            borderBottom: '1px solid var(--m3-surface-container-high)',
+          }}
+        >
+          <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--m3-on-surface)' }}>
+            Binding:{' '}
+            <span style={{ color: 'var(--m3-primary)', fontWeight: 600 }}>
+              {CORNER_LABELS[selectedCorner]}
+            </span>
+          </span>
+          <span style={{ fontSize: 12, color: 'var(--m3-on-surface-variant)' }}>Select action</span>
+        </div>
+        <div style={{ padding: '8px' }}>
+          {ACTIONS.map(action => {
+            const isSelected = hotCornerConfig.corners[selectedCorner] === action.id;
+            return (
+              <button
+                key={action.id}
+                onClick={() => setAction(action.id)}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: '11px 12px',
+                  borderRadius: 10,
+                  border: 'none',
+                  background: isSelected ? 'var(--m3-primary-container)' : 'transparent',
+                  cursor: 'pointer',
+                  transition: 'background 100ms ease',
+                  fontFamily: 'Roboto, sans-serif',
+                  marginBottom: 2,
+                }}
+              >
+                <Icon
+                  name={action.icon}
+                  size={18}
+                  style={{ color: isSelected ? 'var(--m3-on-primary-container)' : 'var(--m3-on-surface-variant)' }}
+                />
+                <span style={{ flex: 1, fontSize: 13, fontWeight: isSelected ? 600 : 400, color: isSelected ? 'var(--m3-on-primary-container)' : 'var(--m3-on-surface)', textAlign: 'left' }}>
+                  {action.label}
+                </span>
+                {isSelected && <Icon name="check" size={18} style={{ color: 'var(--m3-primary)' }} />}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Dwell + toggle settings */}
+      <div
+        style={{
+          background: 'var(--m3-surface-container-lowest)',
+          border: '1px solid var(--m3-surface-container-high)',
+          borderRadius: 12,
+          padding: '12px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 16,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--m3-on-surface)', minWidth: 140 }}>Dwell Delay Trigger</span>
+          <input
+            type="range"
+            min={50}
+            max={500}
+            value={hotCornerConfig.dwellTimeMs}
+            onChange={e => updateHotCornerConfig({ dwellTimeMs: Number(e.target.value) })}
+            style={{ flex: 1, accentColor: 'var(--m3-primary)', cursor: 'pointer', height: 4 }}
+          />
+          <span style={{ fontFamily: 'Space Mono, monospace', fontSize: 12, fontWeight: 700, color: 'var(--m3-on-surface)', minWidth: 52, textAlign: 'right' }}>
+            {hotCornerConfig.dwellTimeMs} ms
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--m3-on-surface)', marginBottom: 2 }}>Disable in Fullscreen</div>
+            <div style={{ fontSize: 12, color: 'var(--m3-on-surface-variant)' }}>Suppress triggers during fullscreen media or gaming</div>
+          </div>
+          <Toggle
+            checked={hotCornerConfig.disableInFullscreen}
+            onChange={v => updateHotCornerConfig({ disableInFullscreen: v })}
+          />
+        </div>
       </div>
     </div>
   );
 };
+

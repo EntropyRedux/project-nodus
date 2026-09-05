@@ -32,9 +32,10 @@ class HttpRpcClient {
 
     private fun buildRequest(url: String, authToken: String? = null, postBody: String? = null): Request {
         val builder = Request.Builder().url(url)
-        val token = if (authToken.isNullOrBlank()) "NODUS-FLEET-SECURE" else authToken
-        builder.header("Authorization", "Bearer $token")
-        builder.header("X-Nodus-Auth-Token", token)
+        if (!authToken.isNullOrBlank()) {
+            builder.header("Authorization", "Bearer $authToken")
+            builder.header("X-Nodus-Auth-Token", authToken)
+        }
         if (postBody != null) {
             builder.post(postBody.toRequestBody(JSON_MEDIA_TYPE))
         } else {

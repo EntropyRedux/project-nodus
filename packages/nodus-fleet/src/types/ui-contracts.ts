@@ -1,53 +1,104 @@
-// Nodus Fleet — UI Component Contracts & Presentational Props
-// These strict contracts decouple UI/UX components (from AI Studio / Figma) from Context & Native Bridge.
+import { DeviceInfo, DeviceProcess, ClipboardItem } from '../nodus-common';
 
-import { DeviceInfo, DeviceProcess, ClipboardItem } from '@nodus/common';
-
-export interface DeviceCardProps {
-  device: DeviceInfo;
-  color?: string;
-  isLocal?: boolean;
-  onSelect?: (deviceId: string) => void;
-  onOpenControls?: (device: DeviceInfo) => void;
-  onReboot?: (deviceId: string) => void;
-  onRemove?: (deviceId: string) => void;
-}
-
-export interface RemoteControlPadProps {
-  device: DeviceInfo;
-  statusMessage?: string | null;
-  isLoading?: boolean;
-  onMediaAction: (action: 'play_pause' | 'prev' | 'next' | 'volume_up' | 'volume_down' | 'volume_mute') => void;
-  onHotkey: (keys: string[]) => void;
-  onInjectText: (text: string) => void;
-  onLockSystem: () => void;
-  onClose: () => void;
-}
-
-export interface ProcessMonitorProps {
-  device: DeviceInfo;
-  processes: DeviceProcess[] | Array<{ pid: number; name: string; memory_kb: number }>;
-  isLoading?: boolean;
-  onRefresh: () => void;
-  onKillProcess: (pid: number) => void;
-}
-
-export interface UniversalClipboardFeedProps {
-  items: ClipboardItem[];
-  onCopyItem?: (text: string) => void;
-  onClearHistory?: () => void;
-  onSyncText?: (text: string) => void;
-}
-
+// 1. Mesh Topology Visualizer (Interactive SVG Graph)
 export interface MeshTopologyVisualizerProps {
   devices: DeviceInfo[];
   activeDeviceId?: string;
   onSelectDevice?: (deviceId: string) => void;
 }
 
-export interface QuickActionsBarProps {
-  onRescanMesh: () => void;
-  onOpenHome?: () => void;
-  isHomeInstalled?: boolean;
-  connectedCount: number;
+// 2. Remote Control Deck & Virtual Trackpad
+export interface RemoteControlTabProps {
+  devices: DeviceInfo[];
+  targetDeviceId: string | null;
+  onSelectDevice: (id: string) => void;
+}
+
+// 3. Remote Process Monitor Table
+export interface ProcessMonitorProps {
+  device: DeviceInfo;
+  devices?: DeviceInfo[];
+  onSelectDevice?: (deviceId: string) => void;
+  processes: Array<{ pid: number; name: string; memory_kb: number }> | DeviceProcess[];
+  isLoading?: boolean;
+  onRefresh: () => void;
+  onKillProcess: (pid: number) => void;
+}
+
+// 4. Remote Terminal Shell
+export interface RemoteTerminalProps {
+  sessions?: TerminalSession[];
+  activeSessionId?: string | null;
+  availableDevices: DeviceInfo[];
+  onSendCommand?: (sessionId: string, command: string) => void;
+  onCreateSession?: (device: DeviceInfo) => void;
+  onCloseSession?: (sessionId: string) => void;
+  onSetActiveSession?: (sessionId: string) => void;
+}
+
+// 5. Subnet Pairing Modal
+export interface ScannedPeer {
+  ip: string;
+  port: number;
+  hostname?: string;
+  hasAgent: boolean;
+  isInFleet?: boolean;
+  deviceType?: 'desktop' | 'laptop' | 'tablet' | 'phone';
+  os?: string;
+  latencyMs?: number;
+}
+
+export interface DevicePairingModalProps {
+  isOpen: boolean;
+  isScanning: boolean;
+  scanProgress: number;
+  subnet: string;
+  scannedPeers: any[];
+  onClose: () => void;
+  onStartScan: (subnet: string) => void;
+  onSubnetChange: (subnet: string) => void;
+  onPair: (ip: string, port: number, token: string) => void;
+}
+
+// Terminal line and session types
+export type TerminalLineType = 'input' | 'output' | 'error' | 'system' | 'warn' | 'success';
+
+export interface TerminalLine {
+  id: string;
+  type: TerminalLineType;
+  content: string;
+  timestamp: number;
+}
+
+export interface TerminalSession {
+  id: string;
+  targetDevice: DeviceInfo;
+  lines: TerminalLine[];
+  isConnected: boolean;
+  cwd: string;
+}
+
+// Remote App Shortcuts Types
+export type AppCategory = 'browser' | 'media' | 'dev' | 'productivity' | 'system' | 'game' | 'utility';
+
+export interface SharedApp {
+  id: string;
+  name: string;
+  category: AppCategory;
+  deviceId: string;
+  deviceName: string;
+  deviceType: 'tablet' | 'desktop' | 'phone' | 'laptop';
+  deviceColor: string;
+  path?: string;
+  description?: string;
+  sharedBy: 'me' | 'peer';
+  enabled: boolean;
+}
+
+export interface RemoteAppShortcutsProps {
+  myApps: SharedApp[];
+  peerApps: SharedApp[];
+  onToggleMyApp: (id: string, enabled: boolean) => void;
+  onLaunchPeerApp: (app: SharedApp) => void;
+  onAddMyApp: () => void;
 }

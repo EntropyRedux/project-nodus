@@ -109,14 +109,19 @@ class UdpDiscoveryManager(
     private fun handleIncomingPacket(rawJson: String, senderIp: String) {
         try {
             val obj = JSONObject(rawJson)
-            val type = obj.optString("type")
+            val client = obj.optString("client")
 
-            // Ignore our own discovery requests
-            if (type == "NODUS_DISCOVER_REQ" && obj.optString("client") == "com.nodus.fleet") {
+            // Ignore our own discovery requests and probes
+            if (client == "com.nodus.fleet") {
                 return
             }
 
-            // Detect PCControlMaster response format
+            // Ignore loopback or own IP reflection
+            if (senderIp == "127.0.0.1" || senderIp.startsWith("127.")) {
+                return
+            }
+
+            // Detect remote companion response format (e.g. Nodus Desktop or PCControlSuite)
             val isPcControl = obj.has("role") || (obj.has("port") && obj.has("name") && !obj.has("type"))
             val rawName = obj.optString("name", obj.optString("hostname", "Node ($senderIp)"))
             val deviceId = obj.optString("id", if (isPcControl) "win-${senderIp.replace(".", "-")}" else rawName.lowercase().replace(" ", "-"))

@@ -15,7 +15,7 @@ export interface UniversalResponse<T = any> {
   error?: string;
 }
 
-const DEFAULT_AUTH_TOKEN = 'NODUS-FLEET-SECURE';
+const DEFAULT_AUTH_TOKEN = '';
 
 export async function universalNetworkFetch<T = any>(
   url: string,
@@ -30,8 +30,6 @@ export async function universalNetworkFetch<T = any>(
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'X-Nodus-Auth-Token': DEFAULT_AUTH_TOKEN,
-    'Authorization': `Bearer ${DEFAULT_AUTH_TOKEN}`,
     ...(options.headers || {}),
   };
 
@@ -43,7 +41,7 @@ export async function universalNetworkFetch<T = any>(
     const res = await fetch(url, {
       method,
       headers,
-      body: method !== 'GET' && method !== 'HEAD' && bodyStr ? bodyStr : undefined,
+      body: method !== 'GET' && bodyStr ? bodyStr : undefined,
       signal: controller.signal,
     });
 
@@ -72,7 +70,8 @@ export async function universalNetworkFetch<T = any>(
   const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
   if (bridge && typeof bridge.httpFetch === 'function') {
     try {
-      const rawResult = bridge.httpFetch(url, method, bodyStr);
+      const timeout = options.timeoutMs || 2500;
+      const rawResult = bridge.httpFetch(url, method, bodyStr, timeout);
       if (rawResult && typeof rawResult === 'string') {
         const parsed = JSON.parse(rawResult);
         let innerData: any = {};

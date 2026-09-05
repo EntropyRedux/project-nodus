@@ -1,58 +1,69 @@
 import React, { useState } from 'react';
-import { 
-  Monitor, 
-  Tablet, 
-  Smartphone, 
-  Cpu, 
-  Lock, 
-  Trash2, 
-  Check, 
-  Radio, 
-  RefreshCw, 
-  Server, 
-  Key, 
-  ShieldCheck, 
-  Zap, 
-  HardDrive,
-  Activity,
-  Plus
-} from 'lucide-react';
-import { useDesktop } from '../../context/DesktopContext';
+import { useFleetStore } from '../../stores/useFleetStore';
 import { DeviceInfo, DeviceType } from '../../types/desktop';
 
+function Icon({ name, size = 18, style }: { name: string; size?: number; style?: React.CSSProperties }) {
+  return (
+    <span className="material-symbols-rounded" style={{ fontSize: size, lineHeight: 1, ...style }}>
+      {name}
+    </span>
+  );
+}
+
+function StatusDot({ status }: { status: 'online' | 'connected' | 'offline' }) {
+  const colors = {
+    online: '#34A853',
+    connected: 'var(--m3-primary)',
+    offline: 'var(--m3-outline)',
+  };
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        width: 8,
+        height: 8,
+        borderRadius: '50%',
+        background: colors[status] || colors.offline,
+        boxShadow: `0 0 0 2px color-mix(in srgb, ${colors[status] || colors.offline} 20%, transparent)`,
+        flexShrink: 0,
+      }}
+    />
+  );
+}
+
 export const FleetPanel: React.FC = () => {
-  const { 
-    devices, 
-    activeDeviceId, 
-    selectDevice, 
-    activeDevice,
+  const {
+    devices,
+    activeDeviceId,
+    selectDevice,
     removeDevice,
     connectDeviceManual,
     pingDevice,
     syncDeviceState,
-    isDiscovering,
-    startAutoDiscovery,
+    isScanning: isDiscovering,
+    setScanning: startAutoDiscovery,
     serverConfig,
     lockWorkstation,
     systemStats
-  } = useDesktop();
+  } = useFleetStore();
+
+  const activeDevice = devices.find(d => d.id === activeDeviceId);
 
   // Manual Form State
   const [manualName, setManualName] = useState('');
   const [manualIp, setManualIp] = useState('');
   const [manualPort, setManualPort] = useState('9120');
   const [manualType, setManualType] = useState<DeviceType>('tablet');
-  const [manualSecret, setManualSecret] = useState('NODUS-FLEET-SECURE');
   const [pairSuccess, setPairSuccess] = useState(false);
   const [pingStatus, setPingStatus] = useState<{ id: string; msg: string; ok: boolean } | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
 
   const getDeviceIcon = (type: DeviceType) => {
     switch (type) {
-      case 'tablet': return <Tablet size={18} />;
-      case 'desktop': return <Monitor size={18} />;
-      case 'phone': return <Smartphone size={18} />;
-      default: return <Monitor size={18} />;
+      case 'tablet': return 'tablet';
+      case 'desktop': return 'computer';
+      case 'phone': return 'smartphone';
+      default: return 'computer';
     }
   };
 
@@ -68,349 +79,346 @@ export const FleetPanel: React.FC = () => {
     });
 
     setPairSuccess(true);
-    setTimeout(() => setPairSuccess(false), 1200);
+    setTimeout(() => setPairSuccess(false), 2000);
   };
 
   return (
-    <div className="w-full h-full flex flex-col gap-5 overflow-y-auto pr-1">
-      {/* Header Banner */}
-      <div className="flex items-center justify-between pb-3 border-b border-white/10 shrink-0">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h2 className="text-lg font-bold text-white flex items-center gap-2">
-            <Radio size={20} className="text-[#34C759]" />
-            <span>Multi-Device Fleet Mesh & Subnet Radar</span>
-          </h2>
-          <p className="text-xs text-[#8E8E93]">
-            Discover, pair, and inspect active nodes across your local workstation network.
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+            <div style={{ width: 30, height: 30, borderRadius: 10, background: 'var(--m3-primary-container)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="radar" size={16} style={{ color: 'var(--m3-on-primary-container)' }} />
+            </div>
+            <h1 style={{ fontSize: 18, fontWeight: 400, color: 'var(--m3-on-background)', letterSpacing: 0 }}>
+              Fleet Mesh &amp; LAN Radar
+            </h1>
+          </div>
+          <p style={{ fontSize: 14, color: 'var(--m3-on-surface-variant)', marginLeft: 40 }}>
+            Discover and manage linked tablets, phones, and companion computers on your local network
           </p>
         </div>
-
-        <button
-          onClick={startAutoDiscovery}
-          disabled={isDiscovering}
-          className="px-4 py-2 rounded-2xl bg-[#34C759] hover:bg-[#30D158] text-[#0A0A0C] text-xs font-bold flex items-center gap-2 shadow-lg shadow-[#34C759]/25 transition active:scale-95 disabled:opacity-50"
-        >
-          <RefreshCw size={14} className={isDiscovering ? 'animate-spin' : ''} />
-          <span>{isDiscovering ? 'Scanning Subnet...' : 'Auto-Discover (LAN)'}</span>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <div
+            className="m3-chip"
+            style={{ background: 'var(--m3-tertiary-container)', borderColor: 'var(--m3-tertiary-container)', color: 'var(--m3-on-tertiary-container)' }}
+          >
+            <StatusDot status="online" />
+            Direct LAN Mesh
+          </div>
+          <button
+            className="m3-tonal-button m3-ripple"
+            onClick={() => startAutoDiscovery(true)}
+            disabled={isDiscovering}
+            style={{ padding: '8px 18px', opacity: isDiscovering ? 0.6 : 1 }}
+          >
+            <Icon name="wifi_find" size={16} />
+            {isDiscovering ? 'Scanning Subnet...' : 'Scan Subnet'}
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1 min-h-0">
-        {/* ─── Left Column: Active Nodes List (5 cols) ─────────────── */}
-        <section className="lg:col-span-5 flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-[#8E8E93]">
-              Active Nodes ({devices.length})
-            </h3>
-            <span className={`text-[11px] font-mono ${devices.length > 0 ? 'text-[#34C759]' : 'text-[#8E8E93]'}`}>
-              {devices.length > 0 ? 'Mesh Online' : 'No Remote Peers'}
-            </span>
-          </div>
+      {/* Discovered nodes */}
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+          <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--m3-on-surface-variant)', letterSpacing: 0.5, textTransform: 'uppercase' }}>
+            Active Mesh Nodes
+          </span>
+          <span
+            style={{
+              background: 'var(--m3-secondary-container)',
+              color: 'var(--m3-on-secondary-container)',
+              fontSize: 12,
+              fontWeight: 700,
+              padding: '1px 8px',
+              borderRadius: 100,
+            }}
+          >
+            {devices.length}
+          </span>
+        </div>
 
-          <div className="space-y-2.5 overflow-y-auto pr-1">
-            {devices.length === 0 ? (
-              <div className="p-6 rounded-3xl bg-[#121218] border border-white/5 flex flex-col items-center justify-center text-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-[#8E8E93]">
-                  <Radio size={22} />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-white">No Remote Devices Connected</h4>
-                  <p className="text-xs text-[#8E8E93] max-w-xs mt-1 leading-relaxed">
-                    0 remote peers in cluster. Use Auto-Discover (LAN) to scan the network or connect a device manually.
-                  </p>
-                </div>
-              </div>
-            ) : (
-              devices.map((device) => {
-                const isSelected = activeDeviceId === device.id;
-                return (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12 }}>
+          {devices.length === 0 ? (
+            <div
+              className="m3-card"
+              style={{
+                gridColumn: '1 / -1',
+                padding: 32,
+                textAlign: 'center',
+                color: 'var(--m3-on-surface-variant)',
+                border: '1px border-dashed var(--m3-outline-variant)',
+              }}
+            >
+              <Icon name="radar" size={40} style={{ opacity: 0.4, marginBottom: 8 }} />
+              <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--m3-on-surface)' }}>No Remote Nodes Found</div>
+              <p style={{ fontSize: 12, marginTop: 4 }}>
+                Run subnet scan or manually link a device using the form below.
+              </p>
+            </div>
+          ) : (
+            devices.map((device) => {
+              const isSelected = activeDeviceId === device.id;
+              const isOnline = device.status === 'online' || device.status === 'connected';
+
+              return (
+                <div
+                  key={device.id}
+                  className="m3-card"
+                  onClick={() => selectDevice(device.id)}
+                  style={{
+                    padding: 0,
+                    overflow: 'hidden',
+                    cursor: 'pointer',
+                    border: isSelected
+                      ? '1.5px solid var(--m3-primary)'
+                      : '1px solid var(--m3-surface-container-high)',
+                    background: 'var(--m3-surface-container-lowest)',
+                  }}
+                >
+                  {/* Card Header */}
                   <div
-                    key={device.id}
-                    onClick={() => selectDevice(device.id)}
-                    className={`p-4 rounded-3xl border transition-all cursor-pointer flex flex-col gap-2.5 ${
-                      isSelected
-                        ? 'bg-[#181822] border-[#34C759] shadow-xl shadow-[#34C759]/10'
-                        : 'bg-[#121218] hover:bg-[#181822] border-white/5'
-                    }`}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      padding: '14px 16px 10px',
+                      borderBottom: '1px solid var(--m3-surface-container-high)',
+                      background: isSelected
+                        ? 'color-mix(in srgb, var(--m3-primary-container) 30%, var(--m3-surface-container-lowest))'
+                        : 'var(--m3-surface-container-low)',
+                    }}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`w-9 h-9 rounded-2xl flex items-center justify-center text-white ${
-                            isSelected ? 'bg-[#34C759] text-black' : 'bg-white/5 text-[#8E8E93]'
-                          }`}
-                        >
-                          {getDeviceIcon(device.type)}
-                        </div>
-                        <div>
-                          <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                            {device.name}
-                            {device.status === 'online' || device.status === 'connected' ? (
-                              <span className="w-2 h-2 rounded-full bg-[#34C759] shadow-[0_0_6px_#34C759]" />
-                            ) : (
-                              <span className="w-2 h-2 rounded-full bg-[#636366]" />
-                            )}
-                          </h4>
-                          <p className="text-[11px] font-mono text-[#8E8E93]">{device.ipAddress}</p>
-                        </div>
+                    <div
+                      style={{
+                        width: 34,
+                        height: 34,
+                        borderRadius: 12,
+                        background: isOnline ? 'var(--m3-primary-container)' : 'var(--m3-secondary-container)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <Icon
+                        name={getDeviceIcon(device.type)}
+                        size={18}
+                        style={{ color: isOnline ? 'var(--m3-on-primary-container)' : 'var(--m3-on-secondary-container)' }}
+                      />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 500, fontSize: 14, color: 'var(--m3-on-surface)', lineHeight: 1.3 }}>
+                          {device.name}
+                        </span>
+                        {isOnline && (
+                          <span
+                            style={{
+                              background: 'var(--m3-tertiary-container)',
+                              color: 'var(--m3-on-tertiary-container)',
+                              fontSize: 11,
+                              fontWeight: 600,
+                              padding: '1px 8px',
+                              borderRadius: 100,
+                            }}
+                          >
+                            CONNECTED
+                          </span>
+                        )}
                       </div>
-
+                      <div
+                        style={{
+                          fontFamily: 'Space Mono, monospace',
+                          fontSize: 11,
+                          color: 'var(--m3-on-surface-variant)',
+                          marginTop: 2,
+                        }}
+                      >
+                        {device.ipAddress}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <StatusDot status={isOnline ? 'online' : 'offline'} />
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           removeDevice(device.id);
                         }}
-                        className="p-1.5 rounded-lg bg-white/5 hover:bg-[#FF3B30]/20 text-[#8E8E93] hover:text-[#FF3B30] transition"
-                        title="Remove Node"
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          cursor: 'pointer',
+                          color: 'var(--m3-on-surface-variant)',
+                          borderRadius: 50,
+                          width: 32,
+                          height: 32,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          transition: 'background 150ms ease',
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--m3-surface-container-high)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                       >
-                        <Trash2 size={13} />
+                        <Icon name="delete" size={18} />
                       </button>
                     </div>
+                  </div>
 
-                    {/* Micro Telemetry */}
-                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-white/5 text-[11px] font-mono text-[#8E8E93]">
-                      <div>
-                        CPU: <span className="text-white font-bold">{device.cpuLoad ?? 0}%</span>
+                  {/* Telemetry Stats */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, background: 'var(--m3-surface-container-high)' }}>
+                    <div style={{ background: 'var(--m3-surface-container-lowest)', padding: '12px 16px' }}>
+                      <div style={{ fontSize: 11, color: 'var(--m3-on-surface-variant)', marginBottom: 4, letterSpacing: 0.4 }}>
+                        CPU Load
                       </div>
-                      <div>
-                        RAM: <span className="text-white font-bold">{device.ramUsage ?? '0 GB'}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontFamily: 'Space Mono, monospace', fontSize: 13, fontWeight: 700, color: 'var(--m3-on-surface)' }}>
+                          {device.cpuLoad ?? 0}%
+                        </span>
                       </div>
                     </div>
+                    <div style={{ background: 'var(--m3-surface-container-lowest)', padding: '12px 16px' }}>
+                      <div style={{ fontSize: 11, color: 'var(--m3-on-surface-variant)', marginBottom: 4, letterSpacing: 0.4 }}>
+                        Memory
+                      </div>
+                      <span style={{ fontFamily: 'Space Mono, monospace', fontSize: 13, fontWeight: 700, color: 'var(--m3-on-surface)' }}>
+                        {device.ramUsage ?? 'N/A'}
+                      </span>
+                    </div>
                   </div>
-                );
-              })
-            )}
-          </div>
-        </section>
 
-        {/* ─── Right Column: Selected Node Details & Manual Pairing (7 cols) */}
-        <section className="lg:col-span-7 flex flex-col gap-4">
-          {/* Detailed Selected Node Card (or Host Station when no peers) */}
-          {activeDevice ? (
-            <div className="bg-[#121218] border border-white/10 rounded-3xl p-5 flex flex-col gap-4 shadow-xl">
-              <div className="flex items-center justify-between pb-3 border-b border-white/10">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-[#34C759]/20 text-[#34C759] flex items-center justify-center">
-                    {getDeviceIcon(activeDevice.type)}
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold text-white">{activeDevice.name}</h3>
-                    <p className="text-xs text-[#8E8E93]">{activeDevice.os} • {activeDevice.ipAddress}</p>
-                  </div>
+                  {/* Actions for Selected Node */}
+                  {isSelected && (
+                    <div style={{ display: 'flex', gap: 8, padding: '12px 16px', background: 'var(--m3-surface-container-lowest)' }}>
+                      <button
+                        className="m3-tonal-button m3-ripple"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          setPingStatus({ id: device.id, msg: 'Pinging node...', ok: true });
+                          const res = await pingDevice(device.id);
+                          setPingStatus({
+                            id: device.id,
+                            msg: res.ok ? `Latency: ${res.latencyMs}ms` : 'Unreachable',
+                            ok: res.ok,
+                          });
+                          setTimeout(() => setPingStatus(null), 3000);
+                        }}
+                        style={{ flex: 1, justifyContent: 'center', padding: '8px 16px' }}
+                      >
+                        <Icon name="bolt" size={16} />
+                        Ping Node
+                      </button>
+                      <button
+                        className="m3-outlined-button m3-ripple"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          lockWorkstation();
+                        }}
+                        style={{ flex: 1, justifyContent: 'center', padding: '8px 16px' }}
+                      >
+                        <Icon name="lock" size={16} />
+                        Lock Host
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <span
-                  className={`px-3 py-1 rounded-full text-xs font-bold border uppercase ${
-                    activeDevice.status === 'connected' || activeDevice.status === 'online'
-                      ? 'bg-[#34C759]/20 text-[#34C759] border-[#34C759]/30'
-                      : 'bg-[#FF3B30]/20 text-[#FF3B30] border-[#FF3B30]/30'
-                  }`}
-                >
-                  {activeDevice.status}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div className="p-3 rounded-2xl bg-[#181822] border border-white/5 flex flex-col gap-1">
-                  <span className="text-[10.5px] uppercase font-bold text-[#8E8E93]">Resolution</span>
-                  <span className="text-xs font-mono font-bold text-white">{activeDevice.resolution}</span>
-                </div>
-                <div className="p-3 rounded-2xl bg-[#181822] border border-white/5 flex flex-col gap-1">
-                  <span className="text-[10.5px] uppercase font-bold text-[#8E8E93]">CPU Load</span>
-                  <span className="text-xs font-mono font-bold text-[#34C759]">{activeDevice.cpuLoad ?? 0}%</span>
-                </div>
-                <div className="p-3 rounded-2xl bg-[#181822] border border-white/5 flex flex-col gap-1">
-                  <span className="text-[10.5px] uppercase font-bold text-[#8E8E93]">Memory Usage</span>
-                  <span className="text-xs font-mono font-bold text-[#007AFF]">{activeDevice.ramUsage ?? '0 GB'}</span>
-                </div>
-              </div>
-
-              {/* Live Ping/Sync Status Badge */}
-              {pingStatus && pingStatus.id === activeDevice.id && (
-                <div
-                  className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center justify-between border ${
-                    pingStatus.ok
-                      ? 'bg-[#34C759]/15 text-[#34C759] border-[#34C759]/30'
-                      : 'bg-[#FF3B30]/15 text-[#FF3B30] border-[#FF3B30]/30'
-                  }`}
-                >
-                  <span>{pingStatus.msg}</span>
-                  <span className="text-[10px]">{pingStatus.ok ? 'ONLINE' : 'UNREACHABLE'}</span>
-                </div>
-              )}
-
-              {/* Node Remote Actions */}
-              <div className="flex items-center gap-2 pt-1">
-                <button
-                  onClick={async () => {
-                    setPingStatus({ id: activeDevice.id, msg: 'Pinging node...', ok: true });
-                    const res = await pingDevice(activeDevice.id);
-                    setPingStatus({
-                      id: activeDevice.id,
-                      msg: res.ok ? `Ping Latency: ${res.latencyMs}ms` : 'Node unreachable',
-                      ok: res.ok,
-                    });
-                    setTimeout(() => setPingStatus(null), 3000);
-                  }}
-                  className="flex-1 py-2 rounded-xl bg-[#181822] hover:bg-[#222230] border border-white/10 text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-98"
-                >
-                  <Zap size={13} className="text-[#34C759]" />
-                  <span>Ping Node</span>
-                </button>
-                <button
-                  onClick={async () => {
-                    setIsSyncing(true);
-                    const ok = await syncDeviceState(activeDevice.id);
-                    setIsSyncing(false);
-                    setPingStatus({
-                      id: activeDevice.id,
-                      msg: ok ? 'State synced from node' : 'Failed to sync state',
-                      ok,
-                    });
-                    setTimeout(() => setPingStatus(null), 3000);
-                  }}
-                  disabled={isSyncing}
-                  className="flex-1 py-2 rounded-xl bg-[#181822] hover:bg-[#222230] border border-white/10 text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-98 disabled:opacity-50"
-                >
-                  <RefreshCw size={13} className={`text-[#007AFF] ${isSyncing ? 'animate-spin' : ''}`} />
-                  <span>{isSyncing ? 'Syncing...' : 'Sync State'}</span>
-                </button>
-                <button
-                  onClick={lockWorkstation}
-                  className="flex-1 py-2 rounded-xl bg-[#181822] hover:bg-[#222230] border border-white/10 text-xs font-bold flex items-center justify-center gap-1.5 text-[#FF9500] transition active:scale-98"
-                >
-                  <Lock size={13} />
-                  <span>Lock Screen</span>
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="bg-[#121218] border border-white/10 rounded-3xl p-5 flex flex-col gap-4 shadow-xl">
-              <div className="flex items-center justify-between pb-3 border-b border-white/10">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-[#007AFF]/20 text-[#007AFF] flex items-center justify-center">
-                    <Monitor size={20} />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold text-white">Host Workstation (This PC)</h3>
-                    <p className="text-xs text-[#8E8E93]">
-                      {systemStats?.hostname || 'Windows PC'} • 127.0.0.1:{serverConfig.port}
-                    </p>
-                  </div>
-                </div>
-                <span className="px-3 py-1 rounded-full bg-[#007AFF]/20 text-[#007AFF] text-xs font-bold border border-[#007AFF]/30 uppercase">
-                  Host Bridge
-                </span>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div className="p-3 rounded-2xl bg-[#181822] border border-white/5 flex flex-col gap-1">
-                  <span className="text-[10.5px] uppercase font-bold text-[#8E8E93]">Screen</span>
-                  <span className="text-xs font-mono font-bold text-white">
-                    {typeof window !== 'undefined' ? `${window.screen.width} × ${window.screen.height}` : '1920 × 1080'}
-                  </span>
-                </div>
-                <div className="p-3 rounded-2xl bg-[#181822] border border-white/5 flex flex-col gap-1">
-                  <span className="text-[10.5px] uppercase font-bold text-[#8E8E93]">Host CPU Load</span>
-                  <span className="text-xs font-mono font-bold text-[#34C759]">
-                    {systemStats?.cpu_load_percent ? Math.round(systemStats.cpu_load_percent) : 0}%
-                  </span>
-                </div>
-                <div className="p-3 rounded-2xl bg-[#181822] border border-white/5 flex flex-col gap-1">
-                  <span className="text-[10.5px] uppercase font-bold text-[#8E8E93]">Host Memory</span>
-                  <span className="text-xs font-mono font-bold text-[#007AFF]">
-                    {systemStats
-                      ? `${(systemStats.ram_used_mb / 1024).toFixed(1)} / ${(systemStats.ram_total_mb / 1024).toFixed(1)} GB`
-                      : '0 GB'}
-                  </span>
-                </div>
-              </div>
-            </div>
+              );
+            })
           )}
+        </div>
+      </div>
 
-          {/* Manual IP / Port Pair Box */}
-          <div className="bg-[#121218] border border-white/10 rounded-3xl p-5 flex flex-col gap-3 shadow-xl">
-            <div className="flex items-center justify-between pb-2 border-b border-white/10">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <Plus size={15} className="text-[#007AFF]" />
-                <span>Pair New Node Manually</span>
-              </h3>
-              {pairSuccess && (
-                <span className="text-xs text-[#34C759] font-bold flex items-center gap-1">
-                  <Check size={13} />
-                  <span>Node Connected</span>
-                </span>
-              )}
-            </div>
-
-            <form onSubmit={handleManualConnect} className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10.5px] font-bold text-[#8E8E93] uppercase block mb-1">
-                  Device Name
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. POCO Pad"
-                  value={manualName}
-                  onChange={(e) => setManualName(e.target.value)}
-                  className="w-full px-3 py-1.5 rounded-xl bg-black/40 border border-white/10 text-xs text-white outline-none focus:border-[#007AFF]"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-[10.5px] font-bold text-[#8E8E93] uppercase block mb-1">
-                  Device Type
-                </label>
-                <select
-                  value={manualType}
-                  onChange={(e) => setManualType(e.target.value as DeviceType)}
-                  className="w-full px-3 py-1.5 rounded-xl bg-[#181822] border border-white/10 text-xs text-white outline-none focus:border-[#007AFF]"
-                >
-                  <option value="tablet">Android Tablet</option>
-                  <option value="desktop">Windows PC</option>
-                  <option value="phone">Smartphone</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-[10.5px] font-bold text-[#8E8E93] uppercase block mb-1">
-                  Target IP Address
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. 192.168.1.118"
-                  value={manualIp}
-                  onChange={(e) => setManualIp(e.target.value)}
-                  className="w-full px-3 py-1.5 rounded-xl bg-black/40 border border-white/10 text-xs font-mono text-white outline-none focus:border-[#007AFF]"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-[10.5px] font-bold text-[#8E8E93] uppercase block mb-1">
-                  Port
-                </label>
-                <input
-                  type="number"
-                  value={manualPort}
-                  onChange={(e) => setManualPort(e.target.value)}
-                  className="w-full px-3 py-1.5 rounded-xl bg-black/40 border border-white/10 text-xs font-mono text-white outline-none focus:border-[#007AFF]"
-                  required
-                />
-              </div>
-
-              <div className="col-span-2 flex justify-end pt-1">
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl bg-[#007AFF] hover:bg-[#0066D6] text-white text-xs font-bold shadow-lg shadow-[#007AFF]/25 transition active:scale-95"
-                >
-                  Connect & Pair Node
-                </button>
-              </div>
-            </form>
+      {/* Manual Pair Form */}
+      <div
+        className="m3-card"
+        style={{
+          border: '1px solid var(--m3-surface-container-high)',
+          padding: 0,
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '14px 20px',
+            borderBottom: '1px solid var(--m3-surface-container-high)',
+            background: 'var(--m3-surface-container-low)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Icon name="add_circle" size={20} style={{ color: 'var(--m3-primary)' }} />
+            <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--m3-on-surface)' }}>
+              Pair New Device Manually
+            </span>
           </div>
-        </section>
+          {pairSuccess && (
+            <span style={{ fontSize: 12, color: 'var(--m3-tertiary)', fontWeight: 600 }}>
+              ✓ Device paired successfully
+            </span>
+          )}
+        </div>
+
+        <form onSubmit={handleManualConnect} style={{ padding: '20px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div style={{ position: 'relative' }}>
+            <label style={{ position: 'absolute', top: 6, left: 16, fontSize: 11, color: 'var(--m3-primary)', fontWeight: 500, letterSpacing: 0.5 }}>
+              Device Name
+            </label>
+            <input
+              className="m3-input"
+              placeholder="e.g. POCO Pad Pro"
+              value={manualName}
+              onChange={e => setManualName(e.target.value)}
+              required
+            />
+          </div>
+          <div style={{ position: 'relative' }}>
+            <label style={{ position: 'absolute', top: 6, left: 16, fontSize: 11, color: 'var(--m3-primary)', fontWeight: 500, letterSpacing: 0.5 }}>
+              Device Type
+            </label>
+            <select className="m3-select" value={manualType} onChange={e => setManualType(e.target.value as DeviceType)}>
+              <option value="tablet">Android Tablet</option>
+              <option value="phone">Android Phone</option>
+              <option value="desktop">Windows PC</option>
+            </select>
+          </div>
+          <div style={{ position: 'relative' }}>
+            <label style={{ position: 'absolute', top: 6, left: 16, fontSize: 11, color: 'var(--m3-primary)', fontWeight: 500, letterSpacing: 0.5 }}>
+              IP Address
+            </label>
+            <input
+              className="m3-input"
+              placeholder="192.168.1.105"
+              value={manualIp}
+              onChange={e => setManualIp(e.target.value)}
+              style={{ fontFamily: 'Space Mono, monospace' }}
+              required
+            />
+          </div>
+          <div style={{ position: 'relative' }}>
+            <label style={{ position: 'absolute', top: 6, left: 16, fontSize: 11, color: 'var(--m3-primary)', fontWeight: 500, letterSpacing: 0.5 }}>
+              Port
+            </label>
+            <input
+              className="m3-input"
+              value={manualPort}
+              onChange={e => setManualPort(e.target.value)}
+              style={{ fontFamily: 'Space Mono, monospace' }}
+              required
+            />
+          </div>
+          <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end' }}>
+            <button type="submit" className="m3-filled-button m3-ripple">
+              <Icon name="link" size={18} />
+              Authenticate &amp; Link Node
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
 };
+

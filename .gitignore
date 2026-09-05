@@ -63,6 +63,12 @@ shortcuts/
 *_STRATEGY.md
 
 # Generated Documents (DO NOT PUSH)
+generated_documents/
+**/generated_documents/
 generated_documents_do_not_push/
 **/generated_documents_do_not_push/
+
+# Fleet Design & Prototypes
+packages/nodus-fleet/Nodus Fleet Component Design/
+packages/nodus-fleet/nodus-fleet_uiux_prototype/
 

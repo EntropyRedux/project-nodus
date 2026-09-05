@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { DeviceProcess, SystemStats } from '../types/desktop';
 
@@ -13,33 +14,26 @@ export const isTauri = (): boolean => {
   return typeof window !== 'undefined' && Boolean((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__);
 };
 
-const MOCK_PROCESSES: DeviceProcess[] = [
-  { pid: 4820, name: 'code.exe', memoryMb: 820, cpu: 3.4, category: 'user', user: 'Developer', status: 'running', description: 'Visual Studio Code IDE' },
-  { pid: 8192, name: 'chrome.exe', memoryMb: 1450, cpu: 5.2, category: 'user', user: 'Developer', status: 'running', description: 'Google Chrome Browser' },
-  { pid: 1204, name: 'node.exe', memoryMb: 340, cpu: 1.8, category: 'user', user: 'Developer', status: 'running', description: 'Node.js Runtime Worker' },
-  { pid: 9120, name: 'nodus-hub.exe', memoryMb: 128, cpu: 0.6, category: 'daemon', user: 'SYSTEM', status: 'running', description: 'Nodus Fleet Bridge Daemon' },
-  { pid: 6540, name: 'spotify.exe', memoryMb: 260, cpu: 0.9, category: 'user', user: 'Developer', status: 'running', description: 'Spotify Music Streaming' },
-  { pid: 3120, name: 'explorer.exe', memoryMb: 195, cpu: 0.4, category: 'system', user: 'SYSTEM', status: 'running', description: 'Windows Desktop Shell' },
-];
-
-const MOCK_SYSTEM_STATS: SystemStats = {
-  hostname: 'Nodus-Workstation-PC',
-  os: 'Windows 11 Pro 23H2 (x64)',
-  cpu_load_percent: 18,
-  ram_used_mb: 8420,
-  ram_total_mb: 32768,
-  uptime_seconds: 43200,
-};
-
 export const TauriService = {
   async getProcesses(): Promise<DeviceProcess[]> {
     if (!isTauri()) {
-      return MOCK_PROCESSES;
+      return [];
     }
     try {
-      const raw = await invoke<{ pid: number; name: string; memory_kb: number; category?: string; user?: string; cpu?: number }[]>('get_processes');
+      const raw = await invoke<{
+        pid: number;
+        parent_pid?: number;
+        parent_name?: string;
+        name: string;
+        memory_kb: number;
+        category?: string;
+        user?: string;
+        cpu?: number;
+      }[]>('get_processes');
       return raw.map((p) => ({
         pid: p.pid,
+        parentPid: p.parent_pid,
+        parentName: p.parent_name,
         name: p.name,
         memoryMb: Math.round(p.memory_kb / 1024),
         category: (p.category as any) || 'user',
@@ -55,8 +49,7 @@ export const TauriService = {
 
   async killProcess(pid: number): Promise<boolean> {
     if (!isTauri()) {
-      console.log(`[WebPreview] Simulated process kill: ${pid}`);
-      return true;
+      return false;
     }
     try {
       return await invoke<boolean>('kill_process', { pid });
@@ -66,10 +59,66 @@ export const TauriService = {
     }
   },
 
+  async getRemoteProcesses(ip: string, port = 9120, token = 'NODUS-FLEET-SECURE'): Promise<DeviceProcess[]> {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      const res = await fetch(`http://${ip}:${port}/api/processes`, {
+        method: 'GET',
+        headers: {
+          'X-Nodus-Auth-Token': token,
+        },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const data = await res.json();
+        const raw = data.processes || [];
+        return raw.map((p: any) => ({
+          pid: p.pid,
+          parentPid: p.parent_pid,
+          parentName: p.parent_name,
+          name: p.name,
+          memoryMb: p.memory_kb ? Math.round(p.memory_kb / 1024) : (p.memoryMb || 0),
+          category: (p.category as any) || 'user',
+          user: p.user || 'User',
+          cpu: p.cpu || 0,
+          status: 'running' as const,
+        }));
+      }
+    } catch (e) {
+      console.warn(`[TauriService] getRemoteProcesses(${ip}:${port}) failed:`, e);
+    }
+    return [];
+  },
+
+  async killRemoteProcess(ip: string, port = 9120, pid: number, token = 'NODUS-FLEET-SECURE'): Promise<boolean> {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      const res = await fetch(`http://${ip}:${port}/api/process/kill`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Nodus-Auth-Token': token,
+        },
+        body: JSON.stringify({ pid }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const data = await res.json();
+        return data.status === 'success';
+      }
+    } catch (e) {
+      console.warn(`[TauriService] killRemoteProcess(${ip}:${port}, pid=${pid}) error:`, e);
+    }
+    return false;
+  },
+
   async lockWorkstation(): Promise<boolean> {
     if (!isTauri()) {
-      console.log('[WebPreview] Simulated lock workstation');
-      return true;
+      return false;
     }
     try {
       return await invoke<boolean>('lock_workstation');
@@ -81,7 +130,7 @@ export const TauriService = {
 
   async getSystemStats(): Promise<SystemStats | null> {
     if (!isTauri()) {
-      return MOCK_SYSTEM_STATS;
+      return null;
     }
     try {
       return await invoke<SystemStats>('get_system_stats');
@@ -408,5 +457,219 @@ export const TauriService = {
       return [];
     }
   },
+
+  async unregisterNode(id: string): Promise<boolean> {
+    if (!isTauri()) return true;
+    try {
+      return await invoke<boolean>('unregister_node', { id });
+    } catch (e) {
+      console.error(`[TauriService] unregisterNode(${id}) error:`, e);
+      return false;
+    }
+  },
+
+  async scanSubnet(subnetBase: string): Promise<any[]> {
+    if (!isTauri()) {
+      return [];
+    }
+    try {
+      return await invoke<any[]>('scan_subnet', { subnetBase });
+    } catch (e) {
+      console.error('[TauriService] scanSubnet error:', e);
+      return [];
+    }
+  },
+
+  async getLanDeviceCount(subnetBase?: string): Promise<number> {
+    if (!isTauri()) {
+      return 0;
+    }
+    try {
+      return await invoke<number>('get_lan_device_count', { subnetBase });
+    } catch (e) {
+      console.error('[TauriService] getLanDeviceCount error:', e);
+      return 0;
+    }
+  },
+
+  async getServerStatus(): Promise<{ running: boolean; port: number }> {
+    if (!isTauri()) return { running: true, port: 9120 };
+    try {
+      return await invoke<{ running: boolean; port: number }>('get_server_status');
+    } catch (e) {
+      console.error('[TauriService] getServerStatus error:', e);
+      return { running: false, port: 9120 };
+    }
+  },
+
+  async setServerRunning(running: boolean, port?: number): Promise<boolean> {
+    if (!isTauri()) return running;
+    try {
+      return await invoke<boolean>('set_server_running', { running, port });
+    } catch (e) {
+      console.error('[TauriService] setServerRunning error:', e);
+      return false;
+    }
+  },
+
+  async getDefaultWorkingDir(): Promise<string> {
+    if (!isTauri()) return 'C:\\Users\\Workstation';
+    try {
+      return await invoke<string>('get_default_working_dir');
+    } catch {
+      return 'C:\\';
+    }
+  },
+
+  async runTerminalCommand(command: string, cwd?: string): Promise<{ stdout: string; stderr: string; exit_code: number; success: boolean; cwd?: string }> {
+    if (!isTauri()) {
+      return {
+        stdout: `Simulated local command output for '${command}'`,
+        stderr: '',
+        exit_code: 0,
+        success: true,
+        cwd,
+      };
+    }
+    try {
+      return await invoke<{ stdout: string; stderr: string; exit_code: number; success: boolean; cwd?: string }>('run_terminal_command', {
+        command,
+        cwd,
+      });
+    } catch (e: any) {
+      return {
+        stdout: '',
+        stderr: String(e || 'Command execution error'),
+        exit_code: 1,
+        success: false,
+        cwd,
+      };
+    }
+  },
+
+  async runRemoteTerminalCommand(
+    ip: string,
+    port = 9120,
+    command: string,
+    cwd?: string,
+    token = 'NODUS-FLEET-SECURE'
+  ): Promise<{ stdout: string; stderr: string; exit_code: number; success: boolean; cwd?: string }> {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const res = await fetch(`http://${ip}:${port}/api/terminal/exec`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Nodus-Auth-Token': token,
+        },
+        body: JSON.stringify({ command, cwd }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const data = await res.json();
+        return {
+          stdout: data.stdout || '',
+          stderr: data.stderr || '',
+          exit_code: data.exit_code ?? 0,
+          success: data.success ?? true,
+          cwd: data.cwd || cwd,
+        };
+      }
+      const errText = await res.text();
+      return {
+        stdout: '',
+        stderr: `Remote execution failed HTTP ${res.status}: ${errText}`,
+        exit_code: res.status,
+        success: false,
+        cwd,
+      };
+    } catch (e: any) {
+      return {
+        stdout: '',
+        stderr: `Remote connection error: ${e?.message || e}`,
+        exit_code: -1,
+        success: false,
+        cwd,
+      };
+    }
+  },
+
+  // Interactive ConPTY / PTY Streaming Engine
+  async spawnPty(
+    sessionId: string,
+    cols = 80,
+    rows = 24,
+    cwd?: string,
+    shell?: string
+  ): Promise<boolean> {
+    if (!isTauri()) return false;
+    try {
+      return await invoke<boolean>('spawn_pty', {
+        req: {
+          session_id: sessionId,
+          cols,
+          rows,
+          cwd,
+          shell,
+        },
+      });
+    } catch (e) {
+      console.error(`[TauriService] spawnPty(${sessionId}) error:`, e);
+      return false;
+    }
+  },
+
+  async writePty(sessionId: string, data: string): Promise<boolean> {
+    if (!isTauri()) return false;
+    try {
+      return await invoke<boolean>('write_pty', {
+        sessionId,
+        data,
+      });
+    } catch (e) {
+      console.error(`[TauriService] writePty(${sessionId}) error:`, e);
+      return false;
+    }
+  },
+
+  async resizePty(sessionId: string, cols: number, rows: number): Promise<boolean> {
+    if (!isTauri()) return false;
+    try {
+      return await invoke<boolean>('resize_pty', {
+        sessionId,
+        cols,
+        rows,
+      });
+    } catch (e) {
+      return false;
+    }
+  },
+
+  async killPty(sessionId: string): Promise<boolean> {
+    if (!isTauri()) return true;
+    try {
+      return await invoke<boolean>('kill_pty', { sessionId });
+    } catch (e) {
+      return false;
+    }
+  },
+
+  async listenPtyData(sessionId: string, callback: (data: string) => void): Promise<UnlistenFn> {
+    if (!isTauri()) return () => {};
+    return await listen<string>(`pty:data:${sessionId}`, (event) => {
+      callback(event.payload);
+    });
+  },
+
+  async listenPtyExit(sessionId: string, callback: () => void): Promise<UnlistenFn> {
+    if (!isTauri()) return () => {};
+    return await listen(`pty:exit:${sessionId}`, () => {
+      callback();
+    });
+  },
 };
+
+
 

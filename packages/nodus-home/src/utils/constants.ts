@@ -82,6 +82,7 @@ export const INITIAL_DEVICES: DeviceInfo[] = [
     cpuLoad: 12,
     ramUsage: '3.4 / 8.0 GB',
     storage: '68 / 256 GB',
+    isLocal: true,
   },
 ];
 

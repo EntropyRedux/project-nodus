@@ -1,0 +1,48 @@
+import { useClipboardStore } from '../stores/useClipboardStore';
+import { useFleetStore } from '../stores/useFleetStore';
+import { TauriService } from './TauriCommands';
+import { ClipboardBroadcastService } from './ClipboardBroadcastService';
+
+export class DaemonManager {
+  private static clipboardInterval: any = null;
+  private static fleetInterval: any = null;
+  private static lastClipSignature = '';
+
+  static start(token: string) {
+    if (this.clipboardInterval) return;
+
+    // Headless clipboard polling
+    this.clipboardInterval = setInterval(async () => {
+      try {
+        const content = await TauriService.getClipboardContent();
+        if (content.text || content.image_data) {
+          const sig = `${content.text || ''}_${(content.image_data || '').substring(0, 30)}`;
+          if (sig !== this.lastClipSignature) {
+            this.lastClipSignature = sig;
+            useClipboardStore.getState().pushClip(content.text || 'Image', 'this-pc', content.image_data);
+
+            const devices = useFleetStore.getState().devices;
+            ClipboardBroadcastService.queueBroadcast(content.text || null, content.image_data, devices, token);
+          }
+        }
+      } catch {}
+    }, 1500);
+
+    // Headless fleet peer polling
+    this.fleetInterval = setInterval(async () => {
+      try {
+        const discovered = await TauriService.getDiscoveredDevices();
+        if (discovered && discovered.length > 0) {
+          useFleetStore.getState().setDiscoveredNodes(discovered);
+        }
+      } catch {}
+    }, 2500);
+  }
+
+  static stop() {
+    if (this.clipboardInterval) clearInterval(this.clipboardInterval);
+    if (this.fleetInterval) clearInterval(this.fleetInterval);
+    this.clipboardInterval = null;
+    this.fleetInterval = null;
+  }
+}

@@ -1,47 +1,133 @@
-import React, { useState } from 'react';
+import React, { useState, type CSSProperties, type ReactNode } from 'react';
 import { useDesktop } from '../../context/DesktopContext';
-import { 
-  Settings, 
-  Shield, 
-  Server, 
-  FolderOpen, 
-  Key, 
-  Copy, 
-  Check, 
-  RefreshCw, 
-  Lock, 
-  Unlock, 
-  Trash2, 
-  CheckCircle2, 
-  AlertCircle,
-  ToggleLeft,
-  ToggleRight,
-  Tablet,
-  Monitor,
-  Wifi,
-  HardDrive
-} from 'lucide-react';
+
+function Icon({ name, size = 18, style }: { name: string; size?: number; style?: CSSProperties }) {
+  return (
+    <span className="material-symbols-rounded" style={{ fontSize: size, lineHeight: 1, ...style }}>
+      {name}
+    </span>
+  );
+}
+
+function Toggle({ checked, onChange, accent }: { checked: boolean; onChange: (v: boolean) => void; accent?: string }) {
+  const bg = checked ? (accent ?? 'var(--m3-primary)') : 'var(--m3-surface-variant)';
+  return (
+    <button
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      style={{
+        width: 52,
+        height: 32,
+        borderRadius: 100,
+        border: 'none',
+        background: bg,
+        cursor: 'pointer',
+        position: 'relative',
+        transition: 'background 200ms ease',
+        flexShrink: 0,
+      }}
+    >
+      <span
+        style={{
+          position: 'absolute',
+          top: 4,
+          left: checked ? 24 : 4,
+          width: 24,
+          height: 24,
+          borderRadius: '50%',
+          background: checked ? 'var(--m3-on-primary)' : 'var(--m3-outline)',
+          transition: 'left 200ms ease',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+        }}
+      />
+    </button>
+  );
+}
+
+function SectionCard({
+  icon,
+  iconBg,
+  title,
+  subtitle,
+  children,
+}: {
+  icon: string;
+  iconBg: string;
+  title: string;
+  subtitle: string;
+  children: ReactNode;
+}) {
+  return (
+    <div style={{ background: 'var(--m3-surface-container-lowest)', border: '1px solid var(--m3-surface-container-high)', borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', borderBottom: '1px solid var(--m3-surface-container-high)', background: 'var(--m3-surface-container-low)' }}>
+        <div style={{ width: 30, height: 30, borderRadius: 12, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Icon name={icon} size={16} style={{ color: 'var(--m3-on-primary-container)' }} />
+        </div>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--m3-on-surface)' }}>{title}</div>
+          <div style={{ fontSize: 12, color: 'var(--m3-on-surface-variant)' }}>{subtitle}</div>
+        </div>
+      </div>
+      <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function ToggleRow({
+  label,
+  desc,
+  checked,
+  onChange,
+  accent,
+}: {
+  label: string;
+  desc: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  accent?: string;
+}) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--m3-on-surface)', marginBottom: 2 }}>{label}</div>
+        <div style={{ fontSize: 12, color: 'var(--m3-on-surface-variant)' }}>{desc}</div>
+      </div>
+      <Toggle checked={checked} onChange={onChange} accent={accent} />
+    </div>
+  );
+}
+
+type Permission = 'remoteExec' | 'clipboardSync' | 'powerControl';
+
+const PERMISSION_LABELS: Record<Permission, string> = {
+  remoteExec: 'Remote Exec',
+  clipboardSync: 'Clipboard',
+  powerControl: 'Power/Lock',
+};
 
 export const ConfigPanel: React.FC = () => {
-  const { 
-    serverConfig, 
-    updateServerConfig, 
-    trustedDevices, 
-    toggleTrustDevice, 
-    removeTrustedDevice, 
-    updateDevicePermissions 
+  const {
+    serverConfig,
+    updateServerConfig,
+    trustedDevices,
+    toggleTrustDevice,
+    removeTrustedDevice,
+    updateDevicePermissions,
   } = useDesktop();
 
-  const [copiedPin, setCopiedPin] = useState(false);
-  const [saveToast, setSaveToast] = useState(false);
+  const [secretVisible, setSecretVisible] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  const handleCopyPin = () => {
+  const handleCopy = () => {
     navigator.clipboard.writeText(serverConfig.pairingSecret);
-    setCopiedPin(true);
-    setTimeout(() => setCopiedPin(false), 2000);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
   };
 
-  const handleRegeneratePin = () => {
+  const handleRegenerate = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let newPin = 'NODUS-';
     for (let i = 0; i < 6; i++) {
@@ -50,317 +136,270 @@ export const ConfigPanel: React.FC = () => {
     updateServerConfig({ pairingSecret: newPin });
   };
 
-  const handleSaveNotification = () => {
-    setSaveToast(true);
-    setTimeout(() => setSaveToast(false), 2000);
-  };
-
   return (
-    <div className="w-full h-full flex flex-col gap-5 overflow-y-auto pr-1">
-      {/* Header Banner */}
-      <div className="flex items-center justify-between pb-3 border-b border-white/10 shrink-0">
-        <div>
-          <h2 className="text-lg font-bold text-white flex items-center gap-2">
-            <Settings size={20} className="text-[#34C759]" />
-            <span>Bridge Configuration & Security Studio</span>
-          </h2>
-          <p className="text-xs text-[#8E8E93]">
-            Configure local companion daemon, security PIN, node permissions, and allowed directory paths.
-          </p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Header */}
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+          <div style={{ width: 30, height: 30, borderRadius: 10, background: 'var(--m3-primary-container)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Icon name="settings" size={16} style={{ color: 'var(--m3-on-primary-container)' }} />
+          </div>
+          <h1 style={{ fontSize: 18, fontWeight: 400, color: 'var(--m3-on-background)' }}>
+            Bridge Daemon &amp; Node Security
+          </h1>
         </div>
-        {saveToast && (
-          <span className="px-3 py-1 rounded-xl bg-[#34C759]/20 text-[#34C759] text-xs font-bold border border-[#34C759]/40 flex items-center gap-1.5 animate-in fade-in duration-150">
-            <Check size={13} />
-            <span>Settings Saved</span>
-          </span>
-        )}
+        <p style={{ fontSize: 12, color: 'var(--m3-on-surface-variant)', marginLeft: 40 }}>
+          Local companion daemon endpoints, cryptographic pairing keys, permissions, and directory whitelists
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* ─── 1. Host Server & Network Daemon ──────────────────────── */}
-        <section className="bg-[#121218] border border-white/10 rounded-3xl p-5 flex flex-col gap-4 shadow-xl">
-          <div className="flex items-center gap-2.5 pb-2 border-b border-white/10">
-            <div className="w-8 h-8 rounded-xl bg-[#34C759]/20 text-[#34C759] flex items-center justify-center">
-              <Server size={16} />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-white">Local Bridge Daemon</h3>
-              <p className="text-[11px] text-[#8E8E93]">HTTP REST & UDP Discovery Listener</p>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[11px] font-bold text-[#8E8E93] uppercase block mb-1">
-                  Listening Host
-                </label>
-                <input
-                  type="text"
-                  value={serverConfig.host}
-                  onChange={(e) => {
-                    updateServerConfig({ host: e.target.value });
-                    handleSaveNotification();
-                  }}
-                  className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs font-mono text-white outline-none focus:border-[#34C759]"
-                />
-              </div>
-              <div>
-                <label className="text-[11px] font-bold text-[#8E8E93] uppercase block mb-1">
-                  Port
-                </label>
-                <input
-                  type="number"
-                  value={serverConfig.port}
-                  onChange={(e) => {
-                    updateServerConfig({ port: parseInt(e.target.value, 10) || 9120 });
-                    handleSaveNotification();
-                  }}
-                  className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs font-mono text-white outline-none focus:border-[#34C759]"
-                />
-              </div>
-            </div>
-
-            {/* Toggle Switches */}
-            <div className="pt-2 space-y-2.5">
-              <div 
-                onClick={() => {
-                  updateServerConfig({ autoStartOnBoot: !serverConfig.autoStartOnBoot });
-                  handleSaveNotification();
-                }}
-                className="p-3 rounded-2xl bg-[#181822] hover:bg-[#1E1E2A] border border-white/5 flex items-center justify-between cursor-pointer transition"
-              >
-                <div>
-                  <h4 className="text-xs font-bold text-white">Auto-Start with Windows</h4>
-                  <p className="text-[10.5px] text-[#8E8E93]">Launch background companion bridge on system logon</p>
-                </div>
-                {serverConfig.autoStartOnBoot ? (
-                  <ToggleRight size={26} className="text-[#34C759]" />
-                ) : (
-                  <ToggleLeft size={26} className="text-[#636366]" />
-                )}
-              </div>
-
-              <div 
-                onClick={() => {
-                  updateServerConfig({ broadcastMdns: !serverConfig.broadcastMdns });
-                  handleSaveNotification();
-                }}
-                className="p-3 rounded-2xl bg-[#181822] hover:bg-[#1E1E2A] border border-white/5 flex items-center justify-between cursor-pointer transition"
-              >
-                <div>
-                  <h4 className="text-xs font-bold text-white">Broadcast mDNS & UDP Beacon</h4>
-                  <p className="text-[10.5px] text-[#8E8E93]">Allow Android tablets on subnet to discover this PC</p>
-                </div>
-                {serverConfig.broadcastMdns ? (
-                  <ToggleRight size={26} className="text-[#007AFF]" />
-                ) : (
-                  <ToggleLeft size={26} className="text-[#636366]" />
-                )}
-              </div>
-
-              <div 
-                onClick={() => {
-                  updateServerConfig({ encryptionEnabled: !serverConfig.encryptionEnabled });
-                  handleSaveNotification();
-                }}
-                className="p-3 rounded-2xl bg-[#181822] hover:bg-[#1E1E2A] border border-white/5 flex items-center justify-between cursor-pointer transition"
-              >
-                <div>
-                  <h4 className="text-xs font-bold text-white">AES-256 Payload Encryption</h4>
-                  <p className="text-[10.5px] text-[#8E8E93]">Encrypt clipboard & remote exec data over LAN</p>
-                </div>
-                {serverConfig.encryptionEnabled ? (
-                  <ToggleRight size={26} className="text-[#BF5AF2]" />
-                ) : (
-                  <ToggleLeft size={26} className="text-[#636366]" />
-                )}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ─── 2. Security PIN & Pairing Secret ────────────────────── */}
-        <section className="bg-[#121218] border border-white/10 rounded-3xl p-5 flex flex-col gap-4 shadow-xl">
-          <div className="flex items-center gap-2.5 pb-2 border-b border-white/10">
-            <div className="w-8 h-8 rounded-xl bg-[#007AFF]/20 text-[#007AFF] flex items-center justify-center">
-              <Shield size={16} />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-white">Security Key & Pairing PIN</h3>
-              <p className="text-[11px] text-[#8E8E93]">Prevent unauthorized nodes from executing actions</p>
-            </div>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-black/40 border border-white/10 flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-[#8E8E93] uppercase">Pairing PIN / Token</span>
-              <span className="text-[10px] text-[#34C759] font-mono">Status: Enforced</span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <div className="flex-1 px-3.5 py-2.5 rounded-xl bg-[#181822] border border-white/10 font-mono text-sm font-bold text-white tracking-widest flex items-center justify-between">
-                <span>{serverConfig.pairingSecret}</span>
-                <Key size={14} className="text-[#007AFF]" />
-              </div>
-              <button
-                onClick={handleCopyPin}
-                className="p-2.5 rounded-xl bg-white/5 hover:bg-white/15 text-white transition border border-white/10"
-                title="Copy Pairing PIN"
-              >
-                {copiedPin ? <Check size={16} className="text-[#34C759]" /> : <Copy size={16} />}
-              </button>
-              <button
-                onClick={handleRegeneratePin}
-                className="p-2.5 rounded-xl bg-[#007AFF]/20 hover:bg-[#007AFF]/30 text-[#007AFF] transition border border-[#007AFF]/30"
-                title="Regenerate New PIN"
-              >
-                <RefreshCw size={16} />
-              </button>
-            </div>
-
-            <p className="text-[11px] text-[#8E8E93] leading-relaxed">
-              Enter this pairing token in the Nodus Home launcher on your POCO Pad to authenticate cross-device commands.
-            </p>
-          </div>
-
-          {/* Directory Whitelist */}
-          <div className="flex flex-col gap-2 pt-1">
-            <div className="flex items-center justify-between">
-              <label className="text-[11px] font-bold text-[#8E8E93] uppercase flex items-center gap-1.5">
-                <FolderOpen size={13} className="text-[#FF9500]" />
-                <span>Allowed Execution Paths</span>
-              </label>
-              <span className="text-[10px] text-[#8E8E93]">Semicolon delimited</span>
-            </div>
-            <textarea
-              rows={2}
-              value={serverConfig.allowedPaths}
-              onChange={(e) => {
-                updateServerConfig({ allowedPaths: e.target.value });
-                handleSaveNotification();
+      {/* Local Bridge Daemon */}
+      <SectionCard
+        icon="dns"
+        iconBg="var(--m3-primary-container)"
+        title="Local Bridge Daemon"
+        subtitle="HTTP REST & UDP subnet discovery listener"
+      >
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: 'var(--m3-on-surface-variant)', marginBottom: 6 }}>LISTENING HOST</div>
+            <input
+              value={serverConfig.host}
+              onChange={e => updateServerConfig({ host: e.target.value })}
+              style={{
+                width: '100%',
+                background: 'var(--m3-surface-container)',
+                border: '1px solid var(--m3-outline-variant)',
+                borderRadius: 8,
+                padding: '9px 12px',
+                fontSize: 13,
+                fontFamily: 'Space Mono, monospace',
+                color: 'var(--m3-on-surface)',
+                outline: 'none',
+                boxSizing: 'border-box',
               }}
-              className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs font-mono text-white outline-none focus:border-[#FF9500] resize-none"
-              placeholder="C:\Projects;C:\Program Files;C:\Tools"
             />
           </div>
-        </section>
-      </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: 'var(--m3-on-surface-variant)', marginBottom: 6 }}>BIND PORT</div>
+            <input
+              value={serverConfig.port}
+              onChange={e => updateServerConfig({ port: parseInt(e.target.value, 10) || 9120 })}
+              style={{
+                width: '100%',
+                background: 'var(--m3-surface-container)',
+                border: '1px solid var(--m3-outline-variant)',
+                borderRadius: 8,
+                padding: '9px 12px',
+                fontSize: 13,
+                fontFamily: 'Space Mono, monospace',
+                color: 'var(--m3-on-surface)',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
+        </div>
+        <div style={{ height: 1, background: 'var(--m3-surface-container-high)' }} />
+        <ToggleRow
+          label="Auto-Start on Boot"
+          desc="Launch companion daemon on Windows logon"
+          checked={serverConfig.autoStartOnBoot}
+          onChange={v => updateServerConfig({ autoStartOnBoot: v })}
+        />
+        <ToggleRow
+          label="Broadcast mDNS Beacon"
+          desc="Allow tablets on local subnet to automatically detect host"
+          checked={serverConfig.broadcastMdns}
+          onChange={v => updateServerConfig({ broadcastMdns: v })}
+        />
+        <ToggleRow
+          label="AES-256 Payload Encryption"
+          desc="Encrypt clipboard & command packets over local network"
+          checked={serverConfig.encryptionEnabled}
+          onChange={v => updateServerConfig({ encryptionEnabled: v })}
+          accent="#7B68EE"
+        />
+      </SectionCard>
 
-      {/* ─── 3. Trusted Devices Allowlist Matrix ──────────────────── */}
-      <section className="bg-[#121218] border border-white/10 rounded-3xl p-5 flex flex-col gap-4 shadow-xl">
-        <div className="flex items-center justify-between pb-2 border-b border-white/10">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-[#BF5AF2]/20 text-[#BF5AF2] flex items-center justify-center">
-              <Key size={16} />
+      {/* Pairing Secret */}
+      <SectionCard
+        icon="key"
+        iconBg="color-mix(in srgb, #7B68EE 18%, transparent)"
+        title="Pairing Secret & Security PIN"
+        subtitle="Require authenticated PIN for cross-device command execution"
+      >
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: 'var(--m3-on-surface-variant)' }}>PAIRING SECRET KEY</div>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, color: '#34A853' }}>
+              <Icon name="verified" size={13} style={{ color: '#34A853' }} />
+              Enforced
+            </span>
+          </div>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              background: 'var(--m3-surface-container)',
+              border: '1px solid var(--m3-outline-variant)',
+              borderRadius: 10,
+              padding: '12px 14px',
+            }}
+          >
+            <span style={{ flex: 1, fontFamily: 'Space Mono, monospace', fontSize: 14, fontWeight: 700, color: 'var(--m3-on-surface)', letterSpacing: 1 }}>
+              {secretVisible ? serverConfig.pairingSecret : '●●●●●-●●●●●-●●●●●●'}
+            </span>
+            <button
+              onClick={() => setSecretVisible(v => !v)}
+              title="Show/hide"
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--m3-on-surface-variant)', borderRadius: 8, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Icon name={secretVisible ? 'visibility_off' : 'visibility'} size={16} />
+            </button>
+            <button
+              onClick={handleCopy}
+              title="Copy"
+              style={{ background: copied ? 'var(--m3-tertiary-container)' : 'transparent', border: 'none', cursor: 'pointer', color: copied ? 'var(--m3-on-tertiary-container)' : 'var(--m3-on-surface-variant)', borderRadius: 8, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Icon name={copied ? 'check' : 'content_copy'} size={16} />
+            </button>
+            <button
+              onClick={handleRegenerate}
+              title="Regenerate"
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--m3-on-surface-variant)', borderRadius: 8, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Icon name="autorenew" size={16} />
+            </button>
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--m3-on-surface-variant)', marginTop: 8, lineHeight: 1.5 }}>
+            Enter this pairing token in the Nodus Home companion app on your tablet to authorize control.
+          </p>
+        </div>
+
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Icon name="folder" size={14} style={{ color: 'var(--m3-primary)' }} />
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: 'var(--m3-on-surface-variant)' }}>EXECUTION PATH WHITELIST</span>
+            </div>
+            <span style={{ fontSize: 11, color: 'var(--m3-on-surface-variant)' }}>Semicolon-delimited</span>
+          </div>
+          <input
+            value={serverConfig.allowedPaths}
+            onChange={e => updateServerConfig({ allowedPaths: e.target.value })}
+            style={{
+              width: '100%',
+              background: 'var(--m3-surface-container)',
+              border: '1px solid var(--m3-outline-variant)',
+              borderRadius: 8,
+              padding: '9px 12px',
+              fontSize: 12,
+              fontFamily: 'Space Mono, monospace',
+              color: 'var(--m3-on-surface)',
+              outline: 'none',
+              boxSizing: 'border-box',
+            }}
+          />
+        </div>
+      </SectionCard>
+
+      {/* Authorized Nodes */}
+      <div style={{ background: 'var(--m3-surface-container-lowest)', border: '1px solid var(--m3-surface-container-high)', borderRadius: 12, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--m3-surface-container-high)', background: 'var(--m3-surface-container-low)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 30, height: 30, borderRadius: 12, background: 'color-mix(in srgb, #34A853 15%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="verified_user" size={16} style={{ color: '#0D652D' }} />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white">Authorized Nodes & Permission Matrix</h3>
-              <p className="text-[11px] text-[#8E8E93]">Granular access control per authenticated device</p>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--m3-on-surface)' }}>Authorized Nodes &amp; Permissions Matrix</div>
+              <div style={{ fontSize: 12, color: 'var(--m3-on-surface-variant)' }}>Granular access control per authenticated fleet device</div>
             </div>
           </div>
-          <span className="text-xs text-[#8E8E93] font-mono">
-            {trustedDevices.filter((d) => d.isTrusted).length} / {trustedDevices.length} Trusted
-          </span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#34A853' }}>{trustedDevices.length} Authorized</span>
         </div>
 
-        <div className="space-y-2.5">
-          {trustedDevices.length === 0 ? (
-            <div className="p-4 rounded-2xl bg-[#181822]/60 border border-white/5 text-center text-xs text-[#8E8E93]">
-              No authenticated remote nodes in allowlist. Discovered peers paired with your pairing secret will appear here.
-            </div>
-          ) : (
-            trustedDevices.map((device) => (
+        <div style={{ padding: '8px' }}>
+          {trustedDevices.map((node, i) => (
             <div
-              key={device.id}
-              className="p-4 rounded-2xl bg-[#181822] border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-3"
+              key={node.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: '14px 12px',
+                borderRadius: 12,
+                borderBottom: i < trustedDevices.length - 1 ? '1px solid var(--m3-surface-container-high)' : 'none',
+              }}
             >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#34C759]/20 text-[#34C759] flex items-center justify-center text-lg">
-                  {device.os === 'android' ? <Tablet size={20} /> : <Monitor size={20} />}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h4 className="text-xs font-bold text-white">{device.name}</h4>
-                    <span className="px-1.5 py-0.2 rounded-md bg-white/5 text-[10px] font-mono text-[#34C759]">
-                      {device.ip}
-                    </span>
-                  </div>
-                  <p className="text-[10.5px] font-mono text-[#8E8E93]">{device.fingerprint}</p>
-                </div>
+              <div style={{ width: 34, height: 34, borderRadius: 10, background: 'var(--m3-secondary-container)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Icon name={node.os === 'android' ? 'tablet' : 'desktop_windows'} size={20} style={{ color: 'var(--m3-on-secondary-container)' }} />
               </div>
 
-              {/* Permission Checkboxes */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  onClick={() =>
-                    updateDevicePermissions(device.id, {
-                      remoteExec: !device.permissions.remoteExec,
-                    })
-                  }
-                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold border transition ${
-                    device.permissions.remoteExec
-                      ? 'bg-[#34C759]/20 text-[#34C759] border-[#34C759]/40'
-                      : 'bg-white/5 text-[#636366] border-white/5'
-                  }`}
-                >
-                  Remote Exec
-                </button>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--m3-on-surface)' }}>{node.name}</span>
+                  <span style={{ fontFamily: 'Space Mono, monospace', fontSize: 11, color: 'var(--m3-primary)' }}>{node.ip}</span>
+                </div>
+                <div style={{ fontFamily: 'Space Mono, monospace', fontSize: 10, color: 'var(--m3-on-surface-variant)', marginTop: 3 }}>{node.fingerprint}</div>
+              </div>
 
-                <button
-                  onClick={() =>
-                    updateDevicePermissions(device.id, {
-                      clipboardSync: !device.permissions.clipboardSync,
-                    })
-                  }
-                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold border transition ${
-                    device.permissions.clipboardSync
-                      ? 'bg-[#007AFF]/20 text-[#007AFF] border-[#007AFF]/40'
-                      : 'bg-white/5 text-[#636366] border-white/5'
-                  }`}
-                >
-                  Clipboard
-                </button>
+              <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
+                {(['remoteExec', 'clipboardSync', 'powerControl'] as Permission[]).map(perm => {
+                  const active = node.permissions[perm];
+                  return (
+                    <button
+                      key={perm}
+                      onClick={() =>
+                        updateDevicePermissions(node.id, {
+                          [perm]: !active,
+                        })
+                      }
+                      style={{
+                        padding: '5px 10px',
+                        borderRadius: 8,
+                        border: 'none',
+                        background: active ? 'var(--m3-primary)' : 'var(--m3-surface-container)',
+                        color: active ? 'var(--m3-on-primary)' : 'var(--m3-on-surface-variant)',
+                        fontSize: 11,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        fontFamily: 'Roboto, sans-serif',
+                      }}
+                    >
+                      {PERMISSION_LABELS[perm]}
+                    </button>
+                  );
+                })}
+              </div>
 
+              <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
                 <button
-                  onClick={() =>
-                    updateDevicePermissions(device.id, {
-                      powerControl: !device.permissions.powerControl,
-                    })
-                  }
-                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold border transition ${
-                    device.permissions.powerControl
-                      ? 'bg-[#FF9500]/20 text-[#FF9500] border-[#FF9500]/40'
-                      : 'bg-white/5 text-[#636366] border-white/5'
-                  }`}
+                  onClick={() => toggleTrustDevice(node.id)}
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: node.isTrusted ? 'var(--m3-primary)' : 'var(--m3-error)', borderRadius: 8, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                 >
-                  Power / Lock
+                  <Icon name={node.isTrusted ? 'lock_open' : 'lock'} size={16} />
                 </button>
-
                 <button
-                  onClick={() => toggleTrustDevice(device.id)}
-                  className={`p-1.5 rounded-xl border transition ${
-                    device.isTrusted
-                      ? 'bg-[#34C759]/20 text-[#34C759] border-[#34C759]/30'
-                      : 'bg-[#FF3B30]/20 text-[#FF3B30] border-[#FF3B30]/30'
-                  }`}
-                  title={device.isTrusted ? 'Revoke Device Trust' : 'Authorize Device'}
+                  onClick={() => removeTrustedDevice(node.id)}
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--m3-on-surface-variant)', borderRadius: 8, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                 >
-                  {device.isTrusted ? <Lock size={14} /> : <Unlock size={14} />}
-                </button>
-
-                <button
-                  onClick={() => removeTrustedDevice(device.id)}
-                  className="p-1.5 rounded-xl bg-white/5 hover:bg-[#FF3B30]/20 text-[#8E8E93] hover:text-[#FF3B30] border border-white/5 transition"
-                  title="Remove Device"
-                >
-                  <Trash2 size={14} />
+                  <Icon name="delete" size={16} />
                 </button>
               </div>
             </div>
-          )))}
+          ))}
+
+          {trustedDevices.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--m3-on-surface-variant)' }}>
+              <Icon name="device_unknown" size={36} style={{ opacity: 0.25, display: 'block', margin: '0 auto 8px' }} />
+              <span style={{ fontSize: 13 }}>No authorized nodes</span>
+            </div>
+          )}
         </div>
-      </section>
+      </div>
     </div>
   );
 };
+

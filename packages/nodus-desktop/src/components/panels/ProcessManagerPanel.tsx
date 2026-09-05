@@ -1,459 +1,317 @@
-import React, { useState, useMemo } from 'react';
-import { useDesktop } from '../../context/DesktopContext';
-import { 
-  Activity, 
-  RotateCcw, 
-  Trash2, 
-  Search, 
-  Cpu, 
-  HardDrive, 
-  ChevronDown, 
-  ChevronRight,
-  AppWindow,
-  Server,
-  Shield,
-  Layers,
-  AlertTriangle,
-  Skull
-} from 'lucide-react';
+import React, { useState, useMemo, type CSSProperties } from 'react';
+import { useProcessStore } from '../../stores/useProcessStore';
 import { DeviceProcess } from '../../types/desktop';
 
-interface ProcessAppGroup {
-  appName: string;
-  category: 'user' | 'daemon' | 'system' | 'service';
-  totalCpu: number;
-  totalMemoryMb: number;
-  processes: DeviceProcess[];
+function Icon({ name, size = 18, style }: { name: string; size?: number; style?: CSSProperties }) {
+  return (
+    <span className="material-symbols-rounded" style={{ fontSize: size, lineHeight: 1, ...style }}>
+      {name}
+    </span>
+  );
+}
+
+function MiniBar({ value, max, color }: { value: number; max: number; color: string }) {
+  return (
+    <div style={{ width: 48, height: 4, background: 'var(--m3-surface-container-high)', borderRadius: 2, overflow: 'hidden', flexShrink: 0 }}>
+      <div style={{ width: `${Math.min(100, (value / max) * 100)}%`, height: '100%', background: color, borderRadius: 2, transition: 'width 600ms ease' }} />
+    </div>
+  );
 }
 
 export const ProcessManagerPanel: React.FC = () => {
-  const { processes, refreshProcesses, killProcess, systemStats } = useDesktop();
+  const { 
+    processes, 
+    systemStats,
+    isLoading: isRefreshing, 
+    loadProcesses: refreshProcesses, 
+    terminateProcess: killProcess 
+  } = useProcessStore();
   const [filterQuery, setFilterQuery] = useState('');
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [terminatedPid, setTerminatedPid] = useState<number | null>(null);
-  const [processToKill, setProcessToKill] = useState<{ pid: number; name: string } | null>(null);
-
-  // Collapsible category sections
-  const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({
-    apps: false,
-    background: false,
-    windows: false,
-  });
-
-  // Expanded application instances (chevron toggle per application)
-  const [expandedApps, setExpandedApps] = useState<Record<string, boolean>>({});
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [sortCol, setSortCol] = useState<'memory' | 'cpu'>('memory');
 
   React.useEffect(() => {
     refreshProcesses();
   }, [refreshProcesses]);
 
-  const toggleCategory = (catKey: string) => {
-    setCollapsedCategories(prev => ({ ...prev, [catKey]: !prev[catKey] }));
-  };
-
-  const toggleAppExpand = (appName: string) => {
-    setExpandedApps(prev => ({ ...prev, [appName]: !prev[appName] }));
-  };
-
   const handleRefresh = async () => {
-    setIsRefreshing(true);
     await refreshProcesses();
-    setTimeout(() => setIsRefreshing(false), 500);
   };
 
-  const handleConfirmKill = async () => {
-    if (!processToKill) return;
-    const pid = processToKill.pid;
-    const success = await killProcess(pid);
-    if (success) {
-      setTerminatedPid(pid);
-      setTimeout(() => setTerminatedPid(null), 2000);
-    }
-    setProcessToKill(null);
+  const toggleCollapse = (label: string) => {
+    setCollapsed(prev => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
   };
 
-  // Filter processes
-  const filteredProcesses = useMemo(() => {
+  const filtered = useMemo(() => {
     const q = filterQuery.toLowerCase().trim();
     if (!q) return processes;
     return processes.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        p.pid.toString().includes(q) ||
-        (p.user && p.user.toLowerCase().includes(q))
+      p => p.name.toLowerCase().includes(q) || p.pid.toString().includes(q)
     );
   }, [processes, filterQuery]);
 
-  // Aggregate processes by Application Name under Apps, Background, and Windows categories
-  const groupedCategories = useMemo(() => {
-    const appMap: Record<string, ProcessAppGroup> = {};
-    const bgMap: Record<string, ProcessAppGroup> = {};
-    const winMap: Record<string, ProcessAppGroup> = {};
+  const groups = useMemo(() => {
+    const apps: DeviceProcess[] = [];
+    const bg: DeviceProcess[] = [];
+    const sys: DeviceProcess[] = [];
 
-    for (const proc of filteredProcesses) {
-      const cat = proc.category || 'user';
-      let targetMap = appMap;
-      if (cat === 'system') {
-        targetMap = winMap;
-      } else if (cat === 'daemon' || cat === 'service') {
-        targetMap = bgMap;
-      }
-
-      if (!targetMap[proc.name]) {
-        targetMap[proc.name] = {
-          appName: proc.name,
-          category: cat,
-          totalCpu: 0,
-          totalMemoryMb: 0,
-          processes: [],
-        };
-      }
-
-      targetMap[proc.name].totalCpu += proc.cpu || 0;
-      targetMap[proc.name].totalMemoryMb += proc.memoryMb || 0;
-      targetMap[proc.name].processes.push(proc);
+    for (const p of filtered) {
+      if (p.category === 'system') sys.push(p);
+      else if (p.category === 'daemon' || p.category === 'service') bg.push(p);
+      else apps.push(p);
     }
 
-    const sortGroups = (map: Record<string, ProcessAppGroup>) =>
-      Object.values(map).sort((a, b) => b.totalMemoryMb - a.totalMemoryMb);
+    const sortFn = (a: DeviceProcess, b: DeviceProcess) =>
+      sortCol === 'memory' ? (b.memoryMb || 0) - (a.memoryMb || 0) : (b.cpu || 0) - (a.cpu || 0);
 
-    return {
-      apps: sortGroups(appMap),
-      background: sortGroups(bgMap),
-      windows: sortGroups(winMap),
-    };
-  }, [filteredProcesses]);
+    return [
+      { label: 'Apps', icon: 'apps', iconColor: 'var(--m3-primary)', processes: apps.sort(sortFn) },
+      { label: 'Background Processes', icon: 'settings_applications', iconColor: '#F57C00', processes: bg.sort(sortFn) },
+      { label: 'Windows System Processes', icon: 'shield', iconColor: '#7B68EE', processes: sys.sort(sortFn) },
+    ];
+  }, [filtered, sortCol]);
 
-  const renderAppGroup = (group: ProcessAppGroup) => {
-    const isExpanded = Boolean(expandedApps[group.appName]);
-    const hasMultiple = group.processes.length > 1;
-    const isHighMem = group.totalMemoryMb > 400;
-    const isHighCpu = group.totalCpu > 10.0;
-
-    return (
-      <div key={group.appName} className="rounded-xl overflow-hidden transition bg-white/[0.01] hover:bg-white/[0.03]">
-        {/* Parent Application Header Row */}
-        <div className="grid grid-cols-12 items-center py-2 px-3 hover:bg-white/5 rounded-xl transition text-xs group">
-          {/* Chevron + App Name + Count Badge */}
-          <div className="col-span-5 flex items-center gap-2 min-w-0 pr-2">
-            {hasMultiple ? (
-              <button
-                type="button"
-                onClick={() => toggleAppExpand(group.appName)}
-                className="p-1 -ml-1 text-[#8E8E93] hover:text-white transition rounded"
-              >
-                {isExpanded ? <ChevronDown size={14} className="text-[#FF9500]" /> : <ChevronRight size={14} />}
-              </button>
-            ) : (
-              <span className="w-5" />
-            )}
-
-            <span className="font-semibold text-white truncate group-hover:text-[#FF9500] transition">
-              {group.appName}
-            </span>
-
-            {hasMultiple && (
-              <span className="text-[10px] font-mono text-[#8E8E93] bg-white/10 px-1.5 py-0.2 rounded-md shrink-0">
-                {group.processes.length}
-              </span>
-            )}
-          </div>
-
-          {/* Status */}
-          <div className="col-span-2 text-[#8E8E93] text-[11px] truncate flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#34C759]" />
-            <span>Running</span>
-          </div>
-
-          {/* CPU Total */}
-          <div className="col-span-2 text-right pr-4 font-mono font-bold">
-            <span className={isHighCpu ? 'text-[#FF3B30]' : 'text-[#8E8E93]'}>
-              {group.totalCpu > 0 ? `${group.totalCpu.toFixed(1)}%` : '0.0%'}
-            </span>
-          </div>
-
-          {/* Memory Total */}
-          <div className="col-span-2 text-right pr-4 font-mono font-bold">
-            <span className={isHighMem ? 'text-[#FF9500]' : 'text-white'}>
-              {group.totalMemoryMb} MB
-            </span>
-          </div>
-
-          {/* Action */}
-          <div className="col-span-1 flex justify-end">
-            {group.processes.length === 1 ? (
-              <button
-                onClick={() => setProcessToKill({ pid: group.processes[0].pid, name: group.processes[0].name })}
-                className="p-1 px-2 rounded-lg bg-[#FF3B30]/10 hover:bg-[#FF3B30] text-[#FF3B30] hover:text-white font-bold text-[11px] flex items-center gap-1 border border-[#FF3B30]/20 hover:border-[#FF3B30] transition active:scale-95"
-                title={`End Task: ${group.appName} (${group.processes[0].pid})`}
-              >
-                <Trash2 size={12} />
-              </button>
-            ) : (
-              <button
-                onClick={() => toggleAppExpand(group.appName)}
-                className="p-1 px-2 text-[#8E8E93] hover:text-white text-[11px] transition"
-                title="Expand instances"
-              >
-                {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Sub-processes / Child Instances under this Application */}
-        {hasMultiple && isExpanded && (
-          <div className="pl-6 pr-2 py-1 space-y-0.5 border-l-2 border-white/10 ml-4 mb-1">
-            {group.processes.map((proc) => {
-              const isTerminated = terminatedPid === proc.pid;
-              return (
-                <div
-                  key={proc.pid}
-                  className={`grid grid-cols-12 items-center py-1.5 px-3 rounded-lg hover:bg-white/5 transition text-[11px] ${
-                    isTerminated ? 'bg-[#FF3B30]/20 opacity-50' : ''
-                  }`}
-                >
-                  <div className="col-span-5 flex items-center gap-2 min-w-0 pr-2">
-                    <span className="font-mono text-[#8E8E93] text-[9px] bg-white/5 px-1.5 py-0.5 rounded text-center shrink-0">
-                      PID {proc.pid}
-                    </span>
-                    <span className="text-[#8E8E93] truncate">
-                      {proc.description || proc.name}
-                    </span>
-                  </div>
-
-                  <div className="col-span-2 text-[#8E8E93] text-[10px]">
-                    {proc.user || 'User'}
-                  </div>
-
-                  <div className="col-span-2 text-right pr-4 font-mono text-[#8E8E93]">
-                    {proc.cpu ? `${proc.cpu.toFixed(1)}%` : '0.0%'}
-                  </div>
-
-                  <div className="col-span-2 text-right pr-4 font-mono text-[#8E8E93]">
-                    {proc.memoryMb || 0} MB
-                  </div>
-
-                  <div className="col-span-1 flex justify-end">
-                    <button
-                      onClick={() => setProcessToKill({ pid: proc.pid, name: `${proc.name} (PID ${proc.pid})` })}
-                      className="p-1 rounded bg-[#FF3B30]/10 hover:bg-[#FF3B30] text-[#FF3B30] hover:text-white transition active:scale-95"
-                      title={`End Instance: PID ${proc.pid}`}
-                    >
-                      <Trash2 size={11} />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const renderSectionHeader = (title: string, count: number, catKey: string, icon: React.ReactNode) => {
-    const isCollapsed = collapsedCategories[catKey];
-    return (
-      <button
-        onClick={() => toggleCategory(catKey)}
-        className="w-full flex items-center justify-between py-2 px-3 bg-white/[0.03] hover:bg-white/[0.06] rounded-xl text-left transition my-1 select-none"
-      >
-        <div className="flex items-center gap-2 text-xs font-bold text-white uppercase tracking-wider">
-          {isCollapsed ? <ChevronRight size={14} className="text-[#8E8E93]" /> : <ChevronDown size={14} className="text-[#8E8E93]" />}
-          <div className="flex items-center gap-1.5 text-[#8E8E93]">
-            {icon}
-            <span className="text-white">{title}</span>
-          </div>
-          <span className="text-[10px] font-mono font-normal text-[#8E8E93] bg-white/5 px-2 py-0.5 rounded-full">
-            {count} apps
-          </span>
-        </div>
-      </button>
-    );
-  };
+  const totalCpu = systemStats?.cpu_load_percent || processes.reduce((s, p) => s + (p.cpu || 0), 0);
+  const totalMemMb = systemStats?.ram_used_mb || processes.reduce((s, p) => s + (p.memoryMb || 0), 0);
+  const maxMemGb = systemStats ? Math.round((systemStats.ram_total_mb / 1024) * 10) / 10 : 32;
 
   return (
-    <div className="w-full h-full flex flex-col gap-3 overflow-hidden relative font-sans">
-      {/* Warning Confirmation Modal */}
-      {processToKill && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fadeIn">
-          <div className="w-full max-w-sm bg-[#16161D] border border-[#FF3B30]/40 rounded-3xl p-5 shadow-2xl flex flex-col gap-4 text-center">
-            <div className="w-12 h-12 rounded-2xl bg-[#FF3B30]/20 border border-[#FF3B30]/40 text-[#FF3B30] flex items-center justify-center mx-auto">
-              <AlertTriangle size={24} />
-            </div>
-
-            <div>
-              <h3 className="text-base font-bold text-white">End Task?</h3>
-              <p className="text-xs text-[#8E8E93] mt-1.5 leading-relaxed">
-                Are you sure you want to end <span className="text-white font-mono font-bold">{processToKill.name}</span> (PID: <span className="font-mono text-[#FF9500]">{processToKill.pid}</span>)? If an open program is associated with this process, it will close and you will lose any unsaved data.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2.5 pt-1">
-              <button
-                type="button"
-                onClick={() => setProcessToKill(null)}
-                className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-[#8E8E93] hover:text-white text-xs font-semibold transition"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmKill}
-                className="flex-1 py-2.5 rounded-xl bg-[#FF3B30] hover:bg-[#E0352B] text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-lg shadow-[#FF3B30]/25 active:scale-95"
-              >
-                <Skull size={13} />
-                <span>End Task</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Header Banner */}
-      <div className="flex items-center justify-between pb-2 border-b border-white/10 shrink-0">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
-          <h2 className="text-base font-bold text-white flex items-center gap-2">
-            <Activity size={18} className="text-[#FF9500]" />
-            <span>Task Manager (Processes)</span>
-          </h2>
-          <p className="text-[11px] text-[#8E8E93]">
-            Nested application tree showing all process instances under their parent app.
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+            <div style={{ width: 30, height: 30, borderRadius: 10, background: 'var(--m3-primary-container)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="monitoring" size={16} style={{ color: 'var(--m3-on-primary-container)' }} />
+            </div>
+            <h1 style={{ fontSize: 18, fontWeight: 400, color: 'var(--m3-on-background)' }}>
+              Process &amp; Task Manager
+            </h1>
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--m3-on-surface-variant)', marginLeft: 40 }}>
+            Direct Win32 process enumeration, resource telemetry, and task termination
           </p>
         </div>
-
-        {/* Quick Search & Refresh */}
-        <div className="flex items-center gap-2">
-          <div className="relative flex items-center">
-            <Search size={13} className="absolute left-3 text-[#8E8E93]" />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ position: 'relative' }}>
+            <Icon name="search" size={15} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--m3-on-surface-variant)', pointerEvents: 'none' }} />
             <input
-              type="text"
-              placeholder="Search apps or process instances..."
               value={filterQuery}
-              onChange={(e) => setFilterQuery(e.target.value)}
-              className="pl-8 pr-3 py-1.5 rounded-xl bg-[#181822] border border-white/10 text-xs text-white outline-none focus:border-[#FF9500] w-64"
+              onChange={e => setFilterQuery(e.target.value)}
+              placeholder="Search apps or process..."
+              style={{
+                background: 'var(--m3-surface-container-low)',
+                border: '1px solid var(--m3-outline-variant)',
+                borderRadius: 10,
+                padding: '8px 12px 8px 30px',
+                fontSize: 13,
+                fontFamily: 'Roboto, sans-serif',
+                color: 'var(--m3-on-surface)',
+                outline: 'none',
+                width: 220,
+              }}
             />
           </div>
-
           <button
             onClick={handleRefresh}
             disabled={isRefreshing}
-            className="px-3 py-1.5 rounded-xl bg-[#FF9500] hover:bg-[#E08500] text-black text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-[#FF9500]/20 transition active:scale-95"
+            style={{
+              background: 'var(--m3-secondary-container)',
+              color: 'var(--m3-on-secondary-container)',
+              border: 'none',
+              borderRadius: 10,
+              padding: '9px 14px',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              fontFamily: 'Roboto, sans-serif',
+            }}
           >
-            <RotateCcw size={12} className={isRefreshing ? 'animate-spin' : ''} />
-            <span>Refresh</span>
+            <Icon name="refresh" size={15} />
+            {isRefreshing ? 'Refreshing...' : 'Refresh'}
           </button>
         </div>
       </div>
 
-      {/* System Resource Gauges Strip */}
-      {systemStats && (
-        <div className="grid grid-cols-3 gap-2.5 shrink-0">
-          <div className="p-2.5 rounded-2xl bg-[#121218] border border-white/10 flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-[#34C759]/20 text-[#34C759] flex items-center justify-center shrink-0">
-              <Cpu size={15} />
+      {/* Resource Gauge Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+        <div style={{ background: 'var(--m3-surface-container-lowest)', border: '1px solid var(--m3-surface-container-high)', borderRadius: 12, padding: '12px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <div style={{ width: 30, height: 30, borderRadius: 10, background: 'var(--m3-primary-container)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="memory" size={16} style={{ color: 'var(--m3-on-primary-container)' }} />
             </div>
-            <div>
-              <span className="text-[10px] uppercase font-bold text-[#8E8E93]">CPU Utilization</span>
-              <p className="text-xs font-mono font-bold text-white">{systemStats.cpu_load_percent}%</p>
-            </div>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: 'var(--m3-on-surface-variant)' }}>CPU LOAD</span>
           </div>
-
-          <div className="p-2.5 rounded-2xl bg-[#121218] border border-white/10 flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-[#007AFF]/20 text-[#007AFF] flex items-center justify-center shrink-0">
-              <HardDrive size={15} />
-            </div>
-            <div>
-              <span className="text-[10px] uppercase font-bold text-[#8E8E93]">Memory In-Use</span>
-              <p className="text-xs font-mono font-bold text-white">
-                {Math.round((systemStats.ram_used_mb / 1024) * 10) / 10} / {Math.round((systemStats.ram_total_mb / 1024) * 10) / 10} GB
-              </p>
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+            <span style={{ fontFamily: 'Space Mono, monospace', fontSize: 22, fontWeight: 700, color: 'var(--m3-on-surface)' }}>
+              {Math.round(totalCpu)}%
+            </span>
           </div>
-
-          <div className="p-2.5 rounded-2xl bg-[#121218] border border-white/10 flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-[#BF5AF2]/20 text-[#BF5AF2] flex items-center justify-center shrink-0">
-              <Layers size={15} />
-            </div>
-            <div>
-              <span className="text-[10px] uppercase font-bold text-[#8E8E93]">Total Running Tasks</span>
-              <p className="text-xs font-mono font-bold text-white">{processes.length} Processes</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Grouped Process Table */}
-      <div className="flex-1 bg-[#121218] border border-white/10 rounded-2xl p-3 flex flex-col overflow-hidden shadow-2xl">
-        {/* Table Column Headers */}
-        <div className="grid grid-cols-12 text-[10px] font-bold text-[#8E8E93] uppercase pb-2 border-b border-white/10 px-3 shrink-0 select-none">
-          <div className="col-span-5">
-            <span>Name</span>
-          </div>
-
-          <div className="col-span-2">
-            <span>Status</span>
-          </div>
-
-          <div className="col-span-2 text-right pr-4">
-            <span>CPU</span>
-          </div>
-
-          <div className="col-span-2 text-right pr-4">
-            <span>Memory</span>
-          </div>
-
-          <div className="col-span-1 text-right">
-            <span>Action</span>
+          <div style={{ height: 6, background: 'var(--m3-surface-container-high)', borderRadius: 3, overflow: 'hidden' }}>
+            <div style={{ width: `${Math.min(100, totalCpu)}%`, height: '100%', background: 'var(--m3-primary)', borderRadius: 3, transition: 'width 600ms ease' }} />
           </div>
         </div>
 
-        {/* Scrollable Process Groups Container */}
-        <div className="flex-1 overflow-y-auto divide-y divide-white/5 pr-1 mt-1 space-y-1">
-          {/* Section 1: Apps */}
-          <div>
-            {renderSectionHeader('Apps', groupedCategories.apps.length, 'apps', <AppWindow size={13} className="text-[#34C759]" />)}
-            {!collapsedCategories.apps && (
-              <div className="space-y-0.5 pl-1">
-                {groupedCategories.apps.length === 0 ? (
-                  <p className="py-2 text-center text-[11px] text-[#8E8E93] italic">No active application windows</p>
-                ) : (
-                  groupedCategories.apps.map(renderAppGroup)
-                )}
-              </div>
-            )}
+        <div style={{ background: 'var(--m3-surface-container-lowest)', border: '1px solid var(--m3-surface-container-high)', borderRadius: 12, padding: '12px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <div style={{ width: 30, height: 30, borderRadius: 10, background: 'color-mix(in srgb, #0078D4 15%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="storage" size={16} style={{ color: '#0078D4' }} />
+            </div>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: 'var(--m3-on-surface-variant)' }}>MEMORY IN-USE</span>
           </div>
-
-          {/* Section 2: Background Processes */}
-          <div className="pt-1">
-            {renderSectionHeader('Background Processes', groupedCategories.background.length, 'background', <Server size={13} className="text-[#007AFF]" />)}
-            {!collapsedCategories.background && (
-              <div className="space-y-0.5 pl-1">
-                {groupedCategories.background.length === 0 ? (
-                  <p className="py-2 text-center text-[11px] text-[#8E8E93] italic">No background processes</p>
-                ) : (
-                  groupedCategories.background.map(renderAppGroup)
-                )}
-              </div>
-            )}
+          <div style={{ fontFamily: 'Space Mono, monospace', fontSize: 18, fontWeight: 700, color: 'var(--m3-on-surface)', marginBottom: 8 }}>
+            {(totalMemMb / 1024).toFixed(1)} <span style={{ fontSize: 14, color: 'var(--m3-on-surface-variant)' }}>/ {maxMemGb} GB</span>
           </div>
-
-          {/* Section 3: Windows Processes */}
-          <div className="pt-1">
-            {renderSectionHeader('Windows Processes', groupedCategories.windows.length, 'windows', <Shield size={13} className="text-[#FF9500]" />)}
-            {!collapsedCategories.windows && (
-              <div className="space-y-0.5 pl-1">
-                {groupedCategories.windows.length === 0 ? (
-                  <p className="py-2 text-center text-[11px] text-[#8E8E93] italic">No Windows system processes</p>
-                ) : (
-                  groupedCategories.windows.map(renderAppGroup)
-                )}
-              </div>
-            )}
+          <div style={{ height: 6, background: 'var(--m3-surface-container-high)', borderRadius: 3, overflow: 'hidden' }}>
+            <div style={{ width: `${Math.min(100, (totalMemMb / 1024 / maxMemGb) * 100)}%`, height: '100%', background: '#0078D4', borderRadius: 3, transition: 'width 600ms ease' }} />
           </div>
         </div>
+
+        <div style={{ background: 'var(--m3-surface-container-lowest)', border: '1px solid var(--m3-surface-container-high)', borderRadius: 12, padding: '12px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <div style={{ width: 30, height: 30, borderRadius: 10, background: 'color-mix(in srgb, #7B68EE 15%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="layers" size={16} style={{ color: '#7B68EE' }} />
+            </div>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: 'var(--m3-on-surface-variant)' }}>ACTIVE PROCESSES</span>
+          </div>
+          <div style={{ fontFamily: 'Space Mono, monospace', fontSize: 22, fontWeight: 700, color: 'var(--m3-on-surface)', marginBottom: 8 }}>
+            {processes.length} <span style={{ fontSize: 14, fontWeight: 400, color: 'var(--m3-on-surface-variant)' }}>Tasks</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#34A853', display: 'inline-block' }} />
+            <span style={{ fontSize: 12, color: '#34A853', fontWeight: 600 }}>Telemetry Live</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Process Table */}
+      <div style={{ background: 'var(--m3-surface-container-lowest)', border: '1px solid var(--m3-surface-container-high)', borderRadius: 12, overflow: 'hidden' }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 120px 100px 100px 56px',
+            padding: '8px 12px',
+            background: 'var(--m3-surface-container-low)',
+            borderBottom: '1px solid var(--m3-surface-container-high)',
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: 0.6,
+            color: 'var(--m3-on-surface-variant)',
+          }}
+        >
+          <span>APPLICATION / PROCESS</span>
+          <span>STATE</span>
+          <button
+            onClick={() => setSortCol('cpu')}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700, letterSpacing: 0.6, color: sortCol === 'cpu' ? 'var(--m3-primary)' : 'var(--m3-on-surface-variant)', padding: 0, display: 'flex', alignItems: 'center', gap: 3, fontFamily: 'Roboto, sans-serif' }}
+          >
+            CPU (%) {sortCol === 'cpu' && <Icon name="arrow_downward" size={12} />}
+          </button>
+          <button
+            onClick={() => setSortCol('memory')}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700, letterSpacing: 0.6, color: sortCol === 'memory' ? 'var(--m3-primary)' : 'var(--m3-on-surface-variant)', padding: 0, display: 'flex', alignItems: 'center', gap: 3, fontFamily: 'Roboto, sans-serif' }}
+          >
+            Memory {sortCol === 'memory' && <Icon name="arrow_downward" size={12} />}
+          </button>
+          <span>ACTION</span>
+        </div>
+
+        {groups.map(group => {
+          const isCollapsed = collapsed.has(group.label);
+          if (group.processes.length === 0 && filterQuery) return null;
+
+          return (
+            <div key={group.label}>
+              <button
+                onClick={() => toggleCollapse(group.label)}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '9px 16px',
+                  background: 'var(--m3-surface-container-low)',
+                  border: 'none',
+                  borderBottom: '1px solid var(--m3-surface-container-high)',
+                  cursor: 'pointer',
+                  fontFamily: 'Roboto, sans-serif',
+                }}
+              >
+                <Icon name={isCollapsed ? 'chevron_right' : 'expand_more'} size={16} style={{ color: 'var(--m3-on-surface-variant)' }} />
+                <Icon name={group.icon} size={16} style={{ color: group.iconColor }} />
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--m3-on-surface)' }}>{group.label}</span>
+                <span style={{ fontSize: 11, color: 'var(--m3-on-surface-variant)', marginLeft: 4 }}>{group.processes.length} apps</span>
+              </button>
+
+              {!isCollapsed &&
+                group.processes.map((proc, i) => (
+                  <div
+                    key={`${proc.pid}-${proc.name}`}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 120px 100px 100px 56px',
+                      padding: '8px 12px',
+                      alignItems: 'center',
+                      borderBottom: i < group.processes.length - 1 ? '1px solid var(--m3-surface-container-high)' : 'none',
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: 'Space Mono, monospace',
+                        fontSize: 13,
+                        color: proc.category === 'system' ? 'var(--m3-primary)' : 'var(--m3-on-surface)',
+                        paddingLeft: 24,
+                      }}
+                    >
+                      {proc.name} <span style={{ fontSize: 10, opacity: 0.6 }}>(PID {proc.pid})</span>
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#34A853', flexShrink: 0 }} />
+                      <span style={{ fontSize: 13, color: 'var(--m3-on-surface-variant)' }}>Running</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <MiniBar value={proc.cpu || 0} max={20} color={(proc.cpu || 0) > 10 ? '#EA4335' : 'var(--m3-primary)'} />
+                      <span style={{ fontFamily: 'Space Mono, monospace', fontSize: 12, fontWeight: 700, color: (proc.cpu || 0) > 10 ? '#EA4335' : 'var(--m3-on-surface)' }}>
+                        {(proc.cpu || 0).toFixed(1)}%
+                      </span>
+                    </div>
+                    <span style={{ fontFamily: 'Space Mono, monospace', fontSize: 12, fontWeight: 700, color: (proc.memoryMb || 0) > 1000 ? '#F57C00' : 'var(--m3-on-surface)' }}>
+                      {proc.memoryMb || 0} MB
+                    </span>
+                    <button
+                      onClick={() => killProcess(proc.pid)}
+                      disabled={proc.category === 'system'}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: proc.category === 'system' ? 'not-allowed' : 'pointer',
+                        color: proc.category === 'system' ? 'var(--m3-outline)' : 'var(--m3-error)',
+                        borderRadius: 8,
+                        width: 30,
+                        height: 30,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        opacity: proc.category === 'system' ? 0.4 : 1,
+                      }}
+                    >
+                      <Icon name="delete" size={16} />
+                    </button>
+                  </div>
+                ))}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 };
+
