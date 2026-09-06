@@ -159,6 +159,11 @@ class FleetActivity : AppCompatActivity() {
         }
 
         @JavascriptInterface
+        fun getLanDeviceCount(): Int {
+            return FleetDaemonService.instance?.getDiscoveredPeersCount() ?: 0
+        }
+
+        @JavascriptInterface
         fun getClipboardHistory(): String {
             return ClipboardSyncService.instance?.getClipboardJson() ?: "[]"
         }

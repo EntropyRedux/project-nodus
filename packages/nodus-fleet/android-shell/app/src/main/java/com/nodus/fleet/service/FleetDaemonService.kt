@@ -107,6 +107,10 @@ class FleetDaemonService : Service() {
         return array.toString()
     }
 
+    fun getDiscoveredPeersCount(): Int {
+        return discoveredPeers.size
+    }
+
     fun addOrUpdateRemoteDevice(device: JSONObject) {
         val id = device.optString("id")
         if (id.isEmpty() || id == "poco-pad") return

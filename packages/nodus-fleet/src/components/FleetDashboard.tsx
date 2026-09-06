@@ -125,6 +125,39 @@ export const FleetDashboard: React.FC = () => {
     return {};
   });
 
+  // Live LAN device count (similar to Nodus Desktop)
+  const [lanDeviceCount, setLanDeviceCount] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('nodus_lan_device_count');
+      if (saved) return parseInt(saved, 10) || 0;
+    } catch (_) {}
+    return 0;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('nodus_lan_device_count', String(lanDeviceCount));
+    } catch (_) {}
+  }, [lanDeviceCount]);
+
+  const refreshLanCount = React.useCallback(() => {
+    const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
+    if (bridge && typeof bridge.getLanDeviceCount === 'function') {
+      try {
+        const count = bridge.getLanDeviceCount();
+        if (count > 0 || lanDeviceCount === 0) {
+          setLanDeviceCount(count);
+        }
+      } catch (_) {}
+    }
+  }, [lanDeviceCount]);
+
+  useEffect(() => {
+    refreshLanCount();
+    const interval = setInterval(refreshLanCount, 5000);
+    return () => clearInterval(interval);
+  }, [refreshLanCount]);
+
   const setDeviceNickname = (ip: string, nickname: string, trusted = true) => {
     const cleanIp = ip.trim();
     const cleanNick = nickname.trim();
@@ -292,20 +325,27 @@ export const FleetDashboard: React.FC = () => {
     }));
   };
 
-  // Subnet Scanning native call & web fallback
+  // Subnet Scanning native call & web fallback with smooth visual feedback
   const handleStartScan = async (targetSubnet: string) => {
+    triggerHaptic(15);
     setIsScanningSubnet(true);
     setScanProgress(10);
     setScannedPeers([]);
 
+    // Smooth progress ticker
+    const progressInterval = setInterval(() => {
+      setScanProgress(prev => (prev >= 90 ? 90 : prev + 15));
+    }, 200);
+
+    // Yield to the JS event loop to force immediate DOM repaint of the "Probing..." button & spinner
+    await new Promise(resolve => setTimeout(resolve, 80));
+
     const cleanSubnet = targetSubnet.trim().replace(/\.+$/, '');
     const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
 
-    if (bridge && typeof bridge.scanSubnetNative === 'function') {
-      try {
-        setScanProgress(40);
+    try {
+      if (bridge && typeof bridge.scanSubnetNative === 'function') {
         const rawJson = bridge.scanSubnetNative(cleanSubnet);
-        setScanProgress(90);
         if (rawJson && rawJson.startsWith('[')) {
           const list: ScannedPeer[] = JSON.parse(rawJson);
           const mapped: ScannedPeer[] = list.map(p => {
@@ -320,54 +360,52 @@ export const FleetDashboard: React.FC = () => {
             };
           });
           setScannedPeers(mapped);
+          if (mapped.length > 0) {
+            setLanDeviceCount(mapped.length);
+          }
         }
-      } catch (e) {
-        console.warn('Native scan failed', e);
-      } finally {
-        setScanProgress(100);
-        setIsScanningSubnet(false);
+      } else {
+        // Web simulation / HTTP probing fallback
+        const discovered: ScannedPeer[] = [];
+        const probes = [];
+
+        for (let i = 1; i <= 254; i++) {
+          const ip = `${cleanSubnet}.${i}`;
+          probes.push(
+            (async () => {
+              try {
+                const url = `http://${ip}:9120/api/status`;
+                const res = await universalNetworkFetch<{ name?: string; hostname?: string; os?: string; deviceType?: string }>(url, { timeoutMs: 600 });
+                if (res && res.ok) {
+                  const trustInfo = trustedDevices[ip];
+                  discovered.push({
+                    ip,
+                    port: 9120,
+                    hostname: res.data?.name || res.data?.hostname || `Nodus Node (${ip})`,
+                    nickname: trustInfo?.nickname,
+                    hasAgent: true,
+                    isTrusted: trustInfo ? trustInfo.trusted : true,
+                    isUnknown: trustInfo ? !trustInfo.trusted : false,
+                    isInFleet: devices.some(d => d.ipAddress === ip),
+                    deviceType: (res.data?.deviceType as any) || 'desktop',
+                    os: res.data?.os || 'windows',
+                  });
+                }
+              } catch (_) {}
+            })()
+          );
+        }
+
+        await Promise.all(probes);
+        setScannedPeers(discovered);
+        if (discovered.length > 0) {
+          setLanDeviceCount(discovered.length);
+        }
       }
-      return;
-    }
-
-    // Web simulation / HTTP probing fallback
-    try {
-      setScanProgress(25);
-      const discovered: ScannedPeer[] = [];
-      const probes = [];
-
-      for (let i = 1; i <= 254; i++) {
-        const ip = `${cleanSubnet}.${i}`;
-        probes.push(
-          (async () => {
-            try {
-              const url = `http://${ip}:9120/api/status`;
-              const res = await universalNetworkFetch<{ name?: string; hostname?: string; os?: string; deviceType?: string }>(url, { timeoutMs: 600 });
-              if (res && res.ok) {
-                const trustInfo = trustedDevices[ip];
-                discovered.push({
-                  ip,
-                  port: 9120,
-                  hostname: res.data?.name || res.data?.hostname || `Nodus Node (${ip})`,
-                  nickname: trustInfo?.nickname,
-                  hasAgent: true,
-                  isTrusted: trustInfo ? trustInfo.trusted : true,
-                  isUnknown: trustInfo ? !trustInfo.trusted : false,
-                  isInFleet: devices.some(d => d.ipAddress === ip),
-                  deviceType: (res.data?.deviceType as any) || 'desktop',
-                  os: res.data?.os || 'windows',
-                });
-              }
-            } catch (_) {}
-          })()
-        );
-      }
-
-      await Promise.all(probes);
-      setScannedPeers(discovered);
     } catch (err) {
-      console.warn('Web scan failed', err);
+      console.warn('Scan failed', err);
     } finally {
+      clearInterval(progressInterval);
       setScanProgress(100);
       setIsScanningSubnet(false);
     }
@@ -583,11 +621,19 @@ export const FleetDashboard: React.FC = () => {
                 triggerHaptic(12);
                 setShowPairingModal(true);
               }}
-              title="Pair New Mesh Node"
-              className="h-8 px-2.5 sm:px-3 rounded-lg bg-[#A8C7FA] hover:bg-[#C2E7FF] text-[#062E6F] text-xs font-semibold font-mono flex items-center gap-1.5 transition active:scale-95 shadow-sm shrink-0 touch-manipulation"
+              title={`Pair New Mesh Node (${lanDeviceCount || 0} active LAN devices detected)`}
+              className="h-8 px-2.5 sm:px-3 rounded-lg bg-[#A8C7FA] hover:bg-[#C2E7FF] text-[#062E6F] text-xs font-semibold font-mono flex items-center gap-1.5 transition active:scale-95 shadow-sm shrink-0 touch-manipulation relative"
             >
               <Plus size={15} className="stroke-[2.5]" />
               <span className="hidden sm:inline">Pair</span>
+              {lanDeviceCount > 0 && (
+                <span
+                  className="px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold shadow-md border border-[#111318] flex items-center justify-center min-w-[17px] h-[17px] bg-[#0842A0] text-[#D3E3FD] animate-in zoom-in-75"
+                  title={`${lanDeviceCount} active device${lanDeviceCount === 1 ? '' : 's'} on WiFi`}
+                >
+                  {lanDeviceCount}
+                </span>
+              )}
             </button>
           </div>
 
@@ -608,10 +654,18 @@ export const FleetDashboard: React.FC = () => {
               triggerHaptic(12);
               setShowPairingModal(true);
             }}
-            title="Pair New Mesh Node"
-            className="w-11 h-11 rounded-lg bg-[#A8C7FA] hover:bg-[#C2E7FF] text-[#062E6F] shadow-md shadow-blue-950/40 transition-all flex items-center justify-center active:scale-95 group mb-2"
+            title={`Pair New Mesh Node (${lanDeviceCount || 0} active LAN devices detected)`}
+            className="w-11 h-11 rounded-lg bg-[#A8C7FA] hover:bg-[#C2E7FF] text-[#062E6F] shadow-md shadow-blue-950/40 transition-all flex items-center justify-center active:scale-95 group mb-2 relative"
           >
             <Plus size={22} className="stroke-[2.5]" />
+            {lanDeviceCount > 0 && (
+              <span
+                className="absolute -top-1.5 -right-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold shadow-md border border-[#111318] flex items-center justify-center min-w-[18px] h-[18px] bg-[#0842A0] text-[#D3E3FD] transition-transform animate-in zoom-in-75"
+                title={`${lanDeviceCount} active device${lanDeviceCount === 1 ? '' : 's'} on WiFi`}
+              >
+                {lanDeviceCount}
+              </span>
+            )}
           </button>
 
           {/* Navigation Items with clean rounded-lg indicators */}
@@ -1091,11 +1145,19 @@ export const FleetDashboard: React.FC = () => {
             triggerHaptic(12);
             setShowPairingModal(true);
           }}
-          title="Pair New Node"
-          className="flex-1 flex flex-col items-center justify-center py-1 px-1 min-h-[50px] transition duration-150 focus:outline-none"
+          title={`Pair New Node (${lanDeviceCount || 0} active LAN devices detected)`}
+          className="flex-1 flex flex-col items-center justify-center py-1 px-1 min-h-[50px] transition duration-150 focus:outline-none relative"
         >
-          <div className="w-12 h-8 rounded-lg transition-all flex items-center justify-center bg-[#A8C7FA]/15 text-[#A8C7FA]">
+          <div className="w-12 h-8 rounded-lg transition-all flex items-center justify-center bg-[#A8C7FA]/15 text-[#A8C7FA] relative">
             <Plus size={19} className="stroke-[2.2]" />
+            {lanDeviceCount > 0 && (
+              <span
+                className="absolute -top-1.5 -right-1 px-1.5 py-0.2 rounded-full text-[9px] font-mono font-bold shadow-sm flex items-center justify-center min-w-[16px] h-[16px] bg-[#A8C7FA] text-[#062E6F] border border-[#111318] animate-in zoom-in-75"
+                title={`${lanDeviceCount} active device${lanDeviceCount === 1 ? '' : 's'} on WiFi`}
+              >
+                {lanDeviceCount}
+              </span>
+            )}
           </div>
           <span className="text-[10px] font-medium tracking-tight mt-1 text-[#A8C7FA]">
             Pair

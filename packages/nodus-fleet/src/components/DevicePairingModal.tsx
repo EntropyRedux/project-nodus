@@ -224,10 +224,17 @@ export const DevicePairingModal: React.FC<DevicePairingModalProps> = ({
               </div>
 
               <button
-                onClick={() => isServerRunning && onStartScan(subnet)}
+                onClick={() => {
+                  if (isServerRunning && !isScanning) {
+                    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+                      try { navigator.vibrate(15); } catch (_) {}
+                    }
+                    onStartScan(subnet);
+                  }
+                }}
                 disabled={isScanning || !isServerRunning}
                 title={!isServerRunning ? 'Start Host Daemon first to scan subnet' : 'Scan subnet for devices'}
-                className="h-9 px-3.5 sm:px-4 rounded-lg bg-[var(--accent-primary)] hover:opacity-90 text-[var(--m3-on-primary)] text-xs font-semibold font-mono flex items-center gap-1.5 sm:gap-2 transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm shrink-0"
+                className="h-9 px-3.5 sm:px-4 rounded-lg bg-[var(--accent-primary)] hover:opacity-90 text-[var(--m3-on-primary)] text-xs font-semibold font-mono flex items-center gap-1.5 sm:gap-2 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm shrink-0 touch-manipulation cursor-pointer select-none"
               >
                 {isScanning ? (
                   <Loader2 size={15} className="animate-spin" />
