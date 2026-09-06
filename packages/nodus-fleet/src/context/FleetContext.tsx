@@ -90,8 +90,23 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (raw) {
           const parsed = JSON.parse(raw);
           if (Array.isArray(parsed)) {
-            const hasLocal = parsed.some(d => d.isLocal || d.id === 'poco-pad' || d.id === 'local');
-            setDevices(hasLocal ? parsed : [DEFAULT_LOCAL_TABLET, ...parsed]);
+            // Deduplicate devices by normalized IP address
+            const deduplicated: DeviceInfo[] = [];
+            const seenIps = new Set<string>();
+            for (const d of parsed) {
+              const cleanIp = (d.ipAddress || '').split(':')[0].trim();
+              if (d.isLocal || d.id === 'poco-pad' || d.id === 'local') {
+                if (!seenIps.has('local')) {
+                  seenIps.add('local');
+                  deduplicated.push(d);
+                }
+              } else if (cleanIp && !seenIps.has(cleanIp)) {
+                seenIps.add(cleanIp);
+                deduplicated.push(d);
+              }
+            }
+            const hasLocal = deduplicated.some(d => d.isLocal || d.id === 'poco-pad' || d.id === 'local');
+            setDevices(hasLocal ? deduplicated : [DEFAULT_LOCAL_TABLET, ...deduplicated]);
           }
         }
       } catch (e) {
@@ -164,7 +179,7 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const addPairedDevice = useCallback((device: Partial<DeviceInfo>) => {
     const ip = device.ipAddress || (device as any).ip;
     if (!ip) return;
-    const cleanIp = ip.trim();
+    const cleanIp = ip.split(':')[0].trim();
     const id = device.id || `node-${cleanIp.replace(/\./g, '-')}`;
     const newDev: DeviceInfo = {
       id,
@@ -180,10 +195,12 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
 
     setDevices(prev => {
-      const exists = prev.some(d => d.ipAddress === cleanIp || d.id === id);
-      return exists
-        ? prev.map(d => (d.ipAddress === cleanIp || d.id === id ? { ...d, ...newDev } : d))
-        : [...prev, newDev];
+      const filtered = prev.filter(d => {
+        if (d.isLocal || d.id === 'poco-pad' || d.id === 'local') return true;
+        const existingIp = (d.ipAddress || '').split(':')[0].trim();
+        return existingIp !== cleanIp && d.id !== id;
+      });
+      return [...filtered, newDev];
     });
     setActiveDeviceId(id);
 

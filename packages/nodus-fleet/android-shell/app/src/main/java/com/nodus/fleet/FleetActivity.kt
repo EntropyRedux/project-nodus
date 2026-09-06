@@ -29,14 +29,24 @@ class FleetActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "NodusFleetActivity"
+        @Volatile
+        var instance: FleetActivity? = null
+            private set
     }
 
     private var webView: WebView? = null
     private lateinit var assetLoader: WebViewAssetLoader
 
+    fun evaluateJs(script: String) {
+        runOnUiThread {
+            webView?.evaluateJavascript(script, null)
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        instance = this
 
         val prefs = getSharedPreferences("nodus_fleet_prefs", Context.MODE_PRIVATE)
         val autoStart = prefs.getBoolean("auto_start_daemon", true)
@@ -115,6 +125,9 @@ class FleetActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (instance === this) {
+            instance = null
+        }
         webView?.destroy()
         webView = null
     }

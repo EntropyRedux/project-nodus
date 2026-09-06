@@ -26,6 +26,15 @@ use crate::commands::{
     system::{get_system_stats, lock_workstation},
 };
 
+use tauri::Emitter;
+
+static APP_HANDLE: Mutex<Option<tauri::AppHandle>> = Mutex::new(None);
+
+pub fn init_server_handle(app: tauri::AppHandle) {
+    let mut lock = APP_HANDLE.lock().unwrap();
+    *lock = Some(app);
+}
+
 static SERVER_RUNNING: AtomicBool = AtomicBool::new(false);
 static REGISTERED_DEVICES: Mutex<Option<HashMap<String, serde_json::Value>>> = Mutex::new(None);
 
@@ -122,6 +131,9 @@ struct PairRequest {
     #[serde(alias = "deviceType", alias = "type")]
     device_type: Option<String>,
     os: Option<String>,
+    #[serde(alias = "isAck")]
+    is_ack: Option<bool>,
+    action: Option<String>,
 }
 
 static TRUSTED_TOKENS: Mutex<Option<std::collections::HashSet<String>>> = Mutex::new(None);
@@ -293,6 +305,7 @@ pub fn start_server(port: u16) {
                 || path == "/api/health" 
                 || path == "/" 
                 || path == "/api/fleet/pair-request" 
+                || path == "/api/fleet/pair-confirm"
                 || path == "/api/fleet/register"
                 || path == "/api/fleet/devices"
                 || path == "/api/fleet/peers"
@@ -581,7 +594,7 @@ pub fn start_server(port: u16) {
                     }
 
                     // Fleet Pairing Handshake (Secure token minting with client details)
-                    (Method::Post, "/api/fleet/pair-request") | (Method::Post, "/api/fleet/register") | (Method::Post, "/api/pair") => {
+                    (Method::Post, "/api/fleet/pair-request") | (Method::Post, "/api/fleet/pair-confirm") | (Method::Post, "/api/fleet/register") | (Method::Post, "/api/pair") => {
                         if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
                             let pair_req: PairRequest = serde_json::from_str(&body_str).unwrap_or(PairRequest {
                                 device_id: None,
@@ -591,7 +604,14 @@ pub fn start_server(port: u16) {
                                 http_port: None,
                                 device_type: None,
                                 os: None,
+                                is_ack: None,
+                                action: None,
                             });
+
+                            let is_ack = pair_req.is_ack.unwrap_or(false)
+                                || pair_req.action.as_deref() == Some("ack")
+                                || pair_req.action.as_deref() == Some("confirm")
+                                || path == "/api/fleet/pair-confirm";
 
                             let client_ip = request.remote_addr().map(|a| a.ip().to_string()).unwrap_or_else(|| "127.0.0.1".to_string());
                             let dev_id = pair_req.device_id.unwrap_or_else(|| format!("node-{}", client_ip.replace('.', "-")));
@@ -627,8 +647,8 @@ pub fn start_server(port: u16) {
                             crate::discovery::register_node(crate::discovery::DiscoveredDeviceNode {
                                 id: dev_id.clone(),
                                 name: dev_name.clone(),
-                                device_type: dev_type,
-                                os: dev_os,
+                                device_type: dev_type.clone(),
+                                os: dev_os.clone(),
                                 ip_address: format!("{}:{}", peer_ip, peer_port),
                                 http_port: peer_port,
                                 status: "connected".to_string(),
@@ -638,6 +658,24 @@ pub fn start_server(port: u16) {
                                 last_seen: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
                                 is_local: false,
                             });
+
+                            // Only emit incoming-pair-request prompt if this is an INITIAL request (not an ACK/confirmation)
+                            if let Ok(guard) = APP_HANDLE.lock() {
+                                if let Some(ref handle) = *guard {
+                                    if !is_ack {
+                                        let _ = handle.emit("incoming-pair-request", json!({
+                                            "id": dev_id,
+                                            "name": dev_name,
+                                            "deviceType": dev_type,
+                                            "os": dev_os,
+                                            "ipAddress": peer_ip,
+                                            "httpPort": peer_port,
+                                            "token": token
+                                        }));
+                                    }
+                                    let _ = handle.emit("fleet_devices_updated", ());
+                                }
+                            }
 
                             (
                                 200,

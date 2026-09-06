@@ -37,6 +37,7 @@ import { ConfigPanel } from '../panels/ConfigPanel';
 import { HotCornerConfigPanel } from '../panels/HotCornerConfigPanel';
 import { ClipboardDrawer } from '../views/ClipboardDrawer';
 import { DevicePairingModal } from '../views/DevicePairingModal';
+import { IncomingPairModal, IncomingPairRequest } from '../views/IncomingPairModal';
 import { TauriService } from '../../services/TauriCommands';
 import { SharedApp } from '../../types/ui-contracts';
 
@@ -136,6 +137,71 @@ export const DesktopAppShell: React.FC = () => {
   // Pair Modal & Clipboard Drawer State
   const [showPairingModal, setShowPairingModal] = useState(false);
   const [showClipboardDrawer, setShowClipboardDrawer] = useState(false);
+
+  // Incoming Pair Request Confirmation Dialog State
+  const [incomingPairRequest, setIncomingPairRequest] = useState<IncomingPairRequest | null>(null);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    (async () => {
+      try {
+        const { listen } = await import('@tauri-apps/api/event');
+        unlisten = await listen<IncomingPairRequest>('incoming-pair-request', (event) => {
+          if (event.payload) {
+            setIncomingPairRequest(event.payload);
+          }
+        });
+      } catch (_) {}
+    })();
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, []);
+
+  const handleAcceptPair = async (req: IncomingPairRequest) => {
+    const cleanIp = req.ipAddress.trim();
+    const portNum = req.httpPort || 9120;
+
+    // 1. Add to trusted device store
+    setDeviceNickname(cleanIp, req.name, true);
+
+    // 2. Connect device
+    connectDeviceManual({
+      name: req.name,
+      ip: cleanIp,
+      port: portNum,
+      type: (req.deviceType as any) || (req.type as any) || 'tablet',
+      os: req.os || 'android',
+    });
+
+    // 3. Dispatch mutual pairing confirmation (ACK) back to target device
+    try {
+      await fetch(`http://${cleanIp}:${portNum}/api/fleet/pair-confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: 'desktop-host',
+          deviceId: 'desktop-host',
+          name: 'Host Workstation (PC)',
+          deviceType: 'desktop',
+          type: 'desktop',
+          os: 'windows',
+          ipAddress: '192.168.1.177',
+          httpPort: 9120,
+          port: 9120,
+          token: 'NODUS-FLEET-SECURE',
+          isAck: true,
+          action: 'confirm',
+        }),
+      });
+    } catch (_) {}
+
+    setIncomingPairRequest(null);
+  };
+
+  const handleDeclinePair = () => {
+    setIncomingPairRequest(null);
+  };
 
   // Time & Date
   const [currentTime, setCurrentTime] = useState<string>('14:42:08');
@@ -791,6 +857,7 @@ export const DesktopAppShell: React.FC = () => {
           isScanning={isScanning}
           scanProgress={scanProgress}
           scannedPeers={scannedPeers}
+          devices={fleetDevices}
           trustedDevices={trustedDevices}
           lanDeviceCount={lanDeviceCount}
           onUpdateNickname={setDeviceNickname}
@@ -798,15 +865,50 @@ export const DesktopAppShell: React.FC = () => {
           onStartServer={toggleServer}
           onStartScan={scanSubnet}
           onPair={(ip, port, token, peer) => {
+            const cleanIp = ip.trim();
+            const portNum = port || 9120;
+            const peerName = peer?.nickname || peer?.hostname || `Nodus Node (${cleanIp})`;
+            const devType = (peer?.deviceType as any) || 'tablet';
+            const devOs = peer?.os || 'android';
+
             connectDeviceManual({
-              name: peer?.nickname || peer?.hostname || `Nodus Node (${ip})`,
-              ip,
-              port,
-              type: (peer?.deviceType as any) || 'tablet',
-              os: peer?.os || 'android'
+              name: peerName,
+              ip: cleanIp,
+              port: portNum,
+              type: devType,
+              os: devOs
             });
+
+            // Send initial pair-request to target node so it prompts with confirmation modal
+            fetch(`http://${cleanIp}:${portNum}/api/fleet/pair-request`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                id: 'desktop-host',
+                deviceId: 'desktop-host',
+                name: 'Host Workstation (PC)',
+                deviceType: 'desktop',
+                type: 'desktop',
+                os: 'windows',
+                ipAddress: '192.168.1.177',
+                httpPort: 9120,
+                port: 9120,
+                token: 'NODUS-FLEET-SECURE',
+                isAck: false,
+              }),
+            }).catch(() => {});
+
             setShowPairingModal(false);
           }}
+        />
+      )}
+
+      {/* Incoming Pairing Confirmation Modal */}
+      {incomingPairRequest && (
+        <IncomingPairModal
+          request={incomingPairRequest}
+          onAccept={handleAcceptPair}
+          onDecline={handleDeclinePair}
         />
       )}
     </div>

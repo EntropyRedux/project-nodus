@@ -46,6 +46,7 @@ import { RemoteControlTab } from './RemoteControlTab';
 import { ProcessMonitorTable } from './ProcessMonitorTable';
 import { RemoteTerminal } from './RemoteTerminal';
 import { DevicePairingModal } from './DevicePairingModal';
+import { IncomingPairModal, IncomingPairRequest } from './IncomingPairModal';
 import { RemoteAppShortcuts } from './RemoteAppShortcuts';
 import { ClipboardDrawer } from './ClipboardDrawer';
 import { SharedApp, ScannedPeer, TrustedEntry } from '../types/ui-contracts';
@@ -109,13 +110,6 @@ export const FleetDashboard: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  // Subnet pairing modal state
-  const [showPairingModal, setShowPairingModal] = useState(false);
-  const [subnetInput, setSubnetInput] = useState('192.168.1');
-  const [isScanningSubnet, setIsScanningSubnet] = useState(false);
-  const [scanProgress, setScanProgress] = useState(0);
-  const [scannedPeers, setScannedPeers] = useState<ScannedPeer[]>([]);
-
   // Trusted devices & inline nickname registry
   const [trustedDevices, setTrustedDevices] = useState<Record<string, TrustedEntry>>(() => {
     try {
@@ -133,6 +127,37 @@ export const FleetDashboard: React.FC = () => {
     } catch (_) {}
     return 0;
   });
+
+  // Subnet pairing modal state
+  const [showPairingModal, setShowPairingModal] = useState(false);
+  const [subnetInput, setSubnetInput] = useState('192.168.1');
+  const [isScanningSubnet, setIsScanningSubnet] = useState(false);
+  const [scanProgress, setScanProgress] = useState(0);
+  const [scannedPeers, setScannedPeers] = useState<ScannedPeer[]>([]);
+
+  // Incoming Pair Request Confirmation Dialog State
+  const [incomingPairRequest, setIncomingPairRequest] = useState<IncomingPairRequest | null>(null);
+
+  useEffect(() => {
+    const handleIncomingPair = (e: any) => {
+      const detail = e.detail;
+      if (detail) {
+        const cleanIp = (detail.ipAddress || detail.ip || '').trim();
+        setIncomingPairRequest({
+          id: detail.id || detail.deviceId || `node-${cleanIp.replace(/\./g, '-')}`,
+          name: detail.name || detail.hostname || 'Remote Workstation',
+          deviceType: detail.type || detail.deviceType || 'desktop',
+          os: detail.os || 'windows',
+          ipAddress: cleanIp || '127.0.0.1',
+          httpPort: detail.httpPort || detail.port || 9120,
+          token: detail.token,
+        });
+        triggerHaptic([30, 50, 30]);
+      }
+    };
+    window.addEventListener('incoming-pair-request', handleIncomingPair);
+    return () => window.removeEventListener('incoming-pair-request', handleIncomingPair);
+  }, []);
 
   useEffect(() => {
     if (scannedPeers.length > 0) {
@@ -355,14 +380,15 @@ export const FleetDashboard: React.FC = () => {
         if (rawJson && rawJson.startsWith('[')) {
           const list: ScannedPeer[] = JSON.parse(rawJson);
           const mapped: ScannedPeer[] = list.map(p => {
-            const trustInfo = trustedDevices[p.ip];
+            const cleanPeerIp = (p.ip || '').split(':')[0].trim();
+            const trustInfo = trustedDevices[cleanPeerIp];
             const isTrusted = trustInfo ? trustInfo.trusted : p.hasAgent;
             return {
               ...p,
               nickname: trustInfo?.nickname || undefined,
               isTrusted,
               isUnknown: !isTrusted,
-              isInFleet: devices.some(d => d.ipAddress === p.ip),
+              isInFleet: devices.some(d => !d.isLocal && (d.ipAddress || '').split(':')[0].trim() === cleanPeerIp),
             };
           });
           setScannedPeers(mapped);
@@ -392,7 +418,7 @@ export const FleetDashboard: React.FC = () => {
                     hasAgent: true,
                     isTrusted: trustInfo ? trustInfo.trusted : true,
                     isUnknown: trustInfo ? !trustInfo.trusted : false,
-                    isInFleet: devices.some(d => d.ipAddress === ip),
+                    isInFleet: devices.some(d => !d.isLocal && (d.ipAddress || '').split(':')[0].trim() === ip),
                     deviceType: (res.data?.deviceType as any) || 'desktop',
                     os: res.data?.os || 'windows',
                   });
@@ -433,7 +459,7 @@ export const FleetDashboard: React.FC = () => {
         port,
         name: cleanName,
         type: deviceType as any,
-        os,
+        os: os as any,
         status: 'connected',
       });
     }
@@ -444,11 +470,92 @@ export const FleetDashboard: React.FC = () => {
       bridge.addPairedDevice(cleanIp, port, cleanName);
     }
 
+    // 4. Send initial pair-request to target workstation so it prompts with confirmation modal
+    universalNetworkFetch(`http://${cleanIp}:${port}/api/fleet/pair-request`, {
+      method: 'POST',
+      body: JSON.stringify({
+        id: 'poco-pad',
+        deviceId: 'poco-pad',
+        name: 'POCO Pad',
+        deviceType: 'tablet',
+        type: 'tablet',
+        os: 'Android 14 (HyperOS)',
+        ipAddress: '192.168.1.35',
+        httpPort: 9120,
+        port: 9120,
+        token: 'NODUS-FLEET-SECURE',
+        isAck: false,
+      }),
+    }).catch(() => {});
+
     if (fleetContext && typeof fleetContext.refreshState === 'function') {
       fleetContext.refreshState();
     }
 
     setShowPairingModal(false);
+  };
+
+  const handleAcceptIncomingPair = (req: IncomingPairRequest) => {
+    triggerHaptic(15);
+    const cleanIp = req.ipAddress.trim();
+    const port = req.httpPort || 9120;
+    const cleanName = req.name || `Host (${cleanIp})`;
+    const deviceType = req.deviceType || (cleanName.toLowerCase().includes('tab') ? 'tablet' : 'desktop');
+    const os = req.os || 'windows';
+
+    // 1. Save to trusted devices registry
+    setDeviceNickname(cleanIp, cleanName, true);
+
+    // 2. Add to live FleetContext
+    if (fleetContext?.addPairedDevice) {
+      fleetContext.addPairedDevice({
+        ipAddress: cleanIp,
+        port,
+        name: cleanName,
+        type: deviceType as any,
+        os: os as any,
+        status: 'connected',
+      });
+    }
+
+    // 3. Dispatch to Android Native Bridge
+    const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
+    if (bridge && typeof bridge.addPairedDevice === 'function') {
+      bridge.addPairedDevice(cleanIp, port, cleanName);
+    }
+
+    // 4. Send HTTP confirmation / bidirectional pair-confirm (ACK) back to sender
+    universalNetworkFetch(`http://${cleanIp}:${port}/api/fleet/pair-confirm`, {
+      method: 'POST',
+      body: JSON.stringify({
+        id: 'poco-pad',
+        deviceId: 'poco-pad',
+        name: 'POCO Pad',
+        deviceType: 'tablet',
+        type: 'tablet',
+        os: 'Android 14 (HyperOS)',
+        ipAddress: '192.168.1.35',
+        httpPort: 9120,
+        port: 9120,
+        token: 'NODUS-FLEET-SECURE',
+        isAck: true,
+        action: 'confirm',
+      }),
+    }).catch(() => {});
+
+    if (fleetContext && typeof fleetContext.refreshState === 'function') {
+      fleetContext.refreshState();
+    }
+
+    setIncomingPairRequest(null);
+  };
+
+  const handleDeclineIncomingPair = () => {
+    triggerHaptic(10);
+    if (incomingPairRequest && fleetContext?.removeDevice) {
+      fleetContext.removeDevice(incomingPairRequest.id);
+    }
+    setIncomingPairRequest(null);
   };
 
   // Universal clipboard broadcasting & actions
@@ -1194,6 +1301,7 @@ export const FleetDashboard: React.FC = () => {
         scanProgress={scanProgress}
         subnet={subnetInput}
         scannedPeers={scannedPeers}
+        devices={devices}
         trustedDevices={trustedDevices}
         lanDeviceCount={Math.max(lanDeviceCount, scannedPeers.length)}
         isServerRunning={isServerRunning}
@@ -1204,6 +1312,15 @@ export const FleetDashboard: React.FC = () => {
         onSubnetChange={s => setSubnetInput(s)}
         onPair={handlePairDevice}
       />
+
+      {/* ── Incoming Pairing Confirmation Dialog ── */}
+      {incomingPairRequest && (
+        <IncomingPairModal
+          request={incomingPairRequest}
+          onAccept={handleAcceptIncomingPair}
+          onDecline={handleDeclineIncomingPair}
+        />
+      )}
     </div>
   );
 };

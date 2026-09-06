@@ -150,6 +150,7 @@ pub fn run() {
             });
 
             // ─── 4. Start Fleet HTTP API Server & UDP Discovery ───────
+            server::init_server_handle(app.handle().clone());
             server::start_server(9120);
             discovery::start_discovery(9120);
 

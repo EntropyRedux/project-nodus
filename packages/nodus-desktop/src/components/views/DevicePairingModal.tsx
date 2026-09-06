@@ -42,6 +42,7 @@ export const DevicePairingModal: React.FC<DevicePairingModalProps> = ({
   scanProgress,
   subnet,
   scannedPeers,
+  devices = [],
   lanDeviceCount,
   onUpdateNickname,
   isServerRunning = true,
@@ -302,7 +303,18 @@ export const DevicePairingModal: React.FC<DevicePairingModalProps> = ({
           ) : (
             scannedPeers.map(peer => {
               const endpointKey = `${peer.ip}:${peer.port}`;
-              const isPaired = pairedEndpoints.has(endpointKey) || peer.isInFleet;
+              const cleanPeerIp = (peer.ip || '').split(':')[0].trim();
+              const isPaired =
+                pairedEndpoints.has(endpointKey) ||
+                peer.isInFleet === true ||
+                Boolean(
+                  devices &&
+                    devices.some((d) => {
+                      if (d.isLocal || d.id === 'this-pc' || d.id === 'local') return false;
+                      const cleanDevIp = (d.ipAddress || '').split(':')[0].trim();
+                      return cleanDevIp === cleanPeerIp;
+                    })
+                );
               const isEditing = editingIp === peer.ip;
               const displayName = peer.nickname || peer.hostname || `Device (${peer.ip})`;
               const isUntrusted = peer.isUnknown === true || (!peer.isTrusted && !peer.hasAgent);

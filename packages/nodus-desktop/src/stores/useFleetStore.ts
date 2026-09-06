@@ -209,13 +209,22 @@ export const useFleetStore = create<FleetState>((set, get) => ({
       clearInterval(progressTimer);
 
       const trusted = get().trustedDevices;
+      const currentDevices = get().devices;
       const enrichedResults: ScannedPeer[] = (results || []).map((peer) => {
         const trustInfo = trusted[peer.ip];
         const isTrusted = Boolean(peer.hasAgent || (trustInfo && trustInfo.trusted));
         const isUnknown = !peer.hasAgent && !trustInfo;
+        const cleanPeerIp = (peer.ip || '').split(':')[0].trim();
+        const isInFleet =
+          peer.isInFleet ||
+          currentDevices.some((d) => {
+            if (d.isLocal || d.id === 'this-pc' || d.id === 'local') return false;
+            return (d.ipAddress || '').split(':')[0].trim() === cleanPeerIp;
+          });
 
         return {
           ...peer,
+          isInFleet,
           nickname: trustInfo?.nickname,
           isTrusted,
           isUnknown,
@@ -243,7 +252,7 @@ export const useFleetStore = create<FleetState>((set, get) => ({
 
     // Update scanned peers for the Pairing Modal
     const discoveredPeers: ScannedPeer[] = nodes.map((n) => {
-      const ip = (n.ipAddress || n.ip_address || '').split(':')[0];
+      const ip = (n.ipAddress || n.ip_address || '').split(':')[0].trim();
       const trustInfo = trusted[ip];
       return {
         ip,
@@ -251,7 +260,9 @@ export const useFleetStore = create<FleetState>((set, get) => ({
         hostname: n.name || n.hostname || `Node (${ip})`,
         nickname: trustInfo?.nickname,
         hasAgent: true,
-        isInFleet: current.some((d) => d.ipAddress === ip || d.id === n.id),
+        isInFleet: current.some(
+          (d) => (!d.isLocal && (d.ipAddress || '').split(':')[0].trim() === ip) || d.id === n.id
+        ),
         isTrusted: Boolean(trustInfo && trustInfo.trusted),
         isUnknown: !trustInfo,
         deviceType: (n.deviceType || n.device_type || 'tablet') as any,
@@ -263,8 +274,12 @@ export const useFleetStore = create<FleetState>((set, get) => ({
     // Only update telemetry of devices that ALREADY exist in the user's paired fleet
     const updatedDevices = current.map((existing) => {
       if (existing.isLocal) return existing;
+      const existingCleanIp = (existing.ipAddress || '').split(':')[0].trim();
       const match = nodes.find(
-        (n) => n.id === existing.id || (n.ipAddress && (n.ipAddress === existing.ipAddress || n.ipAddress.startsWith(`${existing.ipAddress}:`)))
+        (n) =>
+          n.id === existing.id ||
+          ((n.ipAddress || n.ip_address) &&
+            (n.ipAddress || n.ip_address || '').split(':')[0].trim() === existingCleanIp)
       );
       if (match) {
         return {
@@ -287,15 +302,22 @@ export const useFleetStore = create<FleetState>((set, get) => ({
   removeDevice: (id) => {
     if (id === 'this-pc' || id === 'local') return; // Protect local host workstation
     TauriService.unregisterNode(id);
+    const targetDev = get().devices.find((d) => d.id === id);
+    const targetIp = targetDev ? (targetDev.ipAddress || '').split(':')[0].trim() : '';
     set((state) => ({
       devices: state.devices.filter((d) => d.id !== id),
+      scannedPeers: targetIp
+        ? state.scannedPeers.map((p) =>
+            (p.ip || '').split(':')[0].trim() === targetIp ? { ...p, isInFleet: false } : p
+          )
+        : state.scannedPeers,
       selectedDeviceId: state.selectedDeviceId === id ? null : state.selectedDeviceId,
       activeDeviceId: state.activeDeviceId === id ? null : state.activeDeviceId,
     }));
   },
 
   connectDeviceManual: (device) => {
-    const cleanIp = device.ip.trim();
+    const cleanIp = device.ip.split(':')[0].trim();
     const newDevice: DeviceInfo = {
       id: `node-${cleanIp.replace(/[\.:]/g, '-')}`,
       name: device.name || `Node (${cleanIp})`,
@@ -311,9 +333,15 @@ export const useFleetStore = create<FleetState>((set, get) => ({
     };
 
     set((state) => {
-      const filtered = state.devices.filter((d) => d.ipAddress !== cleanIp && d.id !== newDevice.id);
+      const filtered = state.devices.filter(
+        (d) => (d.ipAddress || '').split(':')[0].trim() !== cleanIp && d.id !== newDevice.id
+      );
+      const updatedPeers = state.scannedPeers.map((p) =>
+        (p.ip || '').split(':')[0].trim() === cleanIp ? { ...p, isInFleet: true } : p
+      );
       return {
         devices: [...filtered, newDevice],
+        scannedPeers: updatedPeers,
         selectedDeviceId: newDevice.id,
         activeDeviceId: newDevice.id,
       };

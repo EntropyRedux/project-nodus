@@ -63,12 +63,36 @@ class FleetDaemonService : Service() {
         // Start UDP Discovery Engine (Populates discoveredPeers for pairing modal, does NOT auto-connect un-paired peers)
         udpDiscoveryManager = UdpDiscoveryManager(this) { discoveredDevice ->
             val id = discoveredDevice.optString("id")
+            val ip = discoveredDevice.optString("ipAddress").split(":")[0].trim()
             if (id.isNotEmpty() && id != "poco-pad") {
                 discoveredPeers[id] = discoveredDevice
-                // Only update telemetry if this peer was already explicitly paired by the user
+
+                // Match connected devices by ID or by clean IP address
+                var matchedKey: String? = null
                 if (connectedDevices.containsKey(id)) {
-                    connectedDevices[id] = discoveredDevice
-                    notifyStateChanged()
+                    matchedKey = id
+                } else if (ip.isNotEmpty()) {
+                    for ((k, dev) in connectedDevices) {
+                        if (k != "poco-pad") {
+                            val devIp = dev.optString("ipAddress").split(":")[0].trim()
+                            if (devIp == ip) {
+                                matchedKey = k
+                                break
+                            }
+                        }
+                    }
+                }
+
+                if (matchedKey != null) {
+                    val existing = connectedDevices[matchedKey]
+                    if (existing != null) {
+                        existing.put("cpuLoad", discoveredDevice.optInt("cpuLoad", existing.optInt("cpuLoad", 10)))
+                        existing.put("ramUsage", discoveredDevice.optString("ramUsage", existing.optString("ramUsage", "Active")))
+                        existing.put("battery", discoveredDevice.optInt("battery", existing.optInt("battery", 100)))
+                        existing.put("status", "connected")
+                        existing.put("lastSeen", System.currentTimeMillis())
+                        notifyStateChanged()
+                    }
                 }
             }
         }.apply {
@@ -121,6 +145,24 @@ class FleetDaemonService : Service() {
         val id = device.optString("id")
         if (id.isEmpty() || id == "poco-pad") return
 
+        val newIp = device.optString("ipAddress").split(":")[0].trim()
+
+        // Deduplicate any existing connected node with the same IP address
+        if (newIp.isNotEmpty()) {
+            val duplicateKeys = mutableListOf<String>()
+            for ((existingId, existingDev) in connectedDevices) {
+                if (existingId != "poco-pad" && existingId != id) {
+                    val existingIp = existingDev.optString("ipAddress").split(":")[0].trim()
+                    if (existingIp == newIp) {
+                        duplicateKeys.add(existingId)
+                    }
+                }
+            }
+            for (dupKey in duplicateKeys) {
+                connectedDevices.remove(dupKey)
+            }
+        }
+
         val isNew = !connectedDevices.containsKey(id)
         connectedDevices[id] = device
 
@@ -130,8 +172,8 @@ class FleetDaemonService : Service() {
                 putExtra(NodusIpcContract.EXTRA_DEVICE_JSON, device.toString())
             }
             sendBroadcast(intent, NodusIpcContract.PERMISSION_FLEET_ACCESS)
-            notifyStateChanged()
         }
+        notifyStateChanged()
     }
 
     fun removeRemoteDevice(id: String) {
@@ -212,6 +254,7 @@ class FleetDaemonService : Service() {
     fun notifyStateChanged() {
         val intent = Intent(NodusIpcContract.ACTION_FLEET_STATE_CHANGED)
         sendBroadcast(intent, NodusIpcContract.PERMISSION_FLEET_ACCESS)
+        com.nodus.fleet.FleetActivity.instance?.evaluateJs("window.dispatchEvent(new CustomEvent('fleet-state-changed'));")
     }
 
     fun getDevicesJson(): String {

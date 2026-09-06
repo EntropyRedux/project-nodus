@@ -65,6 +65,7 @@ export interface DevicePairingModalProps {
   scanProgress: number;
   subnet: string;
   scannedPeers: ScannedPeer[];
+  devices?: DeviceInfo[];
   trustedDevices?: Record<string, TrustedEntry>;
   lanDeviceCount?: number;
   isServerRunning?: boolean;

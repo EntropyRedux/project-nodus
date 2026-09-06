@@ -177,10 +177,16 @@ class FleetHttpServer(
                     }
                 }
 
-                uri.startsWith("/api/fleet/pair-request") || uri.startsWith("/api/fleet/register") || uri.startsWith("/api/pair") -> {
+                uri.startsWith("/api/fleet/pair-request") || uri.startsWith("/api/fleet/pair-confirm") || uri.startsWith("/api/fleet/register") || uri.startsWith("/api/pair") -> {
                     try {
                         val clientIp = socket.inetAddress?.hostAddress ?: "127.0.0.1"
                         val reqObj = if (body.isNotBlank()) JSONObject(body) else JSONObject()
+                        val isAck = reqObj.optBoolean("isAck", false) ||
+                                    reqObj.optString("action") == "ack" ||
+                                    reqObj.optString("action") == "confirm" ||
+                                    uri.startsWith("/api/fleet/pair-confirm") ||
+                                    uri.startsWith("/api/fleet/register")
+
                         val devId = reqObj.optString("deviceId", reqObj.optString("id", "win-${clientIp.replace(".", "-")}"))
                         val rawName = reqObj.optString("name", reqObj.optString("hostname", "Host Workstation ($clientIp)"))
                         val devName = if (!rawName.contains("PC") && !rawName.contains("Host")) "$rawName (PC)" else rawName
@@ -204,6 +210,14 @@ class FleetHttpServer(
                         }
 
                         FleetDaemonService.instance?.addOrUpdateRemoteDevice(pairedDevice)
+
+                        // ONLY trigger confirmation dialog if this is an INITIAL pair request, NOT an ACK/confirmation
+                        if (!isAck) {
+                            val jsonStr = pairedDevice.toString()
+                            com.nodus.fleet.FleetActivity.instance?.evaluateJs(
+                                "window.dispatchEvent(new CustomEvent('incoming-pair-request', { detail: $jsonStr }));"
+                            )
+                        }
 
                         val resp = JSONObject().apply {
                             put("status", "success")
