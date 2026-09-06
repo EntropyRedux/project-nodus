@@ -37,6 +37,7 @@ import { ConfigPanel } from '../panels/ConfigPanel';
 import { HotCornerConfigPanel } from '../panels/HotCornerConfigPanel';
 import { ClipboardDrawer } from '../views/ClipboardDrawer';
 import { DevicePairingModal } from '../views/DevicePairingModal';
+import { TauriService } from '../../services/TauriCommands';
 
 export const DesktopAppShell: React.FC = () => {
   const [activeTab, setActiveTab] = useState<
@@ -84,6 +85,8 @@ export const DesktopAppShell: React.FC = () => {
     executables: remoteExecutables,
     executeShortcut,
     updateExecutable: updateRemoteExecutable,
+    addExecutable: addRemoteExecutable,
+    deleteExecutable: deleteRemoteExecutable,
   } = useExecutableStore();
 
   const {
@@ -621,6 +624,34 @@ export const DesktopAppShell: React.FC = () => {
                 onLaunchPeerApp={(app: any) => {
                   const exec = remoteExecutables.find((e: any) => e.id === app.id);
                   if (exec) executeShortcut(exec);
+                }}
+                onLaunchMyApp={(app: any) => {
+                  const exec = remoteExecutables.find((e: any) => e.id === app.id);
+                  if (exec) {
+                    executeShortcut(exec);
+                  } else if (app.path) {
+                    TauriService.executeLocalCommand(app.path);
+                  }
+                }}
+                onRegisterApp={(item) => {
+                  addRemoteExecutable({
+                    deviceId: 'this-pc',
+                    deviceName: 'Workstation PC',
+                    deviceType: 'desktop',
+                    deviceOs: 'windows',
+                    name: item.name,
+                    description: item.description,
+                    category: (item.category as any) || 'tools',
+                    iconName: 'Code',
+                    iconColor: '#0EA5E9',
+                    execType: 'command',
+                    commandOrPackage: item.path,
+                    enabled: true,
+                    pinnedToDrawer: true,
+                  });
+                }}
+                onDeleteMyApp={(id: string) => {
+                  deleteRemoteExecutable(id);
                 }}
                 onAddMyApp={() => {}}
               />

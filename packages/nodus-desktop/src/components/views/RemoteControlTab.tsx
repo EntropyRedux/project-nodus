@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { DeviceInfo } from '../../types/desktop';
 import { RemoteControlTabProps } from '../../types/ui-contracts';
+import { TauriService } from '../../services/TauriCommands';
 import {
   Monitor,
   Laptop,
@@ -235,8 +236,18 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
   const [isClickHeld, setIsClickHeld] = useState(false);
   const [sensitivity, setSensitivity] = useState<'normal' | 'precision' | 'fast'>('normal');
 
-  const targetDevice = devices.find(d => d.id === targetDeviceId) || devices.find(d => !d.isLocal) || devices[0] || null;
-  const controllableDevices = devices.filter(d => !d.isLocal);
+  const localHostDevice: DeviceInfo = devices.find(d => d.isLocal) || devices[0] || {
+    id: 'this-pc',
+    name: 'Workstation Host',
+    type: 'desktop',
+    os: 'windows',
+    status: 'online',
+    ipAddress: '127.0.0.1',
+    isLocal: true,
+  };
+
+  const targetDevice = devices.find(d => d.id === targetDeviceId) || localHostDevice;
+  const controllableDevices = devices.length > 0 ? devices : [localHostDevice];
 
   // Android Haptic Feedback Helper
   const triggerHaptic = (pattern: number | number[] = 12) => {
@@ -256,12 +267,33 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
     }, 2400);
   };
 
+  const lastMovePosRef = useRef<{ clientX: number; clientY: number } | null>(null);
+
   const handleTrackpadMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!targetDevice) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const x = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
     const y = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
     setCursorPos({ x, y });
+
+    if (lastMovePosRef.current) {
+      const mult = sensitivity === 'precision' ? 0.6 : sensitivity === 'fast' ? 2.4 : 1.2;
+      const dx = Math.round((e.clientX - lastMovePosRef.current.clientX) * mult);
+      const dy = Math.round((e.clientY - lastMovePosRef.current.clientY) * mult);
+
+      if (dx !== 0 || dy !== 0) {
+        if (targetDevice.isLocal || targetDevice.ipAddress === '127.0.0.1') {
+          TauriService.simulateMouseMove(dx, dy);
+        } else {
+          fetch(`http://${targetDevice.ipAddress}:9120/api/input/mouse/move`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+            body: JSON.stringify({ dx, dy }),
+          }).catch(() => {});
+        }
+      }
+    }
+    lastMovePosRef.current = { clientX: e.clientX, clientY: e.clientY };
   };
 
   // Android Touch Event Listeners with Edge Inset to protect system back gesture
@@ -278,6 +310,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
     setCursorPos({ x, y });
     setIsClickHeld(true);
     triggerHaptic(10);
+    lastMovePosRef.current = { clientX: touch.clientX, clientY: touch.clientY };
   };
 
   const handleTrackpadTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
@@ -288,10 +321,30 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
     const x = Math.max(0, Math.min(100, ((touch.clientX - rect.left) / rect.width) * 100));
     const y = Math.max(0, Math.min(100, ((touch.clientY - rect.top) / rect.height) * 100));
     setCursorPos({ x, y });
+
+    if (lastMovePosRef.current) {
+      const mult = sensitivity === 'precision' ? 0.6 : sensitivity === 'fast' ? 2.4 : 1.2;
+      const dx = Math.round((touch.clientX - lastMovePosRef.current.clientX) * mult);
+      const dy = Math.round((touch.clientY - lastMovePosRef.current.clientY) * mult);
+
+      if (dx !== 0 || dy !== 0) {
+        if (targetDevice.isLocal || targetDevice.ipAddress === '127.0.0.1') {
+          TauriService.simulateMouseMove(dx, dy);
+        } else {
+          fetch(`http://${targetDevice.ipAddress}:9120/api/input/mouse/move`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+            body: JSON.stringify({ dx, dy }),
+          }).catch(() => {});
+        }
+      }
+    }
+    lastMovePosRef.current = { clientX: touch.clientX, clientY: touch.clientY };
   };
 
   const handleTrackpadTouchEnd = () => {
     setIsClickHeld(false);
+    lastMovePosRef.current = null;
   };
 
   const triggerRipple = (x: number, y: number, color: string) => {
@@ -302,7 +355,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
     }, 600);
   };
 
-  const handleTrackpadMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleTrackpadMouseDown = async (e: React.MouseEvent<HTMLDivElement>) => {
     if (!targetDevice) return;
     e.preventDefault();
     const rect = e.currentTarget.getBoundingClientRect();
@@ -310,66 +363,152 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
     const y = ((e.clientY - rect.top) / rect.height) * 100;
     setIsClickHeld(true);
 
-    if (e.button === 2) {
-      // Right Click
-      triggerHaptic(15);
-      triggerRipple(x, y, '#D4AAFF');
-      showTelemetry('Right Click [Secondary Action]');
-    } else if (e.button === 1) {
-      // Middle Click
-      triggerHaptic(12);
-      triggerRipple(x, y, '#82D5A5');
-      showTelemetry('Middle Click [Scroll Wheel Action]');
+    const buttonName = e.button === 2 ? 'right' : e.button === 1 ? 'middle' : 'left';
+    const color = buttonName === 'right' ? '#D4AAFF' : buttonName === 'middle' ? '#82D5A5' : '#9ECAFF';
+    triggerHaptic(buttonName === 'left' ? 10 : 15);
+    triggerRipple(x, y, color);
+
+    if (targetDevice.isLocal || targetDevice.ipAddress === '127.0.0.1') {
+      await TauriService.simulateMouseClick(buttonName);
+      showTelemetry(`${buttonName.toUpperCase()} Click`);
     } else {
-      // Left Click
-      triggerHaptic(10);
-      triggerRipple(x, y, '#9ECAFF');
-      showTelemetry('Left Click [Primary Action]');
+      try {
+        await fetch(`http://${targetDevice.ipAddress}:9120/api/input/mouse/click`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          body: JSON.stringify({ button: buttonName }),
+        });
+      } catch (_) {}
+      showTelemetry(`${buttonName.toUpperCase()} Click -> ${targetDevice.name}`);
     }
   };
 
-  const handleTrackpadWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+  const handleTrackpadWheel = async (e: React.WheelEvent<HTMLDivElement>) => {
     if (!targetDevice) return;
     triggerRipple(cursorPos.x, cursorPos.y, '#82D5A5');
-    showTelemetry(e.deltaY > 0 ? 'Scroll Down' : 'Scroll Up');
+    const deltaY = e.deltaY > 0 ? -1 : 1;
+
+    if (targetDevice.isLocal || targetDevice.ipAddress === '127.0.0.1') {
+      await TauriService.simulateMouseScroll(0, deltaY);
+      showTelemetry(e.deltaY > 0 ? 'Scroll Down' : 'Scroll Up');
+    } else {
+      try {
+        await fetch(`http://${targetDevice.ipAddress}:9120/api/input/mouse/scroll`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          body: JSON.stringify({ dy: deltaY * 120 }),
+        });
+      } catch (_) {}
+      showTelemetry(e.deltaY > 0 ? 'Scroll Down' : 'Scroll Up');
+    }
   };
 
-  const handleButtonAction = (buttonName: 'left' | 'middle' | 'right') => {
+  const handleButtonAction = async (buttonName: 'left' | 'middle' | 'right') => {
     if (!targetDevice) return;
     triggerHaptic(15);
     const color = buttonName === 'left' ? '#9ECAFF' : buttonName === 'middle' ? '#82D5A5' : '#D4AAFF';
     triggerRipple(cursorPos.x, cursorPos.y, color);
-    showTelemetry(`${buttonName.toUpperCase()} Click sent to ${targetDevice.name}`);
-  };
 
-  const handleMediaAction = (action: string) => {
-    if (!targetDevice) return;
-    triggerHaptic(12);
-    if (action === 'play_pause') {
-      setIsPlaying(!isPlaying);
-      showTelemetry(!isPlaying ? 'Media Play command sent' : 'Media Pause command sent');
+    if (targetDevice.isLocal || targetDevice.ipAddress === '127.0.0.1') {
+      await TauriService.simulateMouseClick(buttonName);
+      showTelemetry(`${buttonName.toUpperCase()} Click`);
     } else {
-      showTelemetry(`Media ${action.toUpperCase()} command sent`);
+      try {
+        await fetch(`http://${targetDevice.ipAddress}:9120/api/input/mouse/click`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          body: JSON.stringify({ button: buttonName }),
+        });
+      } catch (_) {}
+      showTelemetry(`${buttonName.toUpperCase()} Click sent to ${targetDevice.name}`);
     }
   };
 
-  const handleHotkeyClick = (hk: Hotkey) => {
+  const handleMediaAction = async (action: string) => {
     if (!targetDevice) return;
     triggerHaptic(12);
-    showTelemetry(`Hotkey [${hk.label}] executed on ${targetDevice.name}`);
+
+    const mappedAction = action === 'prev' ? 'prev_track' : action === 'next' ? 'next_track' : action;
+
+    if (targetDevice.isLocal || targetDevice.ipAddress === '127.0.0.1') {
+      await TauriService.controlMedia(mappedAction);
+      if (action === 'play_pause') {
+        setIsPlaying(prev => !prev);
+        showTelemetry(!isPlaying ? 'Media Play command executed' : 'Media Pause command executed');
+      } else {
+        showTelemetry(`Media ${action.toUpperCase()} command executed`);
+      }
+    } else {
+      try {
+        await fetch(`http://${targetDevice.ipAddress}:9120/api/media`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          body: JSON.stringify({ action: mappedAction }),
+        });
+        if (action === 'play_pause') {
+          setIsPlaying(prev => !prev);
+        }
+        showTelemetry(`Media ${action.toUpperCase()} command sent to ${targetDevice.name}`);
+      } catch (_) {}
+    }
   };
 
-  const handleLockWorkstation = () => {
+  const handleHotkeyClick = async (hk: Hotkey) => {
+    if (!targetDevice) return;
+    triggerHaptic(12);
+
+    if (targetDevice.isLocal || targetDevice.ipAddress === '127.0.0.1') {
+      await TauriService.simulateHotkey(hk.keys);
+      showTelemetry(`Hotkey [${hk.label}] executed`);
+    } else {
+      try {
+        await fetch(`http://${targetDevice.ipAddress}:9120/api/input/keyboard/hotkey`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          body: JSON.stringify({ keys: hk.keys }),
+        });
+      } catch (_) {}
+      showTelemetry(`Hotkey [${hk.label}] executed on ${targetDevice.name}`);
+    }
+  };
+
+  const handleLockWorkstation = async () => {
     if (!targetDevice) return;
     triggerHaptic([25, 50, 25]);
-    showTelemetry(`Lock Workstation command sent to ${targetDevice.name}`);
+
+    if (targetDevice.isLocal || targetDevice.ipAddress === '127.0.0.1') {
+      await TauriService.lockWorkstation();
+      showTelemetry('Lock Workstation executed');
+    } else {
+      try {
+        await fetch(`http://${targetDevice.ipAddress}:9120/api/system/control`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          body: JSON.stringify({ action: 'lock' }),
+        });
+      } catch (_) {}
+      showTelemetry(`Lock Workstation command sent to ${targetDevice.name}`);
+    }
   };
 
-  const executeInject = (text: string) => {
+  const executeInject = async (text: string) => {
     if (!text.trim() || !targetDevice) return;
     triggerHaptic(10);
     const clean = text.trim();
-    showTelemetry(`Injected "${clean.slice(0, 18)}${clean.length > 18 ? '...' : ''}"`);
+
+    if (targetDevice.isLocal || targetDevice.ipAddress === '127.0.0.1') {
+      await TauriService.simulateText(clean);
+      showTelemetry(`Injected "${clean.slice(0, 18)}${clean.length > 18 ? '...' : ''}"`);
+    } else {
+      try {
+        await fetch(`http://${targetDevice.ipAddress}:9120/api/input/keyboard/text`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          body: JSON.stringify({ text: clean }),
+        });
+      } catch (_) {}
+      showTelemetry(`Injected "${clean.slice(0, 18)}${clean.length > 18 ? '...' : ''}" -> ${targetDevice.name}`);
+    }
     setRecentInjections(prev => [clean, ...prev.filter(t => t !== clean)].slice(0, 6));
   };
 
@@ -459,6 +598,46 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
     showTelemetry('Reset snippets to default list');
   };
 
+  const handleToggleMute = async () => {
+    setIsMuted(prev => !prev);
+    if (targetDevice?.isLocal || targetDevice?.ipAddress === '127.0.0.1') {
+      await TauriService.controlMedia('volume_mute');
+    } else if (targetDevice) {
+      try {
+        await fetch(`http://${targetDevice.ipAddress}:9120/api/media`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          body: JSON.stringify({ action: 'volume_mute' }),
+        });
+      } catch (_) {}
+    }
+    showTelemetry(!isMuted ? 'Muted workstation audio' : 'Unmuted workstation audio');
+  };
+
+  const handleVolumeChange = async (newVal: number) => {
+    const diff = newVal - volume;
+    setVolume(newVal);
+    setIsMuted(false);
+
+    const action = diff > 0 ? 'volume_up' : 'volume_down';
+    const steps = Math.min(5, Math.max(1, Math.round(Math.abs(diff) / 5)));
+
+    if (targetDevice?.isLocal || targetDevice?.ipAddress === '127.0.0.1') {
+      for (let i = 0; i < steps; i++) {
+        await TauriService.controlMedia(action);
+      }
+    } else if (targetDevice) {
+      try {
+        await fetch(`http://${targetDevice.ipAddress}:9120/api/media`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          body: JSON.stringify({ action }),
+        });
+      } catch (_) {}
+    }
+    showTelemetry(`Volume set to ${newVal}%`);
+  };
+
   const VolumeIcon = isMuted ? VolumeX : volume > 50 ? Volume2 : Volume1;
 
   return (
@@ -473,44 +652,45 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
             </span>
           </div>
           <div className="flex items-center gap-2">
-            {controllableDevices.length === 0 ? (
-              <span className="text-xs text-[var(--text-muted)] italic">No remote nodes available</span>
-            ) : (
-              controllableDevices.map(device => {
-                const isActive = targetDevice?.id === device.id;
-                const isOnline = device.status !== 'offline';
-                return (
-                  <button
-                    key={device.id}
-                    onClick={() => isOnline && onSelectDevice(device.id)}
-                    disabled={!isOnline}
-                    className={`h-8 flex items-center gap-2 px-3 rounded-lg text-xs font-medium transition whitespace-nowrap ${
-                      isActive
-                        ? 'bg-[var(--accent-primary)] text-[var(--m3-on-primary)] shadow-sm font-semibold'
-                        : isOnline
-                        ? 'bg-[var(--chip-bg)] text-[var(--chip-text)] hover:bg-[var(--surface-elevated)] border border-[var(--border-subtle)]'
-                        : 'bg-[var(--surface-container)] text-[var(--text-muted)] border border-[var(--border-subtle)] cursor-not-allowed'
-                    }`}
-                  >
-                    <span
-                      className="w-1.5 h-1.5 rounded-full"
-                      style={{
-                        backgroundColor:
-                          device.status === 'online'
-                            ? '#6DD58C'
-                            : device.status === 'connected'
-                            ? '#A8C7FA'
-                            : device.status === 'idle'
-                            ? '#FFDDAF'
-                            : '#879099'
-                      }}
-                    />
-                    {getDeviceIcon(device.type, 13)}
-                    <span>{device.name}</span>
-                  </button>
-                );
-              })
-            )}
+            {controllableDevices.map(device => {
+              const isActive = targetDevice?.id === device.id;
+              const isOnline = device.status !== 'offline';
+              return (
+                <button
+                  key={device.id}
+                  onClick={() => isOnline && onSelectDevice(device.id)}
+                  disabled={!isOnline}
+                  className={`h-8 flex items-center gap-2 px-3 rounded-lg text-xs font-medium transition whitespace-nowrap ${
+                    isActive
+                      ? 'bg-[var(--accent-primary)] text-[var(--m3-on-primary)] shadow-sm font-semibold'
+                      : isOnline
+                      ? 'bg-[var(--chip-bg)] text-[var(--chip-text)] hover:bg-[var(--surface-elevated)] border border-[var(--border-subtle)]'
+                      : 'bg-[var(--surface-container)] text-[var(--text-muted)] border border-[var(--border-subtle)] cursor-not-allowed'
+                  }`}
+                >
+                  <span
+                    className="w-1.5 h-1.5 rounded-full"
+                    style={{
+                      backgroundColor:
+                        device.status === 'online'
+                          ? '#6DD58C'
+                          : device.status === 'connected'
+                          ? '#A8C7FA'
+                          : device.status === 'idle'
+                          ? '#FFDDAF'
+                          : '#879099'
+                    }}
+                  />
+                  {getDeviceIcon(device.type, 13)}
+                  <span>{device.name}</span>
+                  {device.isLocal && (
+                    <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-black/20 font-bold tracking-tight">
+                      THIS PC
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -740,12 +920,10 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
             {/* Volume Slider & Mute Toggle */}
             <div className="flex items-center gap-3 pt-1">
               <button
-                onClick={() => {
-                  setIsMuted(!isMuted);
-                  showTelemetry(!isMuted ? 'Muted workstation audio' : 'Unmuted workstation audio');
-                }}
+                onClick={handleToggleMute}
                 disabled={!targetDevice}
-                className="w-9 h-9 rounded-lg bg-[var(--surface-container)] hover:bg-[var(--surface-base)] text-[var(--text-body)] disabled:opacity-40 transition border border-[var(--border-subtle)] flex items-center justify-center"
+                className="w-9 h-9 rounded-lg bg-[var(--surface-container)] hover:bg-[var(--surface-base)] text-[var(--text-body)] disabled:opacity-40 transition border border-[var(--border-subtle)] flex items-center justify-center cursor-pointer"
+                title={isMuted ? 'Unmute Audio' : 'Mute Audio'}
               >
                 <VolumeIcon className="w-4 h-4" />
               </button>
@@ -755,12 +933,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
                 min="0"
                 max="100"
                 value={isMuted ? 0 : volume}
-                onChange={e => {
-                  const val = Number(e.target.value);
-                  setVolume(val);
-                  setIsMuted(false);
-                  showTelemetry(`Volume set to ${val}%`);
-                }}
+                onChange={e => handleVolumeChange(Number(e.target.value))}
                 disabled={!targetDevice}
                 className="flex-1 accent-[var(--accent-primary)] cursor-pointer disabled:opacity-40"
               />

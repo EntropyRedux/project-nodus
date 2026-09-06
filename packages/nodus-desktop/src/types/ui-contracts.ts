@@ -124,5 +124,9 @@ export interface RemoteAppShortcutsProps {
   peerApps: SharedApp[];
   onToggleMyApp: (id: string, enabled: boolean) => void;
   onLaunchPeerApp: (app: SharedApp) => void;
-  onAddMyApp: () => void;
+  onLaunchMyApp?: (app: SharedApp) => void;
+  onDeleteMyApp?: (id: string) => void;
+  onRegisterApp?: (app: { name: string; path: string; category: AppCategory; description?: string }) => void;
+  onAddMyApp?: () => void;
 }
+
