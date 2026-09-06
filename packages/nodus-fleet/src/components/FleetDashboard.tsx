@@ -135,6 +135,12 @@ export const FleetDashboard: React.FC = () => {
   });
 
   useEffect(() => {
+    if (scannedPeers.length > 0) {
+      setLanDeviceCount(prev => Math.max(prev, scannedPeers.length));
+    }
+  }, [scannedPeers.length]);
+
+  useEffect(() => {
     try {
       localStorage.setItem('nodus_lan_device_count', String(lanDeviceCount));
     } catch (_) {}
@@ -144,13 +150,13 @@ export const FleetDashboard: React.FC = () => {
     const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
     if (bridge && typeof bridge.getLanDeviceCount === 'function') {
       try {
-        const count = bridge.getLanDeviceCount();
-        if (count > 0 || lanDeviceCount === 0) {
-          setLanDeviceCount(count);
+        const count = bridge.getLanDeviceCount(subnetInput);
+        if (count > 0) {
+          setLanDeviceCount(prev => Math.max(prev, count, scannedPeers.length));
         }
       } catch (_) {}
     }
-  }, [lanDeviceCount]);
+  }, [subnetInput, scannedPeers.length]);
 
   useEffect(() => {
     refreshLanCount();
@@ -1189,7 +1195,7 @@ export const FleetDashboard: React.FC = () => {
         subnet={subnetInput}
         scannedPeers={scannedPeers}
         trustedDevices={trustedDevices}
-        lanDeviceCount={scannedPeers.length}
+        lanDeviceCount={Math.max(lanDeviceCount, scannedPeers.length)}
         isServerRunning={isServerRunning}
         onStartServer={toggleServer}
         onUpdateNickname={setDeviceNickname}

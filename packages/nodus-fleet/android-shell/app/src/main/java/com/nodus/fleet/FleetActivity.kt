@@ -158,9 +158,36 @@ class FleetActivity : AppCompatActivity() {
             return FleetDaemonService.instance?.getDevicesJson() ?: "[]"
         }
 
+        private var lastScannedLanCount: Int = 0
+
+        private fun getArpDeviceCount(subnetPrefix: String = "192.168.1"): Int {
+            return try {
+                var count = 0
+                val cleanPrefix = subnetPrefix.trim().removeSuffix(".")
+                val file = java.io.File("/proc/net/arp")
+                if (file.exists()) {
+                    file.forEachLine { line ->
+                        val parts = line.split("\\s+".toRegex())
+                        if (parts.size >= 4) {
+                            val ip = parts[0]
+                            val mac = parts[3]
+                            if (ip.startsWith(cleanPrefix) && mac != "00:00:00:00:00:00" && !mac.contains("00:00:00:00:00:00")) {
+                                count++
+                            }
+                        }
+                    }
+                }
+                count
+            } catch (_: Exception) {
+                0
+            }
+        }
+
         @JavascriptInterface
-        fun getLanDeviceCount(): Int {
-            return FleetDaemonService.instance?.getDiscoveredPeersCount() ?: 0
+        fun getLanDeviceCount(subnet: String = "192.168.1"): Int {
+            val arpCount = getArpDeviceCount(subnet)
+            val udpCount = FleetDaemonService.instance?.getDiscoveredPeersCount() ?: 0
+            return maxOf(lastScannedLanCount, arpCount, udpCount)
         }
 
         @JavascriptInterface
@@ -317,6 +344,7 @@ class FleetActivity : AppCompatActivity() {
                     try { f.get(600, java.util.concurrent.TimeUnit.MILLISECONDS) } catch (_: Exception) {}
                 }
                 executor.shutdownNow()
+                lastScannedLanCount = jsonArray.length()
                 jsonArray.toString()
             } catch (e: Exception) {
                 Log.e(TAG, "Subnet scan error", e)
