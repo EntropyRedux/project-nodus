@@ -267,6 +267,7 @@ class FleetActivity : AppCompatActivity() {
         fun addPairedDevice(ip: String, port: Int, name: String) {
             val cleanIp = ip.trim()
             val deviceId = "win-${cleanIp.replace(".", "-")}"
+            val httpPort = if (port > 0) port else 9120
             val dev = JSONObject().apply {
                 put("id", deviceId)
                 put("name", if (name.isNotBlank()) name else "Workstation Host ($cleanIp)")
@@ -274,13 +275,38 @@ class FleetActivity : AppCompatActivity() {
                 put("os", "windows")
                 put("status", "connected")
                 put("ipAddress", cleanIp)
-                put("httpPort", if (port > 0) port else 9120)
+                put("httpPort", httpPort)
                 put("battery", 100)
                 put("cpuLoad", 15)
                 put("ramUsage", "Active")
                 put("lastSeen", System.currentTimeMillis())
             }
             FleetDaemonService.instance?.addOrUpdateRemoteDevice(dev)
+
+            // Dispatch pairing handshake to the target device so it adds the tablet back
+            Thread {
+                try {
+                    val u = java.net.URL("http://$cleanIp:$httpPort/api/fleet/pair-request")
+                    val conn = u.openConnection() as java.net.HttpURLConnection
+                    conn.requestMethod = "POST"
+                    conn.connectTimeout = 2500
+                    conn.readTimeout = 2500
+                    conn.doOutput = true
+                    conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                    val payload = JSONObject().apply {
+                        put("id", "poco-pad")
+                        put("deviceId", "poco-pad")
+                        put("name", "POCO Pad")
+                        put("deviceType", "tablet")
+                        put("type", "tablet")
+                        put("os", "Android 14 (HyperOS)")
+                        put("httpPort", 9120)
+                        put("port", 9120)
+                    }
+                    conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+                    conn.responseCode
+                } catch (_: Exception) {}
+            }.start()
         }
 
         @JavascriptInterface

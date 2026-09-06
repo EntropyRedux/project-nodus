@@ -177,6 +177,52 @@ class FleetHttpServer(
                     }
                 }
 
+                uri.startsWith("/api/fleet/pair-request") || uri.startsWith("/api/fleet/register") || uri.startsWith("/api/pair") -> {
+                    try {
+                        val clientIp = socket.inetAddress?.hostAddress ?: "127.0.0.1"
+                        val reqObj = if (body.isNotBlank()) JSONObject(body) else JSONObject()
+                        val devId = reqObj.optString("deviceId", reqObj.optString("id", "win-${clientIp.replace(".", "-")}"))
+                        val rawName = reqObj.optString("name", reqObj.optString("hostname", "Host Workstation ($clientIp)"))
+                        val devName = if (!rawName.contains("PC") && !rawName.contains("Host")) "$rawName (PC)" else rawName
+                        val devType = reqObj.optString("deviceType", reqObj.optString("type", "desktop"))
+                        val devOs = reqObj.optString("os", "windows")
+                        val senderIp = reqObj.optString("ipAddress", reqObj.optString("ip", clientIp))
+                        val httpPort = reqObj.optInt("httpPort", reqObj.optInt("port", 9120))
+
+                        val pairedDevice = JSONObject().apply {
+                            put("id", devId)
+                            put("name", devName)
+                            put("type", devType)
+                            put("os", devOs)
+                            put("status", "connected")
+                            put("ipAddress", senderIp)
+                            put("httpPort", httpPort)
+                            put("battery", reqObj.optInt("battery", 100))
+                            put("cpuLoad", reqObj.optInt("cpuLoad", 10))
+                            put("ramUsage", reqObj.optString("ramUsage", "Active"))
+                            put("lastSeen", System.currentTimeMillis())
+                        }
+
+                        FleetDaemonService.instance?.addOrUpdateRemoteDevice(pairedDevice)
+
+                        val resp = JSONObject().apply {
+                            put("status", "success")
+                            put("ok", true)
+                            put("accepted", true)
+                            put("message", "Device paired successfully")
+                            put("authToken", "NODUS-FLEET-SECURE")
+                            put("deviceId", "poco-pad")
+                            put("name", "POCO Pad")
+                        }
+                        responseBytes = resp.toString().toByteArray(Charsets.UTF_8)
+                        contentType = "application/json; charset=utf-8"
+                    } catch (e: Exception) {
+                        statusCode = 400
+                        responseBytes = "{\"error\":\"Invalid pair request\"}".toByteArray(Charsets.UTF_8)
+                        contentType = "application/json; charset=utf-8"
+                    }
+                }
+
                 uri.startsWith("/api/devices") -> {
                     val devices = FleetDaemonService.instance?.getDevicesJson() ?: "[]"
                     responseBytes = devices.toByteArray(Charsets.UTF_8)

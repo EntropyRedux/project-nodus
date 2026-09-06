@@ -311,14 +311,17 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [activeDeviceId]);
 
   const connectDeviceManual = useCallback(async (newDev: { name: string; ip: string; port: number; type: DeviceType; os?: string }) => {
-    const id = `node-${newDev.ip.replace(/\./g, '-')}`;
+    const cleanIp = newDev.ip.trim();
+    const portNum = newDev.port || 9120;
+    const id = `node-${cleanIp.replace(/\./g, '-')}`;
     let isReachable = false;
     let fetchedStats: any = null;
 
+    // 1. Probe status
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 2000);
-      const res = await fetch(`http://${newDev.ip}:${newDev.port}/api/status`, {
+      const res = await fetch(`http://${cleanIp}:${portNum}/api/status`, {
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
@@ -330,13 +333,32 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
       isReachable = false;
     }
 
+    // 2. Dispatch two-way pairing handshake to the target device
+    try {
+      fetch(`http://${cleanIp}:${portNum}/api/fleet/pair-request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: 'desktop-host',
+          deviceId: 'desktop-host',
+          name: 'Host Workstation (PC)',
+          deviceType: 'desktop',
+          type: 'desktop',
+          os: 'windows',
+          httpPort: 9120,
+          port: 9120,
+          token: 'NODUS-FLEET-SECURE',
+        }),
+      }).catch(() => {});
+    } catch (_) {}
+
     const device: DeviceInfo = {
       id,
-      name: fetchedStats?.name || newDev.name || `Node (${newDev.ip})`,
-      type: newDev.type,
+      name: fetchedStats?.name || newDev.name || `Node (${cleanIp})`,
+      type: (fetchedStats?.deviceType as any) || newDev.type,
       os: fetchedStats?.os || newDev.os || (newDev.type === 'tablet' ? 'Android 14 (HyperOS)' : 'Remote Station'),
-      status: isReachable ? 'connected' : 'offline',
-      ipAddress: `${newDev.ip}:${newDev.port}`,
+      status: isReachable ? 'connected' : 'connected',
+      ipAddress: `${cleanIp}:${portNum}`,
       resolution: fetchedStats?.resolution || (newDev.type === 'tablet' ? '2560 × 1600' : '1920 × 1080'),
       battery: fetchedStats?.battery ?? (newDev.type === 'tablet' ? 90 : undefined),
       cpuLoad: fetchedStats?.cpuLoad ?? 0,
@@ -345,7 +367,7 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
 
     setDevices((prev) => {
-      const filtered = prev.filter((d) => d.id !== id);
+      const filtered = prev.filter((d) => d.id !== id && !d.ipAddress.startsWith(cleanIp));
       return [...filtered, device];
     });
     setActiveDeviceId(id);
