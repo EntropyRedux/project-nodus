@@ -30,7 +30,8 @@ import {
   Terminal,
   Calculator,
   Folder,
-  Activity
+  Activity,
+  AppWindow
 } from 'lucide-react';
 import { TauriService } from '../../services/TauriCommands';
 
@@ -50,12 +51,12 @@ const DEFAULT_PRESETS: Array<{
   category: AppCategory;
   description: string;
 }> = [
-  { name: 'Visual Studio Code', path: 'code .', category: 'dev', description: 'Open project directory in VS Code' },
-  { name: 'Windows Terminal', path: 'wt', category: 'dev', description: 'Launch tabbed Windows Terminal' },
+  { name: 'Visual Studio Code', path: 'code', category: 'dev', description: 'Open project in VS Code' },
+  { name: 'Windows Terminal', path: 'wt', category: 'dev', description: 'Launch Windows Terminal' },
   { name: 'PowerShell', path: 'powershell.exe', category: 'dev', description: 'Windows PowerShell prompt' },
   { name: 'Google Chrome', path: 'chrome.exe', category: 'browser', description: 'Launch Chrome browser' },
   { name: 'File Explorer', path: 'explorer.exe', category: 'productivity', description: 'Open File Explorer' },
-  { name: 'Task Manager', path: 'taskmgr.exe', category: 'system', description: 'Windows Task Manager & Performance' },
+  { name: 'Task Manager', path: 'taskmgr.exe', category: 'system', description: 'Windows Task Manager' },
   { name: 'Calculator', path: 'calc.exe', category: 'utility', description: 'Windows Calculator' },
   { name: 'Notepad', path: 'notepad.exe', category: 'productivity', description: 'Simple text editor' },
 ];
@@ -72,6 +73,17 @@ function getDeviceIcon(type: SharedApp['deviceType'], size = 12) {
     default:
       return <Monitor size={size} />;
   }
+}
+
+export function formatIconSrc(rawIcon?: string): string | null {
+  if (!rawIcon || typeof rawIcon !== 'string' || rawIcon.trim().length === 0) {
+    return null;
+  }
+  const trimmed = rawIcon.trim();
+  if (trimmed.startsWith('data:')) {
+    return trimmed;
+  }
+  return `data:image/png;base64,${trimmed}`;
 }
 
 export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
@@ -99,6 +111,7 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
   const [formPath, setFormPath] = useState('');
   const [formCategory, setFormCategory] = useState<AppCategory>('dev');
   const [formDesc, setFormDesc] = useState('');
+  const [previewIcon, setPreviewIcon] = useState<string | null>(null);
 
   const fetchInstalledApps = async () => {
     setIsScanningInstalled(true);
@@ -112,6 +125,22 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
       setIsScanningInstalled(false);
     }
   };
+
+  useEffect(() => {
+    if (showAddModal && formPath.trim().length > 1) {
+      const timer = setTimeout(async () => {
+        try {
+          const icon = await TauriService.extractAppIcon(formPath.trim());
+          setPreviewIcon(icon);
+        } catch (_) {
+          setPreviewIcon(null);
+        }
+      }, 300);
+      return () => clearTimeout(timer);
+    } else {
+      setPreviewIcon(null);
+    }
+  }, [formPath, showAddModal]);
 
   const handleLaunchLocal = async (app: SharedApp | { id: string; name: string; path?: string; commandOrPackage?: string }) => {
     setLaunchedAppId(app.id);
@@ -136,15 +165,24 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
     }, 2000);
   };
 
-  const handleAddPreset = (preset: typeof DEFAULT_PRESETS[0]) => {
+  const handleAddPreset = async (preset: typeof DEFAULT_PRESETS[0]) => {
     if (onRegisterApp) {
-      onRegisterApp(preset);
+      const icon = await TauriService.extractAppIcon(preset.path).catch(() => null);
+      onRegisterApp({
+        ...preset,
+        icon_base64: icon || undefined,
+      } as any);
     }
   };
 
-  const handleSaveCustom = (e: React.FormEvent) => {
+  const handleSaveCustom = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim() || !formPath.trim()) return;
+
+    let icon = previewIcon;
+    if (!icon) {
+      icon = await TauriService.extractAppIcon(formPath.trim()).catch(() => null);
+    }
 
     if (onRegisterApp) {
       onRegisterApp({
@@ -152,11 +190,13 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
         path: formPath.trim(),
         category: formCategory,
         description: formDesc.trim() || undefined,
-      });
+        icon_base64: icon || undefined,
+      } as any);
     }
     setFormName('');
     setFormPath('');
     setFormDesc('');
+    setPreviewIcon(null);
     setShowAddModal(false);
   };
 
@@ -238,7 +278,7 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
             <button
               onClick={fetchInstalledApps}
               disabled={isScanningInstalled}
-              className="h-8 px-3 rounded-lg bg-[var(--surface-elevated)] hover:bg-[var(--surface-base)] text-xs font-mono font-medium text-[var(--text-heading)] border border-[var(--border-subtle)] flex items-center gap-1.5 transition disabled:opacity-50"
+              className="h-8 px-3 rounded-lg bg-[var(--surface-elevated)] hover:bg-[var(--surface-base)] text-xs font-mono font-medium text-[var(--text-heading)] border border-[var(--border-subtle)] flex items-center gap-1.5 transition disabled:opacity-50 cursor-pointer"
             >
               <RefreshCw size={13} className={isScanningInstalled ? 'animate-spin' : ''} />
               <span>{isScanningInstalled ? 'Scanning System...' : 'Re-Scan Apps'}</span>
@@ -247,7 +287,7 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
 
           <button
             onClick={() => setShowAddModal(true)}
-            className="h-8 px-3.5 rounded-lg bg-[var(--accent-primary)] hover:opacity-90 text-[var(--m3-on-primary)] text-xs font-semibold font-mono flex items-center gap-1.5 transition shadow"
+            className="h-8 px-3.5 rounded-lg bg-[var(--accent-primary)] hover:opacity-90 text-[var(--m3-on-primary)] text-xs font-semibold font-mono flex items-center gap-1.5 transition shadow cursor-pointer"
           >
             <Plus size={15} />
             <span>Add Shortcut</span>
@@ -281,7 +321,7 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full no-scrollbar">
           <button
             onClick={() => setSelectedCategory('all')}
-            className={`h-7 px-2.5 rounded-md text-[11px] font-mono transition ${
+            className={`h-7 px-2.5 rounded-md text-[11px] font-mono transition cursor-pointer ${
               selectedCategory === 'all'
                 ? 'bg-[var(--accent-primary)] text-[var(--m3-on-primary)] font-semibold'
                 : 'bg-[var(--surface-base)] text-[var(--text-muted)] hover:text-[var(--text-heading)] border border-[var(--border-subtle)]'
@@ -293,7 +333,7 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
             <button
               key={key}
               onClick={() => setSelectedCategory(key)}
-              className={`h-7 px-2.5 rounded-md text-[11px] font-mono transition flex items-center gap-1.5 ${
+              className={`h-7 px-2.5 rounded-md text-[11px] font-mono transition flex items-center gap-1.5 cursor-pointer ${
                 selectedCategory === key
                   ? 'bg-[var(--accent-primary)] text-[var(--m3-on-primary)] font-semibold'
                   : 'bg-[var(--surface-base)] text-[var(--text-muted)] hover:text-[var(--text-heading)] border border-[var(--border-subtle)]'
@@ -320,7 +360,7 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
                   No Workstation Shortcuts Configured
                 </h3>
                 <p className="text-xs text-[var(--text-muted)] mb-5">
-                  Register shortcuts for your favorite Windows tools, IDEs, or scripts to launch them in 1-click or stream them to your tablet.
+                  Register shortcuts for your favorite Windows tools, IDEs, or scripts to launch them in 1-click or stream them to your tablet with high-res native icons.
                 </p>
 
                 {/* Quick Presets Recommendation */}
@@ -351,6 +391,7 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
                   const catMeta = CATEGORY_ICONS[app.category] || CATEGORY_ICONS.utility;
                   const Icon = catMeta.icon;
                   const isLaunched = launchedAppId === app.id;
+                  const iconSrc = formatIconSrc(app.icon_base64 || (app as any).iconBase64);
 
                   return (
                     <div
@@ -358,17 +399,25 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
                       className="p-4 rounded-xl bg-[var(--surface-elevated)] border border-[var(--border-subtle)] hover:border-[var(--border-active)] transition shadow-sm flex flex-col justify-between gap-3 group"
                     >
                       <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div
-                            className="w-10 h-10 rounded-lg flex items-center justify-center shadow shrink-0"
-                            style={{
-                              backgroundColor: `${catMeta.color}18`,
-                              color: catMeta.color,
-                              border: `1px solid ${catMeta.color}30`
-                            }}
-                          >
-                            <Icon size={18} />
-                          </div>
+                        <div className="flex items-center gap-3.5 min-w-0">
+                          {iconSrc ? (
+                            <img
+                              src={iconSrc}
+                              alt=""
+                              className="w-11 h-11 rounded-lg object-contain shrink-0 bg-[var(--surface-base)] p-1 border border-[var(--border-subtle)] shadow"
+                            />
+                          ) : (
+                            <div
+                              className="w-11 h-11 rounded-lg flex items-center justify-center shadow shrink-0"
+                              style={{
+                                backgroundColor: `${catMeta.color}18`,
+                                color: catMeta.color,
+                                border: `1px solid ${catMeta.color}30`
+                              }}
+                            >
+                              <Icon size={20} />
+                            </div>
+                          )}
                           <div className="min-w-0">
                             <h4 className="text-xs font-semibold text-[var(--text-heading)] truncate">
                               {app.name}
@@ -383,7 +432,7 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
                           <button
                             onClick={() => onDeleteMyApp(app.id)}
                             title="Delete Shortcut"
-                            className="p-1 rounded text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition"
+                            className="p-1 rounded text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition cursor-pointer"
                           >
                             <Trash2 size={13} />
                           </button>
@@ -407,7 +456,7 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
                         {/* Launch Button */}
                         <button
                           onClick={() => handleLaunchLocal(app)}
-                          className={`h-7 px-3 rounded-lg text-xs font-semibold font-mono flex items-center gap-1.5 transition active:scale-95 ${
+                          className={`h-7 px-3.5 rounded-lg text-xs font-semibold font-mono flex items-center gap-1.5 transition active:scale-95 cursor-pointer ${
                             isLaunched
                               ? 'bg-emerald-600 text-white shadow'
                               : 'bg-[var(--accent-primary)] text-[var(--m3-on-primary)] hover:opacity-90 shadow-sm'
@@ -432,18 +481,19 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
               <div className="py-20 text-center flex flex-col items-center justify-center">
                 <RefreshCw size={24} className="animate-spin text-[var(--accent-primary)] mb-3" />
                 <span className="text-xs font-mono text-[var(--text-muted)]">
-                  Scanning Windows Start Menu and Application Registries...
+                  Scanning Windows Applications & Extracting High-Res Shell Icons...
                 </span>
               </div>
             ) : filteredInstalled.length === 0 ? (
               <div className="py-16 text-center text-xs text-[var(--text-muted)] font-mono">
-                No installed Windows applications discovered. Click "Re-Scan Apps" to probe system registries.
+                No installed Windows applications discovered. Click "Re-Scan Apps" to probe system registries and Start Menu.
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                 {filteredInstalled.map((app) => {
                   const isLaunched = launchedAppId === app.id;
                   const isAlreadyAdded = myApps.some(m => m.path === app.path_or_appid || m.name === app.name);
+                  const iconSrc = formatIconSrc(app.icon_base64);
 
                   return (
                     <div
@@ -451,15 +501,15 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
                       className="p-3.5 rounded-xl bg-[var(--surface-elevated)] border border-[var(--border-subtle)] hover:border-[var(--border-active)] transition shadow-sm flex items-center justify-between gap-3"
                     >
                       <div className="flex items-center gap-3 min-w-0">
-                        {app.icon_base64 ? (
+                        {iconSrc ? (
                           <img
-                            src={`data:image/png;base64,${app.icon_base64}`}
+                            src={iconSrc}
                             alt=""
-                            className="w-8 h-8 rounded shrink-0 object-contain"
+                            className="w-9 h-9 rounded-lg shrink-0 object-contain bg-[var(--surface-base)] p-1 border border-[var(--border-subtle)] shadow-sm"
                           />
                         ) : (
-                          <div className="w-8 h-8 rounded-lg bg-[var(--surface-base)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--accent-primary)] shrink-0">
-                            <Monitor size={16} />
+                          <div className="w-9 h-9 rounded-lg bg-[var(--surface-base)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--accent-primary)] shrink-0">
+                            <AppWindow size={18} />
                           </div>
                         )}
                         <div className="min-w-0">
@@ -480,10 +530,11 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
                                 name: app.name,
                                 path: app.path_or_appid,
                                 category: (app.category as any) || 'productivity',
-                              })
+                                icon_base64: app.icon_base64,
+                              } as any)
                             }
                             title="Add to My Shortcuts"
-                            className="h-7 px-2.5 rounded-lg bg-[var(--surface-base)] hover:bg-[var(--surface-container)] text-[var(--text-body)] border border-[var(--border-subtle)] text-[11px] font-mono transition flex items-center gap-1"
+                            className="h-7 px-2.5 rounded-lg bg-[var(--surface-base)] hover:bg-[var(--surface-container)] text-[var(--text-body)] border border-[var(--border-subtle)] text-[11px] font-mono transition flex items-center gap-1 cursor-pointer"
                           >
                             <Plus size={13} />
                             <span>Add</span>
@@ -492,7 +543,7 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
 
                         <button
                           onClick={() => handleLaunchLocal(app)}
-                          className={`h-7 px-2.5 rounded-lg text-xs font-semibold font-mono flex items-center gap-1 transition active:scale-95 ${
+                          className={`h-7 px-2.5 rounded-lg text-xs font-semibold font-mono flex items-center gap-1 transition active:scale-95 cursor-pointer ${
                             isLaunched
                               ? 'bg-emerald-600 text-white shadow'
                               : 'bg-[var(--accent-primary)] text-[var(--m3-on-primary)] hover:opacity-90 shadow-sm'
@@ -523,6 +574,7 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
                   const catMeta = CATEGORY_ICONS[app.category] || CATEGORY_ICONS.utility;
                   const Icon = catMeta.icon;
                   const isLaunched = launchedAppId === app.id;
+                  const iconSrc = formatIconSrc(app.icon_base64);
 
                   return (
                     <div
@@ -530,16 +582,24 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
                       className="p-4 rounded-xl bg-[var(--surface-elevated)] border border-[var(--border-subtle)] flex items-center justify-between gap-3 hover:border-[var(--border-active)] transition shadow-sm"
                     >
                       <div className="flex items-center gap-3.5 min-w-0">
-                        <div
-                          className="w-10 h-10 rounded-lg flex items-center justify-center shadow shrink-0"
-                          style={{
-                            backgroundColor: `${catMeta.color}20`,
-                            color: catMeta.color,
-                            border: `1px solid ${catMeta.color}35`
-                          }}
-                        >
-                          <Icon size={18} />
-                        </div>
+                        {iconSrc ? (
+                          <img
+                            src={iconSrc}
+                            alt=""
+                            className="w-11 h-11 rounded-lg object-contain shrink-0 bg-[var(--surface-base)] p-1 border border-[var(--border-subtle)] shadow"
+                          />
+                        ) : (
+                          <div
+                            className="w-11 h-11 rounded-lg flex items-center justify-center shadow shrink-0"
+                            style={{
+                              backgroundColor: `${catMeta.color}20`,
+                              color: catMeta.color,
+                              border: `1px solid ${catMeta.color}35`
+                            }}
+                          >
+                            <Icon size={18} />
+                          </div>
+                        )}
                         <div className="min-w-0">
                           <h4 className="text-xs font-semibold text-[var(--text-heading)] truncate">
                             {app.name}
@@ -562,7 +622,7 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
 
                       <button
                         onClick={() => handleLaunchPeer(app)}
-                        className={`h-8 px-3.5 rounded-lg text-xs font-semibold font-mono flex items-center gap-1.5 transition active:scale-95 whitespace-nowrap shrink-0 ${
+                        className={`h-8 px-3.5 rounded-lg text-xs font-semibold font-mono flex items-center gap-1.5 transition active:scale-95 whitespace-nowrap shrink-0 cursor-pointer ${
                           isLaunched
                             ? 'bg-emerald-600 text-white border border-emerald-500/30 shadow'
                             : 'bg-[var(--accent-primary)] text-[var(--m3-on-primary)] hover:opacity-90 shadow-sm'
@@ -616,14 +676,21 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
                 <label className="text-[11px] font-mono text-[var(--text-muted)] block mb-1">
                   Executable Path or Command *
                 </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. code ., wt, chrome.exe, C:\Games\game.exe"
-                  value={formPath}
-                  onChange={e => setFormPath(e.target.value)}
-                  className="w-full h-9 px-3 text-xs bg-[var(--surface-base)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-heading)] font-mono focus:outline-none focus:border-[var(--accent-primary)]"
-                />
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. code, wt, chrome.exe, C:\Games\game.exe"
+                    value={formPath}
+                    onChange={e => setFormPath(e.target.value)}
+                    className="flex-1 h-9 px-3 text-xs bg-[var(--surface-base)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-heading)] font-mono focus:outline-none focus:border-[var(--accent-primary)]"
+                  />
+                  {previewIcon && (
+                    <div className="w-9 h-9 rounded-lg bg-[var(--surface-base)] p-1 border border-[var(--border-subtle)] flex items-center justify-center shrink-0 shadow-sm" title="Real Win32 App Icon Extracted">
+                      <img src={formatIconSrc(previewIcon)!} alt="" className="w-7 h-7 object-contain" />
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div>

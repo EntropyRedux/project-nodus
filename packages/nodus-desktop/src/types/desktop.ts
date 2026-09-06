@@ -60,6 +60,7 @@ export interface RemoteExecutable {
   category: 'tools' | 'productivity' | 'games' | 'media' | 'system' | 'custom';
   iconName: string;
   iconColor: string;
+  icon_base64?: string;
   execType: 'native_app' | 'command' | 'url_protocol' | 'script' | 'intent';
   commandOrPackage: string;
   args?: string;

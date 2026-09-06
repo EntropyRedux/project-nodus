@@ -52,6 +52,17 @@ function getDeviceIcon(type: SharedApp['deviceType'], size = 12) {
   }
 }
 
+export function formatIconSrc(rawIcon?: string): string | null {
+  if (!rawIcon || typeof rawIcon !== 'string' || rawIcon.trim().length === 0) {
+    return null;
+  }
+  const trimmed = rawIcon.trim();
+  if (trimmed.startsWith('data:')) {
+    return trimmed;
+  }
+  return `data:image/png;base64,${trimmed}`;
+}
+
 export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
   myApps,
   peerApps,
@@ -211,6 +222,7 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
                 const catMeta = CATEGORY_ICONS[app.category] || CATEGORY_ICONS.utility;
                 const Icon = catMeta.icon;
                 const isLaunched = launchedAppId === app.id;
+                const iconSrc = formatIconSrc(app.icon_base64);
 
                 return (
                   <div
@@ -218,16 +230,24 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
                     className="p-3 sm:p-4 rounded-xl bg-[#282A2F] border border-white/5 flex items-center justify-between gap-3 hover:border-white/10 transition shadow-sm"
                   >
                     <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
-                      <div
-                        className="w-10 h-10 sm:w-11 sm:h-11 rounded-lg flex items-center justify-center shadow-md shrink-0"
-                        style={{
-                          backgroundColor: `${catMeta.color}20`,
-                          color: catMeta.color,
-                          border: `1px solid ${catMeta.color}35`
-                        }}
-                      >
-                        <Icon size={19} />
-                      </div>
+                      {iconSrc ? (
+                        <img
+                          src={iconSrc}
+                          alt=""
+                          className="w-10 h-10 sm:w-11 sm:h-11 rounded-lg object-contain shrink-0 bg-[#111318] p-1 border border-white/10 shadow-md"
+                        />
+                      ) : (
+                        <div
+                          className="w-10 h-10 sm:w-11 sm:h-11 rounded-lg flex items-center justify-center shadow-md shrink-0"
+                          style={{
+                            backgroundColor: `${catMeta.color}20`,
+                            color: catMeta.color,
+                            border: `1px solid ${catMeta.color}35`
+                          }}
+                        >
+                          <Icon size={19} />
+                        </div>
+                      )}
                       <div className="min-w-0">
                         <h4 className="text-xs font-semibold text-slate-100 truncate">
                           {app.name}
@@ -273,6 +293,7 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
             {filteredMyApps.map(app => {
               const catMeta = CATEGORY_ICONS[app.category] || CATEGORY_ICONS.utility;
               const Icon = catMeta.icon;
+              const iconSrc = formatIconSrc(app.icon_base64);
 
               return (
                 <div
@@ -280,16 +301,24 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
                   className="p-3 sm:p-4 rounded-xl bg-[#282A2F] border border-white/5 flex items-center justify-between gap-3 hover:border-white/10 transition"
                 >
                   <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
-                    <div
-                      className="w-10 h-10 sm:w-11 sm:h-11 rounded-lg flex items-center justify-center shadow-md shrink-0"
-                      style={{
-                        backgroundColor: `${catMeta.color}20`,
-                        color: catMeta.color,
-                        border: `1px solid ${catMeta.color}35`
-                      }}
-                    >
-                      <Icon size={19} />
-                    </div>
+                    {iconSrc ? (
+                      <img
+                        src={iconSrc}
+                        alt=""
+                        className="w-10 h-10 sm:w-11 sm:h-11 rounded-lg object-contain shrink-0 bg-[#111318] p-1 border border-white/10 shadow-md"
+                      />
+                    ) : (
+                      <div
+                        className="w-10 h-10 sm:w-11 sm:h-11 rounded-lg flex items-center justify-center shadow-md shrink-0"
+                        style={{
+                          backgroundColor: `${catMeta.color}20`,
+                          color: catMeta.color,
+                          border: `1px solid ${catMeta.color}35`
+                        }}
+                      >
+                        <Icon size={19} />
+                      </div>
+                    )}
                     <div className="min-w-0">
                       <h4 className="text-xs font-semibold text-slate-100 truncate">
                         {app.name}

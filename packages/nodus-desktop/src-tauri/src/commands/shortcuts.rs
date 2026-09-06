@@ -118,6 +118,7 @@ pub fn save_shared_config(config: &SharedShortcutsConfig) {
     }
 }
 
+#[allow(dead_code)]
 pub fn resolve_windows_app_path(app_id: &str) -> Option<String> {
     if Path::new(app_id).exists() {
         return Some(app_id.to_string());
@@ -270,35 +271,9 @@ pub fn determine_lucide_icon_and_color(name: &str, app_id: &str) -> (&'static st
 pub fn get_installed_windows_apps() -> Result<Vec<DiscoveredApp>, String> {
     #[cfg(windows)]
     {
-        // Execute PowerShell command to list all Start Menu & UWP apps
-        let ps_cmd = "Get-StartApps | Select-Object Name, AppID | ConvertTo-Json -Compress";
-        let output = Command::new("powershell")
-            .args(["-NoProfile", "-Command", ps_cmd])
-            .output()
-            .map_err(|e| format!("Failed to execute Get-StartApps: {}", e))?;
-
-        let out_str = String::from_utf8_lossy(&output.stdout);
-        let trimmed = out_str.trim();
-
-        if trimmed.is_empty() {
-            return Ok(vec![]);
-        }
-
-        #[derive(Deserialize)]
-        struct RawApp {
-            #[serde(rename = "Name")]
-            name: Option<String>,
-            #[serde(rename = "AppID")]
-            app_id: Option<String>,
-        }
-
-        let raw_list: Vec<RawApp> = if trimmed.starts_with('[') {
-            serde_json::from_str(trimmed).unwrap_or_default()
-        } else if let Ok(single) = serde_json::from_str::<RawApp>(trimmed) {
-            vec![single]
-        } else {
-            vec![]
-        };
+        let mut results = Vec::new();
+        let mut seen_paths = std::collections::HashSet::new();
+        let mut seen_names = std::collections::HashSet::new();
 
         let current_cfg = load_shared_config();
         let enabled_ids: std::collections::HashSet<String> = current_cfg
@@ -308,56 +283,85 @@ pub fn get_installed_windows_apps() -> Result<Vec<DiscoveredApp>, String> {
             .map(|s| s.path_or_appid.clone())
             .collect();
 
-        let mut results = Vec::new();
-        for (idx, app) in raw_list.into_iter().enumerate() {
-            let name = match app.name {
-                Some(n) if !n.trim().is_empty() => n.trim().to_string(),
-                _ => continue,
-            };
-            let app_id = match app.app_id {
-                Some(id) if !id.trim().is_empty() => id.trim().to_string(),
-                _ => continue,
-            };
+        // 1. Scan Start Menu Directories for .lnk shortcuts (primary source of high-res icons)
+        let mut start_menu_dirs = Vec::new();
+        if let Ok(progdata) = std::env::var("ProgramData") {
+            start_menu_dirs.push(PathBuf::from(progdata).join("Microsoft\\Windows\\Start Menu\\Programs"));
+        }
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            start_menu_dirs.push(PathBuf::from(appdata).join("Microsoft\\Windows\\Start Menu\\Programs"));
+        }
+        if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+            start_menu_dirs.push(PathBuf::from(localappdata).join("Programs"));
+        }
 
-            let is_uwp = !app_id.contains('\\') && !app_id.ends_with(".exe");
-            let is_enabled = enabled_ids.contains(&app_id);
+        for dir in start_menu_dirs {
+            if dir.exists() {
+                scan_dir_shortcuts_recursive(&dir, &enabled_ids, &mut results, &mut seen_paths, &mut seen_names);
+            }
+        }
 
-            // Resolve actual filesystem path for KnownFolder GUIDs and extract icon
-            let icon_base64 = if !is_uwp {
-                let resolved = resolve_windows_app_path(&app_id);
-                resolved.as_ref().and_then(|p| extract_exe_icon(p).ok())
-            } else {
-                None
-            };
+        // 2. Scan Get-StartApps for UWP & Registry Registered Apps
+        let ps_cmd = "Get-StartApps | Select-Object Name, AppID | ConvertTo-Json -Compress";
+        if let Ok(output) = Command::new("powershell").args(["-NoProfile", "-Command", ps_cmd]).output() {
+            let out_str = String::from_utf8_lossy(&output.stdout);
+            let trimmed = out_str.trim();
 
-            // Smart Lucide icon & color determination
-            let (icon_name, icon_color) = determine_lucide_icon_and_color(&name, &app_id);
+            if !trimmed.is_empty() {
+                #[derive(Deserialize)]
+                struct RawApp {
+                    #[serde(rename = "Name")]
+                    name: Option<String>,
+                    #[serde(rename = "AppID")]
+                    app_id: Option<String>,
+                }
 
-            // Categorize by name heuristic
-            let lower = name.to_lowercase();
-            let category = if lower.contains("code") || lower.contains("terminal") || lower.contains("git") || lower.contains("cmd") || lower.contains("powershell") {
-                "tools"
-            } else if lower.contains("game") || lower.contains("steam") || lower.contains("epic") || lower.contains("xbox") {
-                "games"
-            } else if lower.contains("spotify") || lower.contains("media") || lower.contains("music") || lower.contains("vlc") || lower.contains("video") {
-                "media"
-            } else if lower.contains("word") || lower.contains("excel") || lower.contains("office") || lower.contains("notion") || lower.contains("obsidian") {
-                "productivity"
-            } else {
-                "system"
-            };
+                let raw_list: Vec<RawApp> = if trimmed.starts_with('[') {
+                    serde_json::from_str(trimmed).unwrap_or_default()
+                } else if let Ok(single) = serde_json::from_str::<RawApp>(trimmed) {
+                    vec![single]
+                } else {
+                    vec![]
+                };
 
-            results.push(DiscoveredApp {
-                id: format!("win_app_{}", idx),
-                name,
-                path_or_appid: app_id,
-                is_uwp,
-                icon_base64,
-                icon_name: Some(icon_name.to_string()),
-                icon_color: Some(icon_color.to_string()),
-                category: category.to_string(),
-                enabled: is_enabled,
-            });
+                for (idx, app) in raw_list.into_iter().enumerate() {
+                    let name = match app.name {
+                        Some(n) if !n.trim().is_empty() => n.trim().to_string(),
+                        _ => continue,
+                    };
+                    let app_id = match app.app_id {
+                        Some(id) if !id.trim().is_empty() => id.trim().to_string(),
+                        _ => continue,
+                    };
+
+                    let name_lower = name.to_lowercase();
+                    if seen_names.contains(&name_lower) || seen_paths.contains(&app_id) {
+                        continue;
+                    }
+                    seen_names.insert(name_lower);
+                    seen_paths.insert(app_id.clone());
+
+                    let is_uwp = !app_id.contains('\\') && !app_id.ends_with(".exe");
+                    let is_enabled = enabled_ids.contains(&app_id);
+
+                    // Extract icon
+                    let icon_base64 = extract_exe_icon(&app_id).ok();
+                    let (icon_name, icon_color) = determine_lucide_icon_and_color(&name, &app_id);
+                    let category = categorize_app_name(&name);
+
+                    results.push(DiscoveredApp {
+                        id: format!("win_startapp_{}", idx),
+                        name,
+                        path_or_appid: app_id,
+                        is_uwp,
+                        icon_base64,
+                        icon_name: Some(icon_name.to_string()),
+                        icon_color: Some(icon_color.to_string()),
+                        category,
+                        enabled: is_enabled,
+                    });
+                }
+            }
         }
 
         Ok(results)
@@ -366,6 +370,80 @@ pub fn get_installed_windows_apps() -> Result<Vec<DiscoveredApp>, String> {
     #[cfg(not(windows))]
     {
         Ok(vec![])
+    }
+}
+
+#[cfg(windows)]
+fn scan_dir_shortcuts_recursive(
+    dir: &Path,
+    enabled_ids: &std::collections::HashSet<String>,
+    results: &mut Vec<DiscoveredApp>,
+    seen_paths: &mut std::collections::HashSet<String>,
+    seen_names: &mut std::collections::HashSet<String>,
+) {
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                scan_dir_shortcuts_recursive(&path, enabled_ids, results, seen_paths, seen_names);
+            } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                let ext_lower = ext.to_lowercase();
+                if ext_lower == "lnk" || ext_lower == "exe" {
+                    let file_stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("Shortcut").to_string();
+                    let name_lower = file_stem.to_lowercase();
+
+                    // Skip uninstallers, help files, and duplicates
+                    if name_lower.contains("uninstall") || name_lower.contains("help") || name_lower.contains("readme") {
+                        continue;
+                    }
+                    if seen_names.contains(&name_lower) {
+                        continue;
+                    }
+
+                    let full_path = path.to_string_lossy().to_string();
+                    if seen_paths.contains(&full_path) {
+                        continue;
+                    }
+
+                    seen_names.insert(name_lower);
+                    seen_paths.insert(full_path.clone());
+
+                    let icon_base64 = extract_exe_icon(&full_path).ok();
+                    let (icon_name, icon_color) = determine_lucide_icon_and_color(&file_stem, &full_path);
+                    let category = categorize_app_name(&file_stem);
+                    let is_enabled = enabled_ids.contains(&full_path);
+
+                    results.push(DiscoveredApp {
+                        id: format!("lnk_{}", results.len()),
+                        name: file_stem,
+                        path_or_appid: full_path,
+                        is_uwp: false,
+                        icon_base64,
+                        icon_name: Some(icon_name.to_string()),
+                        icon_color: Some(icon_color.to_string()),
+                        category,
+                        enabled: is_enabled,
+                    });
+                }
+            }
+        }
+    }
+}
+
+fn categorize_app_name(name: &str) -> String {
+    let lower = name.to_lowercase();
+    if lower.contains("code") || lower.contains("terminal") || lower.contains("git") || lower.contains("cmd") || lower.contains("powershell") || lower.contains("studio") || lower.contains("dev") {
+        "dev".to_string()
+    } else if lower.contains("chrome") || lower.contains("edge") || lower.contains("browser") || lower.contains("firefox") || lower.contains("brave") {
+        "browser".to_string()
+    } else if lower.contains("game") || lower.contains("steam") || lower.contains("epic") || lower.contains("xbox") || lower.contains("play") {
+        "game".to_string()
+    } else if lower.contains("spotify") || lower.contains("media") || lower.contains("music") || lower.contains("vlc") || lower.contains("video") {
+        "media".to_string()
+    } else if lower.contains("word") || lower.contains("excel") || lower.contains("office") || lower.contains("notion") || lower.contains("obsidian") || lower.contains("doc") {
+        "productivity".to_string()
+    } else {
+        "utility".to_string()
     }
 }
 

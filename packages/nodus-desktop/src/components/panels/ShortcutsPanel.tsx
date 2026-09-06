@@ -188,8 +188,12 @@ export const ShortcutsPanel: React.FC = () => {
                     background: 'var(--m3-surface-container-lowest)',
                   }}
                 >
-                  <div style={{ width: 34, height: 34, borderRadius: 12, background: 'var(--m3-secondary-container)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Icon name="code" size={18} style={{ color: 'var(--m3-on-secondary-container)' }} />
+                  <div style={{ width: 34, height: 34, borderRadius: 10, background: 'var(--m3-surface-container-high)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+                    {s.icon_base64 ? (
+                      <img src={s.icon_base64.startsWith('data:') ? s.icon_base64 : `data:image/png;base64,${s.icon_base64}`} alt="" style={{ width: 28, height: 28, objectFit: 'contain' }} />
+                    ) : (
+                      <Icon name="bolt" size={18} style={{ color: 'var(--m3-primary)' }} />
+                    )}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--m3-on-surface)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name}</div>
@@ -279,8 +283,12 @@ export const ShortcutsPanel: React.FC = () => {
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                    <div style={{ width: 34, height: 34, borderRadius: 12, background: 'var(--m3-secondary-container)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <Icon name="code" size={18} style={{ color: 'var(--m3-on-secondary-container)' }} />
+                    <div style={{ width: 34, height: 34, borderRadius: 10, background: 'var(--m3-surface-container-high)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+                      {app.icon_base64 ? (
+                        <img src={app.icon_base64.startsWith('data:') ? app.icon_base64 : `data:image/png;base64,${app.icon_base64}`} alt="" style={{ width: 28, height: 28, objectFit: 'contain' }} />
+                      ) : (
+                        <Icon name="bolt" size={18} style={{ color: 'var(--m3-primary)' }} />
+                      )}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--m3-on-surface)', marginBottom: 4 }}>{app.name}</div>

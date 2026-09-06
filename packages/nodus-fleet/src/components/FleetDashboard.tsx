@@ -152,6 +152,7 @@ export const FleetDashboard: React.FC = () => {
                 deviceColor: '#A8C7FA',
                 path: a.path_or_appid || a.path || a.commandOrPackage,
                 description: a.description,
+                icon_base64: a.icon_base64 || a.icon,
                 sharedBy: 'peer' as const,
                 enabled: a.enabled ?? true,
               }))

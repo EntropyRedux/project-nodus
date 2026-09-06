@@ -616,6 +616,7 @@ export const DesktopAppShell: React.FC = () => {
                   deviceColor: '#A8C7FA',
                   path: e.commandOrPackage,
                   description: e.description,
+                  icon_base64: e.icon_base64 || e.iconBase64,
                   sharedBy: 'me',
                   enabled: e.pinnedToDrawer ?? true,
                 }))}
@@ -633,7 +634,11 @@ export const DesktopAppShell: React.FC = () => {
                     TauriService.executeLocalCommand(app.path);
                   }
                 }}
-                onRegisterApp={(item) => {
+                onRegisterApp={async (item: any) => {
+                  let iconBase64 = item.icon_base64;
+                  if (!iconBase64 && item.path) {
+                    iconBase64 = (await TauriService.extractAppIcon(item.path).catch(() => null)) || undefined;
+                  }
                   addRemoteExecutable({
                     deviceId: 'this-pc',
                     deviceName: 'Workstation PC',
@@ -644,6 +649,7 @@ export const DesktopAppShell: React.FC = () => {
                     category: (item.category as any) || 'tools',
                     iconName: 'Code',
                     iconColor: '#0EA5E9',
+                    icon_base64: iconBase64,
                     execType: 'command',
                     commandOrPackage: item.path,
                     enabled: true,

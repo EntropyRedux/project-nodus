@@ -41,6 +41,7 @@ pub fn run() {
             commands::input::simulate_text,
             commands::shortcuts::get_installed_windows_apps,
             commands::shortcuts::scan_shortcuts_folder,
+            commands::icon::extract_app_icon,
             commands::shortcuts::get_shared_shortcuts,
             commands::shortcuts::set_shared_shortcuts,
             commands::shortcuts::add_watched_folder,

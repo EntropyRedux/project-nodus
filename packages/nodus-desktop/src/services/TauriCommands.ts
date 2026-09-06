@@ -308,6 +308,28 @@ export const TauriService = {
     }
   },
 
+  async extractAppIcon(path: string): Promise<string | null> {
+    if (!isTauri()) {
+      try {
+        const res = await fetch('http://localhost:9120/api/shortcuts/icon', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          return data.icon || null;
+        }
+      } catch (_) {}
+      return null;
+    }
+    try {
+      return await invoke<string>('extract_app_icon', { path });
+    } catch (e) {
+      return null;
+    }
+  },
+
   async getInstalledApps(): Promise<any[]> {
     if (!isTauri()) {
       try {
