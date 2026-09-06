@@ -231,7 +231,7 @@ export const DesktopAppShell: React.FC = () => {
   const targetDevice = useMemo(() => {
     return (
       devices.find(d => d.id === selectedDeviceId) ||
-      devices.find(d => !d.isLocal) ||
+      devices.find(d => d.isLocal) ||
       devices[0] || {
         id: 'this-pc',
         name: 'Nodus Workstation PC',

@@ -118,7 +118,16 @@ export const TauriService = {
 
   async lockWorkstation(): Promise<boolean> {
     if (!isTauri()) {
-      return false;
+      try {
+        const res = await fetch('http://127.0.0.1:9120/api/system/control', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          body: JSON.stringify({ action: 'lock' }),
+        });
+        return res.ok;
+      } catch (_) {
+        return false;
+      }
     }
     try {
       return await invoke<boolean>('lock_workstation');
@@ -173,8 +182,16 @@ export const TauriService = {
 
   async controlMedia(action: string): Promise<boolean> {
     if (!isTauri()) {
-      console.log(`[WebPreview] Simulated media control: ${action}`);
-      return true;
+      try {
+        const res = await fetch('http://127.0.0.1:9120/api/media', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          body: JSON.stringify({ action }),
+        });
+        return res.ok;
+      } catch (_) {
+        return true;
+      }
     }
     try {
       return await invoke<boolean>('control_media', { action });
@@ -243,8 +260,16 @@ export const TauriService = {
 
   async executeLocalCommand(commandOrPath: string, args?: string, workingDir?: string): Promise<boolean> {
     if (!isTauri()) {
-      console.log(`[WebPreview] Simulated local execution: ${commandOrPath} ${args || ''}`);
-      return true;
+      try {
+        const res = await fetch('http://127.0.0.1:9120/api/exec', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          body: JSON.stringify({ command_or_path: commandOrPath, args, working_dir: workingDir }),
+        });
+        return res.ok;
+      } catch (_) {
+        return true;
+      }
     }
     try {
       return await invoke<boolean>('execute_local_command', {
@@ -261,7 +286,18 @@ export const TauriService = {
   },
 
   async simulateMouseMove(dx: number, dy: number): Promise<boolean> {
-    if (!isTauri()) return true;
+    if (!isTauri()) {
+      try {
+        const res = await fetch('http://127.0.0.1:9120/api/input/mouse/move', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          body: JSON.stringify({ dx, dy }),
+        });
+        return res.ok;
+      } catch (_) {
+        return true;
+      }
+    }
     try {
       return await invoke<boolean>('simulate_mouse_move', { dx, dy });
     } catch (e) {
@@ -270,7 +306,18 @@ export const TauriService = {
   },
 
   async simulateMouseClick(button: string): Promise<boolean> {
-    if (!isTauri()) return true;
+    if (!isTauri()) {
+      try {
+        const res = await fetch('http://127.0.0.1:9120/api/input/mouse/click', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          body: JSON.stringify({ button }),
+        });
+        return res.ok;
+      } catch (_) {
+        return true;
+      }
+    }
     try {
       return await invoke<boolean>('simulate_mouse_click', { button });
     } catch (e) {
@@ -279,7 +326,18 @@ export const TauriService = {
   },
 
   async simulateMouseScroll(dx?: number, dy?: number): Promise<boolean> {
-    if (!isTauri()) return true;
+    if (!isTauri()) {
+      try {
+        const res = await fetch('http://127.0.0.1:9120/api/input/mouse/scroll', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          body: JSON.stringify({ dx, dy }),
+        });
+        return res.ok;
+      } catch (_) {
+        return true;
+      }
+    }
     try {
       return await invoke<boolean>('simulate_mouse_scroll', { dx, dy });
     } catch (e) {
@@ -289,8 +347,16 @@ export const TauriService = {
 
   async simulateHotkey(keys: string[]): Promise<boolean> {
     if (!isTauri()) {
-      console.log(`[WebPreview] Simulated hotkey: ${keys.join('+')}`);
-      return true;
+      try {
+        const res = await fetch('http://127.0.0.1:9120/api/input/keyboard/hotkey', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          body: JSON.stringify({ keys }),
+        });
+        return res.ok;
+      } catch (_) {
+        return true;
+      }
     }
     try {
       return await invoke<boolean>('simulate_hotkey', { keys });
@@ -300,7 +366,18 @@ export const TauriService = {
   },
 
   async simulateText(text: string): Promise<boolean> {
-    if (!isTauri()) return true;
+    if (!isTauri()) {
+      try {
+        const res = await fetch('http://127.0.0.1:9120/api/input/keyboard/text', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          body: JSON.stringify({ text }),
+        });
+        return res.ok;
+      } catch (_) {
+        return true;
+      }
+    }
     try {
       return await invoke<boolean>('simulate_text', { text });
     } catch (e) {

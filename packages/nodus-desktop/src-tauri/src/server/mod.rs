@@ -347,9 +347,9 @@ pub fn start_server(port: u16) {
                     }
 
                     // System Telemetry
-                    (Method::Get, "/api/stats") | (Method::Get, "/api/telemetry") => {
+                    (Method::Get, "/api/stats") | (Method::Get, "/api/telemetry") | (Method::Get, "/api/system/stats") => {
                         match get_system_stats() {
-                            Ok(stats) => (200, json!({ "status": "success", "data": stats })),
+                            Ok(stats) => (200, json!({ "status": "success", "data": stats, "stats": stats })),
                             Err(e) => (500, json!({ "status": "error", "message": e })),
                         }
                     }
@@ -389,15 +389,10 @@ pub fn start_server(port: u16) {
                         if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
                             if let Ok(req) = serde_json::from_str::<SystemControlReq>(&body_str) {
                                 match req.action.to_lowercase().as_str() {
-                                    "lock" => {
-                                        #[cfg(windows)]
-                                        {
-                                            let _ = std::process::Command::new("rundll32.exe")
-                                                .args(["user32.dll,LockWorkStation"])
-                                                .spawn();
-                                        }
-                                        (200, json!({ "status": "ok", "action": "lock" }))
-                                    }
+                                    "lock" => match lock_workstation() {
+                                        Ok(_) => (200, json!({ "status": "ok", "action": "lock" })),
+                                        Err(e) => (500, json!({ "status": "error", "message": e })),
+                                    },
                                     "sleep" => {
                                         #[cfg(windows)]
                                         {
@@ -437,13 +432,10 @@ pub fn start_server(port: u16) {
 
                     // Lock Station alias
                     (Method::Post, "/api/lock") => {
-                        #[cfg(windows)]
-                        {
-                            let _ = std::process::Command::new("rundll32.exe")
-                                .args(["user32.dll,LockWorkStation"])
-                                .spawn();
+                        match lock_workstation() {
+                            Ok(_) => (200, json!({ "status": "ok", "action": "lock" })),
+                            Err(e) => (500, json!({ "status": "error", "message": e })),
                         }
-                        (200, json!({ "status": "ok", "action": "lock" }))
                     }
 
                     // Media AppCommand Controls
@@ -557,53 +549,6 @@ pub fn start_server(port: u16) {
                             }
                         } else {
                             (400, json!({ "status": "error", "message": "Body exceeds maximum size" }))
-                        }
-                    }
-
-                    // Media & Sound Control Deck
-                    (Method::Post, "/api/media") | (Method::Post, "/api/media/control") => {
-                        if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
-                            if let Ok(req) = serde_json::from_str::<MediaControlReq>(&body_str) {
-                                match send_media_appcommand(&req.action) {
-                                    Ok(_) => (200, json!({ "status": "success", "action": req.action })),
-                                    Err(e) => (500, json!({ "status": "error", "message": e })),
-                                }
-                            } else {
-                                (400, json!({ "status": "error", "message": "Invalid JSON body for media control" }))
-                            }
-                        } else {
-                            (400, json!({ "status": "error", "message": "Body exceeds maximum size" }))
-                        }
-                    }
-
-                    // System Control Deck (Lock Workstation)
-                    (Method::Post, "/api/system/control") | (Method::Post, "/api/lock") => {
-                        if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
-                            let action = serde_json::from_str::<SystemControlReq>(&body_str)
-                                .map(|r| r.action)
-                                .unwrap_or_else(|_| "lock".to_string());
-                            
-                            match action.as_str() {
-                                "lock" => match lock_workstation() {
-                                    Ok(_) => (200, json!({ "status": "success", "message": "Workstation locked" })),
-                                    Err(e) => (500, json!({ "status": "error", "message": e })),
-                                },
-                                other => (400, json!({ "status": "error", "message": format!("Unsupported system action: {}", other) })),
-                            }
-                        } else {
-                            // Fallback for empty body lock request
-                            match lock_workstation() {
-                                Ok(_) => (200, json!({ "status": "success", "message": "Workstation locked" })),
-                                Err(e) => (500, json!({ "status": "error", "message": e })),
-                            }
-                        }
-                    }
-
-                    // System Telemetry & Stats Query
-                    (Method::Get, "/api/system/stats") | (Method::Get, "/api/stats") => {
-                        match get_system_stats() {
-                            Ok(stats) => (200, json!({ "status": "success", "stats": stats })),
-                            Err(e) => (500, json!({ "status": "error", "message": e })),
                         }
                     }
 

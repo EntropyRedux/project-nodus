@@ -267,6 +267,12 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
     }, 2400);
   };
 
+  const getDeviceEndpoint = (ip: string, path: string): string => {
+    const host = ip.includes(':') ? ip : `${ip}:9120`;
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    return `http://${host}${cleanPath}`;
+  };
+
   const lastMovePosRef = useRef<{ clientX: number; clientY: number } | null>(null);
 
   const handleTrackpadMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -284,8 +290,8 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
       if (dx !== 0 || dy !== 0) {
         if (targetDevice.isLocal || targetDevice.ipAddress === '127.0.0.1') {
           TauriService.simulateMouseMove(dx, dy);
-        } else {
-          fetch(`http://${targetDevice.ipAddress}:9120/api/input/mouse/move`, {
+        } else if (targetDevice.ipAddress) {
+          fetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/mouse/move'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
             body: JSON.stringify({ dx, dy }),
@@ -330,8 +336,8 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
       if (dx !== 0 || dy !== 0) {
         if (targetDevice.isLocal || targetDevice.ipAddress === '127.0.0.1') {
           TauriService.simulateMouseMove(dx, dy);
-        } else {
-          fetch(`http://${targetDevice.ipAddress}:9120/api/input/mouse/move`, {
+        } else if (targetDevice.ipAddress) {
+          fetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/mouse/move'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
             body: JSON.stringify({ dx, dy }),
@@ -371,9 +377,9 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
     if (targetDevice.isLocal || targetDevice.ipAddress === '127.0.0.1') {
       await TauriService.simulateMouseClick(buttonName);
       showTelemetry(`${buttonName.toUpperCase()} Click`);
-    } else {
+    } else if (targetDevice.ipAddress) {
       try {
-        await fetch(`http://${targetDevice.ipAddress}:9120/api/input/mouse/click`, {
+        await fetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/mouse/click'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
           body: JSON.stringify({ button: buttonName }),
@@ -391,9 +397,9 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
     if (targetDevice.isLocal || targetDevice.ipAddress === '127.0.0.1') {
       await TauriService.simulateMouseScroll(0, deltaY);
       showTelemetry(e.deltaY > 0 ? 'Scroll Down' : 'Scroll Up');
-    } else {
+    } else if (targetDevice.ipAddress) {
       try {
-        await fetch(`http://${targetDevice.ipAddress}:9120/api/input/mouse/scroll`, {
+        await fetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/mouse/scroll'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
           body: JSON.stringify({ dy: deltaY * 120 }),
@@ -412,9 +418,9 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
     if (targetDevice.isLocal || targetDevice.ipAddress === '127.0.0.1') {
       await TauriService.simulateMouseClick(buttonName);
       showTelemetry(`${buttonName.toUpperCase()} Click`);
-    } else {
+    } else if (targetDevice.ipAddress) {
       try {
-        await fetch(`http://${targetDevice.ipAddress}:9120/api/input/mouse/click`, {
+        await fetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/mouse/click'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
           body: JSON.stringify({ button: buttonName }),
@@ -438,9 +444,9 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
       } else {
         showTelemetry(`Media ${action.toUpperCase()} command executed`);
       }
-    } else {
+    } else if (targetDevice.ipAddress) {
       try {
-        await fetch(`http://${targetDevice.ipAddress}:9120/api/media`, {
+        await fetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/media'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
           body: JSON.stringify({ action: mappedAction }),
@@ -460,9 +466,9 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
     if (targetDevice.isLocal || targetDevice.ipAddress === '127.0.0.1') {
       await TauriService.simulateHotkey(hk.keys);
       showTelemetry(`Hotkey [${hk.label}] executed`);
-    } else {
+    } else if (targetDevice.ipAddress) {
       try {
-        await fetch(`http://${targetDevice.ipAddress}:9120/api/input/keyboard/hotkey`, {
+        await fetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/keyboard/hotkey'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
           body: JSON.stringify({ keys: hk.keys }),
@@ -479,9 +485,9 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
     if (targetDevice.isLocal || targetDevice.ipAddress === '127.0.0.1') {
       await TauriService.lockWorkstation();
       showTelemetry('Lock Workstation executed');
-    } else {
+    } else if (targetDevice.ipAddress) {
       try {
-        await fetch(`http://${targetDevice.ipAddress}:9120/api/system/control`, {
+        await fetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/system/control'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
           body: JSON.stringify({ action: 'lock' }),
@@ -491,20 +497,21 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
     }
   };
 
-  const executeInject = async (text: string) => {
+  const executeInject = async (text: string, pressEnter: boolean = false) => {
     if (!text.trim() || !targetDevice) return;
     triggerHaptic(10);
     const clean = text.trim();
+    const payload = pressEnter ? `${clean}\n` : clean;
 
     if (targetDevice.isLocal || targetDevice.ipAddress === '127.0.0.1') {
-      await TauriService.simulateText(clean);
+      await TauriService.simulateText(payload);
       showTelemetry(`Injected "${clean.slice(0, 18)}${clean.length > 18 ? '...' : ''}"`);
-    } else {
+    } else if (targetDevice.ipAddress) {
       try {
-        await fetch(`http://${targetDevice.ipAddress}:9120/api/input/keyboard/text`, {
+        await fetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/keyboard/text'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
-          body: JSON.stringify({ text: clean }),
+          body: JSON.stringify({ text: payload }),
         });
       } catch (_) {}
       showTelemetry(`Injected "${clean.slice(0, 18)}${clean.length > 18 ? '...' : ''}" -> ${targetDevice.name}`);
@@ -515,7 +522,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
   const handleInjectTextSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!injectText.trim() || !targetDevice) return;
-    executeInject(injectText);
+    executeInject(injectText, true);
     setInjectText('');
   };
 
@@ -602,9 +609,9 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
     setIsMuted(prev => !prev);
     if (targetDevice?.isLocal || targetDevice?.ipAddress === '127.0.0.1') {
       await TauriService.controlMedia('volume_mute');
-    } else if (targetDevice) {
+    } else if (targetDevice?.ipAddress) {
       try {
-        await fetch(`http://${targetDevice.ipAddress}:9120/api/media`, {
+        await fetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/media'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
           body: JSON.stringify({ action: 'volume_mute' }),
@@ -626,9 +633,9 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
       for (let i = 0; i < steps; i++) {
         await TauriService.controlMedia(action);
       }
-    } else if (targetDevice) {
+    } else if (targetDevice?.ipAddress) {
       try {
-        await fetch(`http://${targetDevice.ipAddress}:9120/api/media`, {
+        await fetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/media'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
           body: JSON.stringify({ action }),
