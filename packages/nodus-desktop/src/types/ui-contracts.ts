@@ -113,6 +113,7 @@ export interface SharedApp {
   deviceName: string;
   deviceType: 'tablet' | 'desktop' | 'phone' | 'laptop';
   deviceColor: string;
+  deviceIp?: string;
   path?: string;
   description?: string;
   icon_base64?: string;

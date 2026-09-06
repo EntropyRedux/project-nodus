@@ -200,6 +200,27 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
     setShowAddModal(false);
   };
 
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>('all');
+
+  // Extract unique peer devices
+  const availableDevices = React.useMemo(() => {
+    const map = new Map<string, { id: string; name: string; type: SharedApp['deviceType']; color: string; count: number }>();
+    peerApps.forEach(app => {
+      const key = app.deviceId || app.deviceName;
+      if (!map.has(key)) {
+        map.set(key, {
+          id: app.deviceId,
+          name: app.deviceName,
+          type: app.deviceType,
+          color: app.deviceColor || '#A8C7FA',
+          count: 0,
+        });
+      }
+      map.get(key)!.count += 1;
+    });
+    return Array.from(map.values());
+  }, [peerApps]);
+
   // Filtered lists
   const filteredMyApps = myApps.filter(app => {
     const matchesSearch =
@@ -223,7 +244,8 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
       (app.path && app.path.toLowerCase().includes(searchQuery.toLowerCase())) ||
       app.deviceName.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCat = selectedCategory === 'all' || app.category === selectedCategory;
-    return matchesSearch && matchesCat;
+    const matchesDevice = selectedDeviceId === 'all' || app.deviceId === selectedDeviceId || app.deviceName === selectedDeviceId;
+    return matchesSearch && matchesCat && matchesDevice;
   });
 
   return (
@@ -563,7 +585,42 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
 
         {/* VIEW 3: REMOTE PEER LAUNCHPAD */}
         {activeSubTab === 'peer' && (
-          <div>
+          <div className="space-y-4">
+            {/* Device Origin Filter Bar */}
+            {availableDevices.length > 1 && (
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar border-b border-[var(--border-subtle)] pb-2.5">
+                <span className="text-[11px] font-mono text-[var(--text-muted)] shrink-0 mr-1 flex items-center gap-1">
+                  <Monitor size={12} />
+                  Source Device:
+                </span>
+                <button
+                  onClick={() => setSelectedDeviceId('all')}
+                  className={`h-6 px-2.5 rounded-full text-[10px] font-mono transition whitespace-nowrap cursor-pointer ${
+                    selectedDeviceId === 'all'
+                      ? 'bg-[var(--accent-primary)] text-[var(--m3-on-primary)] font-semibold shadow-sm'
+                      : 'bg-[var(--surface-elevated)] text-[var(--text-muted)] hover:text-[var(--text-heading)] border border-[var(--border-subtle)]'
+                  }`}
+                >
+                  All Nodes ({peerApps.length})
+                </button>
+                {availableDevices.map(dev => (
+                  <button
+                    key={dev.id}
+                    onClick={() => setSelectedDeviceId(dev.id)}
+                    className={`h-6 px-2.5 rounded-full text-[10px] font-mono transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                      selectedDeviceId === dev.id
+                        ? 'bg-[var(--accent-primary)] text-[var(--m3-on-primary)] font-semibold shadow-sm'
+                        : 'bg-[var(--surface-elevated)] text-[var(--text-muted)] hover:text-[var(--text-heading)] border border-[var(--border-subtle)]'
+                    }`}
+                  >
+                    <span style={{ color: dev.color }}>{getDeviceIcon(dev.type, 11)}</span>
+                    <span>{dev.name}</span>
+                    <span className="opacity-70">({dev.count})</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
             {filteredPeerApps.length === 0 ? (
               <div className="py-20 text-center text-xs text-[var(--text-muted)] font-mono">
                 No peer application shortcuts shared across mesh nodes yet.
@@ -575,62 +632,83 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
                   const Icon = catMeta.icon;
                   const isLaunched = launchedAppId === app.id;
                   const iconSrc = formatIconSrc(app.icon_base64);
+                  const devColor = app.deviceColor || '#A8C7FA';
 
                   return (
                     <div
                       key={app.id}
-                      className="p-4 rounded-xl bg-[var(--surface-elevated)] border border-[var(--border-subtle)] flex items-center justify-between gap-3 hover:border-[var(--border-active)] transition shadow-sm"
+                      className="p-4 rounded-xl bg-[var(--surface-elevated)] border border-[var(--border-subtle)] flex flex-col justify-between gap-3 hover:border-[var(--border-active)] transition shadow-sm"
                     >
-                      <div className="flex items-center gap-3.5 min-w-0">
-                        {iconSrc ? (
-                          <img
-                            src={iconSrc}
-                            alt=""
-                            className="w-11 h-11 rounded-lg object-contain shrink-0 bg-[var(--surface-base)] p-1 border border-[var(--border-subtle)] shadow"
-                          />
-                        ) : (
-                          <div
-                            className="w-11 h-11 rounded-lg flex items-center justify-center shadow shrink-0"
-                            style={{
-                              backgroundColor: `${catMeta.color}20`,
-                              color: catMeta.color,
-                              border: `1px solid ${catMeta.color}35`
-                            }}
-                          >
-                            <Icon size={18} />
-                          </div>
-                        )}
-                        <div className="min-w-0">
-                          <h4 className="text-xs font-semibold text-[var(--text-heading)] truncate">
-                            {app.name}
-                          </h4>
-                          <div className="flex items-center gap-2 text-[11px] text-[var(--text-muted)] mt-0.5">
-                            <span className="flex items-center gap-1 font-mono">
-                              {getDeviceIcon(app.deviceType, 12)}
-                              {app.deviceName}
-                            </span>
-                            <span>•</span>
-                            <span
-                              className="font-mono text-[10px] uppercase font-semibold"
-                              style={{ color: catMeta.color }}
-                            >
-                              {catMeta.label}
-                            </span>
-                          </div>
+                      {/* Top Device Attribution Header Badge */}
+                      <div className="flex items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-2">
+                        <div
+                          className="flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-mono font-medium border shrink-0"
+                          style={{
+                            backgroundColor: `${devColor}18`,
+                            borderColor: `${devColor}35`,
+                            color: devColor,
+                          }}
+                        >
+                          {getDeviceIcon(app.deviceType, 11)}
+                          <span className="font-semibold truncate max-w-[140px]">
+                            {app.deviceName}
+                          </span>
+                          {app.deviceIp && (
+                            <span className="opacity-70 text-[9px]">· {app.deviceIp}</span>
+                          )}
                         </div>
+
+                        <span
+                          className="font-mono text-[10px] uppercase font-semibold px-2 py-0.5 rounded bg-[var(--surface-base)] border border-[var(--border-subtle)]"
+                          style={{ color: catMeta.color }}
+                        >
+                          {catMeta.label}
+                        </span>
                       </div>
 
-                      <button
-                        onClick={() => handleLaunchPeer(app)}
-                        className={`h-8 px-3.5 rounded-lg text-xs font-semibold font-mono flex items-center gap-1.5 transition active:scale-95 whitespace-nowrap shrink-0 cursor-pointer ${
-                          isLaunched
-                            ? 'bg-emerald-600 text-white border border-emerald-500/30 shadow'
-                            : 'bg-[var(--accent-primary)] text-[var(--m3-on-primary)] hover:opacity-90 shadow-sm'
-                        }`}
-                      >
-                        {isLaunched ? <Check size={14} /> : <Play size={13} />}
-                        <span>{isLaunched ? 'Launched!' : 'Launch'}</span>
-                      </button>
+                      {/* App Info & Launch Action */}
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3.5 min-w-0">
+                          {iconSrc ? (
+                            <img
+                              src={iconSrc}
+                              alt=""
+                              className="w-11 h-11 rounded-lg object-contain shrink-0 bg-[var(--surface-base)] p-1 border border-[var(--border-subtle)] shadow"
+                            />
+                          ) : (
+                            <div
+                              className="w-11 h-11 rounded-lg flex items-center justify-center shadow shrink-0"
+                              style={{
+                                backgroundColor: `${catMeta.color}20`,
+                                color: catMeta.color,
+                                border: `1px solid ${catMeta.color}35`
+                              }}
+                            >
+                              <Icon size={18} />
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <h4 className="text-xs font-semibold text-[var(--text-heading)] truncate">
+                              {app.name}
+                            </h4>
+                            <p className="text-[10px] font-mono text-[var(--text-muted)] mt-0.5 truncate max-w-[180px]">
+                              {app.path || 'Native Target Binary'}
+                            </p>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => handleLaunchPeer(app)}
+                          className={`h-8 px-3.5 rounded-lg text-xs font-semibold font-mono flex items-center gap-1.5 transition active:scale-95 whitespace-nowrap shrink-0 cursor-pointer ${
+                            isLaunched
+                              ? 'bg-emerald-600 text-white border border-emerald-500/30 shadow'
+                              : 'bg-[var(--accent-primary)] text-[var(--m3-on-primary)] hover:opacity-90 shadow-sm'
+                          }`}
+                        >
+                          {isLaunched ? <Check size={14} /> : <Play size={13} />}
+                          <span>{isLaunched ? 'Launched!' : 'Launch'}</span>
+                        </button>
+                      </div>
                     </div>
                   );
                 })}

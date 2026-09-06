@@ -140,17 +140,24 @@ export const FleetDashboard: React.FC = () => {
         const res = await universalNetworkFetch<any>(url);
         if (res && res.data) {
           const raw = res.data.shortcuts || res.data.apps || [];
+          const remoteDevice = res.data.device || {};
+          const devName = remoteDevice.name || targetDevice.name || 'Remote Host';
+          const devType = remoteDevice.type || targetDevice.type || 'desktop';
+          const devColor = remoteDevice.color || '#A8C7FA';
+          const devIp = targetDevice.ipAddress;
+
           if (Array.isArray(raw)) {
             setPeerApps(
               raw.map((a: any) => ({
                 id: a.id || `peer-${a.name}`,
                 name: a.name,
                 category: a.category || 'productivity',
-                deviceId: targetDevice.id,
-                deviceName: targetDevice.name,
-                deviceType: targetDevice.type || 'desktop',
-                deviceColor: '#A8C7FA',
-                path: a.path_or_appid || a.path || a.commandOrPackage,
+                deviceId: a.deviceId || targetDevice.id,
+                deviceName: a.deviceName || devName,
+                deviceType: a.deviceType || devType,
+                deviceColor: a.deviceColor || devColor,
+                deviceIp: a.deviceIp || devIp,
+                path: a.path_or_appid || a.path || a.commandOrPackage || a.name,
                 description: a.description,
                 icon_base64: a.icon_base64 || a.icon,
                 sharedBy: 'peer' as const,
@@ -755,9 +762,11 @@ export const FleetDashboard: React.FC = () => {
                   setMyApps(prev => prev.map(a => (a.id === id ? { ...a, enabled } : a)));
                 }}
                 onLaunchPeerApp={async app => {
-                  if (!targetDevice) return;
+                  const peerIp = app.deviceIp || targetDevice?.ipAddress;
+                  if (!peerIp) return;
+                  triggerHaptic([15, 25, 15]);
                   try {
-                    const url = `http://${targetDevice.ipAddress}:9120/api/shortcuts/launch`;
+                    const url = `http://${peerIp}:9120/api/shortcuts/launch`;
                     await universalNetworkFetch(url, {
                       method: 'POST',
                       body: JSON.stringify({ command_or_path: app.path || app.name })

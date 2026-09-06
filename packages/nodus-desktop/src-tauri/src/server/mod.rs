@@ -647,18 +647,51 @@ pub fn start_server(port: u16) {
                         }
                     }
 
-                    // Query Installed & Discovered Applications
+                    // Query Installed & Discovered Applications with Device Attribution
                     (Method::Get, "/api/shortcuts") | (Method::Get, "/api/apps") => {
-                        let shared = get_shared_shortcuts();
-                        let all_apps = if shared.is_empty() {
-                            get_installed_windows_apps()
+                        let hostname = hostname::get()
+                            .map(|h| h.to_string_lossy().to_string())
+                            .unwrap_or_else(|_| "Host Workstation".to_string());
+                        let cfg = load_shared_config();
+                        let raw_apps = if cfg.shortcuts.is_empty() {
+                            get_shared_shortcuts()
                         } else {
-                            Ok(shared)
+                            cfg.shortcuts
                         };
-                        match all_apps {
-                            Ok(apps) => (200, json!({ "status": "success", "apps": apps })),
-                            Err(e) => (500, json!({ "status": "error", "message": e })),
-                        }
+
+                        let apps: Vec<serde_json::Value> = raw_apps.into_iter().map(|app| {
+                            json!({
+                                "id": app.id,
+                                "name": app.name,
+                                "path": app.path_or_appid,
+                                "path_or_appid": app.path_or_appid,
+                                "is_uwp": app.is_uwp,
+                                "icon_base64": app.icon_base64,
+                                "icon_name": app.icon_name,
+                                "icon_color": app.icon_color,
+                                "category": app.category,
+                                "enabled": app.enabled,
+                                "deviceId": hostname,
+                                "deviceName": hostname,
+                                "deviceType": "desktop",
+                                "deviceColor": "#A8C7FA",
+                                "sharedBy": "peer"
+                            })
+                        }).collect();
+
+                        (200, json!({
+                            "status": "success",
+                            "device": {
+                                "id": hostname,
+                                "name": hostname,
+                                "type": "desktop",
+                                "os": "windows",
+                                "color": "#A8C7FA"
+                            },
+                            "shortcuts": apps,
+                            "apps": apps,
+                            "watched_folders": cfg.watched_folders
+                        }))
                     }
 
                     // Query Installed Windows Apps (Full Scan)

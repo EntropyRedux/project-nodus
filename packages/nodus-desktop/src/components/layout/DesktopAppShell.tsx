@@ -38,6 +38,7 @@ import { HotCornerConfigPanel } from '../panels/HotCornerConfigPanel';
 import { ClipboardDrawer } from '../views/ClipboardDrawer';
 import { DevicePairingModal } from '../views/DevicePairingModal';
 import { TauriService } from '../../services/TauriCommands';
+import { SharedApp } from '../../types/ui-contracts';
 
 export const DesktopAppShell: React.FC = () => {
   const [activeTab, setActiveTab] = useState<
@@ -158,6 +159,62 @@ export const DesktopAppShell: React.FC = () => {
       cpuUsagePercent: d.cpuLoad || 15,
     }));
   }, [fleetDevices]);
+
+  // Remote Peer Shared Shortcuts
+  const [peerApps, setPeerApps] = useState<SharedApp[]>([]);
+
+  useEffect(() => {
+    if (activeTab !== 'shortcuts') return;
+    const remoteDevs = devices.filter(d => !d.isLocal && d.ipAddress && d.ipAddress !== '127.0.0.1');
+    if (remoteDevs.length === 0) {
+      setPeerApps([]);
+      return;
+    }
+
+    let isMounted = true;
+    const fetchAllPeerShortcuts = async () => {
+      const all: SharedApp[] = [];
+      for (const dev of remoteDevs) {
+        try {
+          const res = await fetch(`http://${dev.ipAddress}:9120/api/shortcuts`).then(r => r.json());
+          if (res && (res.shortcuts || res.apps)) {
+            const raw = res.shortcuts || res.apps || [];
+            const remoteDevice = res.device || {};
+            const devName = remoteDevice.name || dev.name;
+            const devType = remoteDevice.type || dev.type || 'desktop';
+            const devColor = remoteDevice.color || '#A8C7FA';
+
+            if (Array.isArray(raw)) {
+              const mapped: SharedApp[] = raw.map((a: any) => ({
+                id: a.id || `peer-${dev.id}-${a.name}`,
+                name: a.name,
+                category: a.category || 'productivity',
+                deviceId: a.deviceId || dev.id,
+                deviceName: a.deviceName || devName,
+                deviceType: a.deviceType || devType,
+                deviceColor: a.deviceColor || devColor,
+                deviceIp: dev.ipAddress,
+                path: a.path || a.path_or_appid || a.commandOrPackage || a.name,
+                description: a.description,
+                icon_base64: a.icon_base64 || a.icon,
+                sharedBy: 'peer' as const,
+                enabled: a.enabled ?? true,
+              }));
+              all.push(...mapped);
+            }
+          }
+        } catch (_) {}
+      }
+      if (isMounted) {
+        setPeerApps(all);
+      }
+    };
+
+    fetchAllPeerShortcuts();
+    return () => {
+      isMounted = false;
+    };
+  }, [activeTab, devices]);
 
   const targetDevice = useMemo(() => {
     return (
@@ -620,11 +677,21 @@ export const DesktopAppShell: React.FC = () => {
                   sharedBy: 'me',
                   enabled: e.pinnedToDrawer ?? true,
                 }))}
-                peerApps={[]}
+                peerApps={peerApps}
                 onToggleMyApp={(id: string, enabled: boolean) => updateRemoteExecutable(id, { pinnedToDrawer: enabled })}
-                onLaunchPeerApp={(app: any) => {
-                  const exec = remoteExecutables.find((e: any) => e.id === app.id);
-                  if (exec) executeShortcut(exec);
+                onLaunchPeerApp={async (app: SharedApp) => {
+                  const peerIp = app.deviceIp || devices.find(d => d.id === app.deviceId)?.ipAddress;
+                  if (peerIp) {
+                    try {
+                      await fetch(`http://${peerIp}:9120/api/shortcuts/launch`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ command_or_path: app.path || app.name }),
+                      });
+                    } catch (e) {
+                      console.warn('Failed to launch peer shortcut', e);
+                    }
+                  }
                 }}
                 onLaunchMyApp={(app: any) => {
                   const exec = remoteExecutables.find((e: any) => e.id === app.id);

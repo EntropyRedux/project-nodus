@@ -100,13 +100,35 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
     setFormPath('');
   };
 
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>('all');
+
+  // Extract unique peer devices
+  const availableDevices = React.useMemo(() => {
+    const map = new Map<string, { id: string; name: string; type: SharedApp['deviceType']; color: string; count: number }>();
+    peerApps.forEach(app => {
+      const key = app.deviceId || app.deviceName;
+      if (!map.has(key)) {
+        map.set(key, {
+          id: app.deviceId,
+          name: app.deviceName,
+          type: app.deviceType,
+          color: app.deviceColor || '#A8C7FA',
+          count: 0,
+        });
+      }
+      map.get(key)!.count += 1;
+    });
+    return Array.from(map.values());
+  }, [peerApps]);
+
   const filteredPeerApps = peerApps.filter(app => {
     const matchesSearch =
       app.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (app.path && app.path.toLowerCase().includes(searchQuery.toLowerCase())) ||
       app.deviceName.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCat = selectedCategory === 'all' || app.category === selectedCategory;
-    return matchesSearch && matchesCat;
+    const matchesDevice = selectedDeviceId === 'all' || app.deviceId === selectedDeviceId || app.deviceName === selectedDeviceId;
+    return matchesSearch && matchesCat && matchesDevice;
   });
 
   const filteredMyApps = myApps.filter(app => {
@@ -159,54 +181,91 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 mb-3.5">
-        {/* Search */}
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#111318] border border-white/10 max-w-sm w-full">
-          <Search size={14} className="text-slate-400" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search peer apps, shortcuts..."
-            className="flex-1 bg-transparent text-xs text-white placeholder-slate-500 focus:outline-none"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="text-xs text-slate-400 hover:text-white"
-            >
-              <X size={13} />
-            </button>
-          )}
-        </div>
+      <div className="flex flex-col gap-2.5 mb-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          {/* Search */}
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#111318] border border-white/10 max-w-sm w-full">
+            <Search size={14} className="text-slate-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search peer apps, host PC, commands..."
+              className="flex-1 bg-transparent text-xs text-white placeholder-slate-500 focus:outline-none font-mono"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="text-xs text-slate-400 hover:text-white"
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
 
-        {/* Category Filter Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full no-scrollbar">
-          <button
-            onClick={() => setSelectedCategory('all')}
-            className={`h-7 px-2.5 rounded-md text-[11px] font-mono transition ${
-              selectedCategory === 'all'
-                ? 'bg-[#A8C7FA] text-[#062E6F] font-semibold'
-                : 'bg-[#111318] text-slate-400 hover:text-white border border-white/5'
-            }`}
-          >
-            All
-          </button>
-          {Object.entries(CATEGORY_ICONS).map(([key, cat]) => (
+          {/* Category Filter Pills */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full no-scrollbar">
             <button
-              key={key}
-              onClick={() => setSelectedCategory(key)}
-              className={`h-7 px-2.5 rounded-md text-[11px] font-mono transition flex items-center gap-1.5 ${
-                selectedCategory === key
+              onClick={() => setSelectedCategory('all')}
+              className={`h-7 px-2.5 rounded-md text-[11px] font-mono transition ${
+                selectedCategory === 'all'
                   ? 'bg-[#A8C7FA] text-[#062E6F] font-semibold'
                   : 'bg-[#111318] text-slate-400 hover:text-white border border-white/5'
               }`}
             >
-              <cat.icon size={12} style={{ color: selectedCategory === key ? 'inherit' : cat.color }} />
-              <span>{cat.label}</span>
+              All Types
             </button>
-          ))}
+            {Object.entries(CATEGORY_ICONS).map(([key, cat]) => (
+              <button
+                key={key}
+                onClick={() => setSelectedCategory(key)}
+                className={`h-7 px-2.5 rounded-md text-[11px] font-mono transition flex items-center gap-1.5 ${
+                  selectedCategory === key
+                    ? 'bg-[#A8C7FA] text-[#062E6F] font-semibold'
+                    : 'bg-[#111318] text-slate-400 hover:text-white border border-white/5'
+                }`}
+              >
+                <cat.icon size={12} style={{ color: selectedCategory === key ? 'inherit' : cat.color }} />
+                <span>{cat.label}</span>
+              </button>
+            ))}
+          </div>
         </div>
+
+        {/* Device Origin Filter Pills (Visible when in peer tab with multiple devices) */}
+        {activeSubTab === 'peer' && availableDevices.length > 1 && (
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar pt-0.5 border-t border-white/5">
+            <span className="text-[11px] font-mono text-slate-400 shrink-0 mr-1 flex items-center gap-1">
+              <Monitor size={12} />
+              Source Device:
+            </span>
+            <button
+              onClick={() => setSelectedDeviceId('all')}
+              className={`h-6 px-2.5 rounded-full text-[10px] font-mono transition whitespace-nowrap ${
+                selectedDeviceId === 'all'
+                  ? 'bg-[#00497D] text-[#D3E3FD] font-semibold border border-[#A8C7FA]/40'
+                  : 'bg-[#111318] text-slate-400 hover:text-white border border-white/5'
+              }`}
+            >
+              All Nodes ({peerApps.length})
+            </button>
+            {availableDevices.map(dev => (
+              <button
+                key={dev.id}
+                onClick={() => setSelectedDeviceId(dev.id)}
+                className={`h-6 px-2.5 rounded-full text-[10px] font-mono transition flex items-center gap-1.5 whitespace-nowrap ${
+                  selectedDeviceId === dev.id
+                    ? 'bg-[#00497D] text-[#D3E3FD] font-semibold border border-[#A8C7FA]/40'
+                    : 'bg-[#111318] text-slate-400 hover:text-white border border-white/5'
+                }`}
+              >
+                <span style={{ color: dev.color }}>{getDeviceIcon(dev.type, 11)}</span>
+                <span>{dev.name}</span>
+                <span className="opacity-60">({dev.count})</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Shortcuts List Body */}
@@ -223,62 +282,83 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
                 const Icon = catMeta.icon;
                 const isLaunched = launchedAppId === app.id;
                 const iconSrc = formatIconSrc(app.icon_base64);
+                const devColor = app.deviceColor || '#A8C7FA';
 
                 return (
                   <div
                     key={app.id}
-                    className="p-3 sm:p-4 rounded-xl bg-[#282A2F] border border-white/5 flex items-center justify-between gap-3 hover:border-white/10 transition shadow-sm"
+                    className="p-3 sm:p-4 rounded-xl bg-[#282A2F] border border-white/5 flex flex-col justify-between gap-2.5 hover:border-white/10 transition shadow-sm"
                   >
-                    <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
-                      {iconSrc ? (
-                        <img
-                          src={iconSrc}
-                          alt=""
-                          className="w-10 h-10 sm:w-11 sm:h-11 rounded-lg object-contain shrink-0 bg-[#111318] p-1 border border-white/10 shadow-md"
-                        />
-                      ) : (
-                        <div
-                          className="w-10 h-10 sm:w-11 sm:h-11 rounded-lg flex items-center justify-center shadow-md shrink-0"
-                          style={{
-                            backgroundColor: `${catMeta.color}20`,
-                            color: catMeta.color,
-                            border: `1px solid ${catMeta.color}35`
-                          }}
-                        >
-                          <Icon size={19} />
-                        </div>
-                      )}
-                      <div className="min-w-0">
-                        <h4 className="text-xs font-semibold text-slate-100 truncate">
-                          {app.name}
-                        </h4>
-                        <div className="flex items-center gap-1.5 sm:gap-2 text-[11px] text-slate-400 mt-0.5 flex-wrap">
-                          <span className="flex items-center gap-1 font-mono truncate max-w-[120px] sm:max-w-none">
-                            {getDeviceIcon(app.deviceType, 12)}
-                            {app.deviceName}
-                          </span>
-                          <span>•</span>
-                          <span
-                            className="font-mono text-[10px] uppercase font-semibold"
-                            style={{ color: catMeta.color }}
-                          >
-                            {catMeta.label}
-                          </span>
-                        </div>
+                    {/* Top Device Attribution Header Badge */}
+                    <div className="flex items-center justify-between gap-2 border-b border-white/5 pb-2">
+                      <div
+                        className="flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-mono font-medium border shrink-0"
+                        style={{
+                          backgroundColor: `${devColor}18`,
+                          borderColor: `${devColor}35`,
+                          color: devColor,
+                        }}
+                      >
+                        {getDeviceIcon(app.deviceType, 11)}
+                        <span className="font-semibold truncate max-w-[140px] sm:max-w-none">
+                          {app.deviceName}
+                        </span>
+                        {app.deviceIp && (
+                          <span className="opacity-70 text-[9px]">· {app.deviceIp}</span>
+                        )}
                       </div>
+
+                      <span
+                        className="font-mono text-[10px] uppercase font-semibold px-2 py-0.5 rounded bg-white/5"
+                        style={{ color: catMeta.color }}
+                      >
+                        {catMeta.label}
+                      </span>
                     </div>
 
-                    <button
-                      onClick={() => handleLaunch(app)}
-                      className={`h-8 px-3 sm:px-3.5 rounded-lg text-xs font-semibold font-mono flex items-center gap-1.5 transition active:scale-95 whitespace-nowrap shrink-0 touch-manipulation ${
-                        isLaunched
-                          ? 'bg-[#0F5223] text-[#C4EED0] border border-[#6DD58C]/30 shadow'
-                          : 'bg-[#A8C7FA] hover:bg-[#C2E7FF] text-[#062E6F] shadow-sm'
-                      }`}
-                    >
-                      {isLaunched ? <Check size={14} /> : <Play size={13} />}
-                      <span>{isLaunched ? 'Launched!' : 'Launch'}</span>
-                    </button>
+                    {/* App Info & Launch Action */}
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
+                        {iconSrc ? (
+                          <img
+                            src={iconSrc}
+                            alt=""
+                            className="w-10 h-10 sm:w-11 sm:h-11 rounded-lg object-contain shrink-0 bg-[#111318] p-1 border border-white/10 shadow-md"
+                          />
+                        ) : (
+                          <div
+                            className="w-10 h-10 sm:w-11 sm:h-11 rounded-lg flex items-center justify-center shadow-md shrink-0"
+                            style={{
+                              backgroundColor: `${catMeta.color}20`,
+                              color: catMeta.color,
+                              border: `1px solid ${catMeta.color}35`
+                            }}
+                          >
+                            <Icon size={19} />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <h4 className="text-xs font-semibold text-slate-100 truncate">
+                            {app.name}
+                          </h4>
+                          <p className="text-[10px] font-mono text-slate-400 mt-0.5 truncate max-w-[200px] sm:max-w-xs">
+                            {app.path || 'Native Target Binary'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleLaunch(app)}
+                        className={`h-8 px-3 sm:px-3.5 rounded-lg text-xs font-semibold font-mono flex items-center gap-1.5 transition active:scale-95 whitespace-nowrap shrink-0 touch-manipulation cursor-pointer ${
+                          isLaunched
+                            ? 'bg-[#0F5223] text-[#C4EED0] border border-[#6DD58C]/30 shadow'
+                            : 'bg-[#A8C7FA] hover:bg-[#C2E7FF] text-[#062E6F] shadow-sm'
+                        }`}
+                      >
+                        {isLaunched ? <Check size={14} /> : <Play size={13} />}
+                        <span>{isLaunched ? 'Launched!' : 'Launch'}</span>
+                      </button>
+                    </div>
                   </div>
                 );
               })}
