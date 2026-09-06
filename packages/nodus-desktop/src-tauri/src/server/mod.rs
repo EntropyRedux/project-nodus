@@ -302,29 +302,6 @@ pub fn start_server(port: u16) {
                         let ram_total = stats.as_ref().map(|s| s.ram_total_mb).unwrap_or(0);
                         let cpu_load = stats.as_ref().map(|s| s.cpu_load_percent).unwrap_or(0.0);
 
-                        // If request came from a client IP, record it as a companion node
-                        if let Some(remote) = request.remote_addr() {
-                            let ip = remote.ip().to_string();
-                            if ip != "127.0.0.1" && ip != "::1" {
-                                let id = format!("node-{}", ip.replace('.', "-"));
-                                let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
-                                crate::discovery::register_node(crate::discovery::DiscoveredDeviceNode {
-                                    id,
-                                    name: format!("Companion ({})", ip),
-                                    device_type: "tablet".to_string(),
-                                    os: "Companion Node".to_string(),
-                                    ip_address: format!("{}:9120", ip),
-                                    http_port: 9120,
-                                    status: "online".to_string(),
-                                    battery: Some(90),
-                                    cpu_load: Some(15),
-                                    ram_usage: Some("4.2 / 8.0 GB".to_string()),
-                                    last_seen: now,
-                                    is_local: false,
-                                });
-                            }
-                        }
-
                         (
                             200,
                             json!({

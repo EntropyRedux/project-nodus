@@ -239,35 +239,49 @@ export const useFleetStore = create<FleetState>((set, get) => ({
   setDevices: (devices) => set({ devices }),
   setDiscoveredNodes: (nodes) => {
     const current = get().devices;
-    const mapped: DeviceInfo[] = nodes.map((n) => {
-      const isLocal = Boolean(n.isLocal || n.is_local || n.id === 'this-pc' || n.id === 'local');
-      const ip = n.ipAddress || n.ip_address || '';
+    const trusted = get().trustedDevices;
+
+    // Update scanned peers for the Pairing Modal
+    const discoveredPeers: ScannedPeer[] = nodes.map((n) => {
+      const ip = (n.ipAddress || n.ip_address || '').split(':')[0];
+      const trustInfo = trusted[ip];
       return {
-        id: isLocal ? 'this-pc' : (n.id || `node-${ip.replace(/[\.:]/g, '-')}`),
-        name: n.name || n.hostname || (isLocal ? 'Host Workstation PC' : 'Discovered Peer'),
-        type: (n.deviceType || n.device_type || (isLocal ? 'desktop' : 'tablet')) as any,
-        os: (n.os || (isLocal ? 'windows' : 'android')) as any,
-        status: 'connected',
-        ipAddress: ip || (isLocal ? '127.0.0.1' : ''),
-        resolution: n.resolution || '1920x1080',
-        lastSeen: 'Just now',
-        isLocal,
-        cpuLoad: n.cpuLoad ?? n.cpu_load ?? (isLocal ? 8 : 12),
-        battery: n.battery ?? 100,
+        ip,
+        port: n.httpPort || n.http_port || 9120,
+        hostname: n.name || n.hostname || `Node (${ip})`,
+        nickname: trustInfo?.nickname,
+        hasAgent: true,
+        isInFleet: current.some((d) => d.ipAddress === ip || d.id === n.id),
+        isTrusted: Boolean(trustInfo && trustInfo.trusted),
+        isUnknown: !trustInfo,
+        deviceType: (n.deviceType || n.device_type || 'tablet') as any,
+        os: n.os || 'android',
+        latencyMs: 12,
       };
     });
 
-    // Merge by id preserving existing verified states
-    const merged = [...current];
-    for (const node of mapped) {
-      const idx = merged.findIndex((d) => d.id === node.id || (node.ipAddress && d.ipAddress === node.ipAddress));
-      if (idx >= 0) {
-        merged[idx] = { ...merged[idx], ...node, isLocal: merged[idx].isLocal || node.isLocal, status: 'connected' };
-      } else {
-        merged.push(node);
+    // Only update telemetry of devices that ALREADY exist in the user's paired fleet
+    const updatedDevices = current.map((existing) => {
+      if (existing.isLocal) return existing;
+      const match = nodes.find(
+        (n) => n.id === existing.id || (n.ipAddress && (n.ipAddress === existing.ipAddress || n.ipAddress.startsWith(`${existing.ipAddress}:`)))
+      );
+      if (match) {
+        return {
+          ...existing,
+          battery: match.battery ?? existing.battery,
+          cpuLoad: match.cpuLoad ?? match.cpu_load ?? existing.cpuLoad,
+          ramUsage: match.ramUsage || existing.ramUsage,
+          status: 'connected' as const,
+        };
       }
-    }
-    set({ devices: merged });
+      return existing;
+    });
+
+    set({
+      scannedPeers: discoveredPeers.length > 0 ? discoveredPeers : get().scannedPeers,
+      devices: updatedDevices,
+    });
   },
 
   removeDevice: (id) => {

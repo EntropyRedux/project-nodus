@@ -258,22 +258,21 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
               }
 
               const existing = devMap.get(d.id);
-              const updated: DeviceInfo = {
-                id: d.id,
-                name: d.name || existing?.name || 'Companion Node',
-                type: (d.deviceType || d.type || existing?.type || 'tablet') as DeviceType,
-                os: d.os || existing?.os || 'Android 14 (HyperOS)',
-                status: d.status === 'online' ? 'connected' : 'offline',
-                ipAddress: d.ipAddress || existing?.ipAddress || '',
-                resolution: existing?.resolution || '2560 × 1600',
-                battery: d.battery ?? existing?.battery,
-                cpuLoad: d.cpuLoad ?? existing?.cpuLoad ?? 12,
-                ramUsage: d.ramUsage || existing?.ramUsage || '4.0 / 8.0 GB',
-              };
+              if (existing) {
+                const updated: DeviceInfo = {
+                  ...existing,
+                  name: existing.name || d.name || 'Companion Node',
+                  status: d.status === 'online' ? 'connected' : 'offline',
+                  ipAddress: d.ipAddress || existing.ipAddress || '',
+                  battery: d.battery ?? existing.battery,
+                  cpuLoad: d.cpuLoad ?? existing.cpuLoad ?? 12,
+                  ramUsage: d.ramUsage || existing.ramUsage || '4.0 / 8.0 GB',
+                };
 
-              if (!existing || existing.status !== updated.status || existing.battery !== updated.battery) {
-                devMap.set(d.id, updated);
-                hasChanges = true;
+                if (existing.status !== updated.status || existing.battery !== updated.battery || existing.cpuLoad !== updated.cpuLoad) {
+                  devMap.set(d.id, updated);
+                  hasChanges = true;
+                }
               }
             }
 

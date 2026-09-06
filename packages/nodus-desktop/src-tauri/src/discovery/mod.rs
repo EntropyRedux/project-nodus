@@ -58,6 +58,7 @@ pub struct ScannedPeerResult {
     pub latency_ms: Option<u64>,
 }
 
+#[allow(dead_code)]
 pub fn register_node(device: DiscoveredDeviceNode) {
     let mut lock = DISCOVERED_DEVICES.lock().unwrap();
     if lock.is_none() {
@@ -526,71 +527,11 @@ pub fn start_discovery(server_port: u16) {
     });
 }
 
-fn handle_probe(socket: &UdpSocket, src: SocketAddr, msg: &str, http_port: u16) {
-    let sender_ip = src.ip().to_string();
+fn handle_probe(socket: &UdpSocket, src: SocketAddr, _msg: &str, http_port: u16) {
     let stats = get_system_stats().ok();
     let hostname = stats.as_ref().map(|s| s.hostname.clone()).unwrap_or_else(|| "Workstation (PC)".to_string());
 
-    if let Ok(val) = serde_json::from_str::<serde_json::Value>(msg) {
-        let msg_type = val.get("type").and_then(|v| v.as_str()).unwrap_or("");
-        if msg_type == "NODUS_DISCOVER_REQ" || msg_type == "NODUS_BEACON" {
-            let client = val.get("client").and_then(|v| v.as_str()).unwrap_or("");
-            let beacon_host = val.get("hostname").and_then(|v| v.as_str()).unwrap_or("");
-            let is_self_desktop = (client == "com.nodus.desktop" && (beacon_host == hostname || src.ip().is_loopback()))
-                || src.ip().is_loopback()
-                || sender_ip == "127.0.0.1";
-
-            let name = if is_self_desktop {
-                format!("{} (Host PC)", hostname)
-            } else {
-                val.get("name")
-                    .or_else(|| val.get("hostname"))
-                    .and_then(|v| v.as_str())
-                    .filter(|s| !s.trim().is_empty())
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| format!("LAN Node ({})", sender_ip))
-            };
-
-            let device_type = if is_self_desktop {
-                "desktop".to_string()
-            } else {
-                val.get("deviceType").or_else(|| val.get("type")).and_then(|v| v.as_str()).unwrap_or("tablet").to_string()
-            };
-
-            let os = if is_self_desktop {
-                "windows".to_string()
-            } else {
-                val.get("os").and_then(|v| v.as_str()).unwrap_or("companion").to_string()
-            };
-
-            let dev_http_port = val.get("httpPort").or_else(|| val.get("port")).and_then(|v| v.as_u64()).unwrap_or(9120) as u16;
-            let battery = val.get("battery").and_then(|v| v.as_u64()).map(|b| b as u8).or(Some(if is_self_desktop { 100 } else { 90 }));
-            let cpu_load = val.get("cpuLoad").or_else(|| val.get("cpu")).and_then(|v| v.as_u64()).map(|c| c as u8).or(Some(if is_self_desktop { 8 } else { 12 }));
-            let ram_usage = val.get("ramUsage").and_then(|v| v.as_str()).map(|s| s.to_string()).or_else(|| Some("4.2 / 8.0 GB".to_string()));
-
-            let id = if is_self_desktop {
-                "this-pc".to_string()
-            } else {
-                format!("node-{}", sender_ip.replace('.', "-"))
-            };
-            let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
-
-            register_node(DiscoveredDeviceNode {
-                id,
-                name,
-                device_type,
-                os,
-                ip_address: format!("{}:{}", sender_ip, dev_http_port),
-                http_port: dev_http_port,
-                status: "online".to_string(),
-                battery,
-                cpu_load,
-                ram_usage,
-                last_seen: now,
-                is_local: is_self_desktop,
-            });
-        }
-    }
+    // We respond to discovery probes without auto-registering unauthenticated devices into active fleet
 
     let ram_used = stats.as_ref().map(|s| s.ram_used_mb).unwrap_or(0);
     let ram_total = stats.as_ref().map(|s| s.ram_total_mb).unwrap_or(0);

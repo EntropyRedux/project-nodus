@@ -38,6 +38,7 @@ class FleetDaemonService : Service() {
     }
 
     private val connectedDevices = ConcurrentHashMap<String, JSONObject>()
+    private val discoveredPeers = ConcurrentHashMap<String, JSONObject>()
     private val httpRpcClient = HttpRpcClient()
     private var udpDiscoveryManager: UdpDiscoveryManager? = null
 
@@ -53,9 +54,17 @@ class FleetDaemonService : Service() {
         // Register local tablet node
         registerLocalDevice()
 
-        // Start UDP Discovery Engine
+        // Start UDP Discovery Engine (Populates discoveredPeers for pairing modal, does NOT auto-connect un-paired peers)
         udpDiscoveryManager = UdpDiscoveryManager(this) { discoveredDevice ->
-            addOrUpdateRemoteDevice(discoveredDevice)
+            val id = discoveredDevice.optString("id")
+            if (id.isNotEmpty() && id != "poco-pad") {
+                discoveredPeers[id] = discoveredDevice
+                // Only update telemetry if this peer was already explicitly paired by the user
+                if (connectedDevices.containsKey(id)) {
+                    connectedDevices[id] = discoveredDevice
+                    notifyStateChanged()
+                }
+            }
         }.apply {
             start()
         }
@@ -90,6 +99,14 @@ class FleetDaemonService : Service() {
         connectedDevices[localDevice.getString("id")] = localDevice
     }
 
+    fun getDiscoveredPeersJson(): String {
+        val array = JSONArray()
+        for (peer in discoveredPeers.values) {
+            array.put(peer)
+        }
+        return array.toString()
+    }
+
     fun addOrUpdateRemoteDevice(device: JSONObject) {
         val id = device.optString("id")
         if (id.isEmpty() || id == "poco-pad") return
@@ -98,7 +115,7 @@ class FleetDaemonService : Service() {
         connectedDevices[id] = device
 
         if (isNew) {
-            Log.i(TAG, "New peer connected: ${device.optString("name")} (${device.optString("ipAddress")})")
+            Log.i(TAG, "New peer explicitly paired: ${device.optString("name")} (${device.optString("ipAddress")})")
             val intent = Intent(NodusIpcContract.ACTION_DEVICE_CONNECTED).apply {
                 putExtra(NodusIpcContract.EXTRA_DEVICE_JSON, device.toString())
             }
@@ -109,6 +126,7 @@ class FleetDaemonService : Service() {
 
     fun removeRemoteDevice(id: String) {
         val removed = connectedDevices.remove(id)
+        discoveredPeers.remove(id)
         if (removed != null) {
             Log.i(TAG, "Peer disconnected: ${removed.optString("name")}")
             val intent = Intent(NodusIpcContract.ACTION_DEVICE_DISCONNECTED).apply {
