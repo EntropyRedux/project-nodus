@@ -543,7 +543,12 @@ fn handle_probe(socket: &UdpSocket, src: SocketAddr, msg: &str, http_port: u16) 
             let name = if is_self_desktop {
                 format!("{} (Host PC)", hostname)
             } else {
-                val.get("name").and_then(|v| v.as_str()).unwrap_or("POCO Pad").to_string()
+                val.get("name")
+                    .or_else(|| val.get("hostname"))
+                    .and_then(|v| v.as_str())
+                    .filter(|s| !s.trim().is_empty())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| format!("LAN Node ({})", sender_ip))
             };
 
             let device_type = if is_self_desktop {
@@ -555,12 +560,7 @@ fn handle_probe(socket: &UdpSocket, src: SocketAddr, msg: &str, http_port: u16) 
             let os = if is_self_desktop {
                 "windows".to_string()
             } else {
-                let raw_os = val.get("os").and_then(|v| v.as_str()).unwrap_or("android");
-                if raw_os.to_lowercase().contains("android") {
-                    "Android 14 (HyperOS)".to_string()
-                } else {
-                    raw_os.to_string()
-                }
+                val.get("os").and_then(|v| v.as_str()).unwrap_or("companion").to_string()
             };
 
             let dev_http_port = val.get("httpPort").or_else(|| val.get("port")).and_then(|v| v.as_u64()).unwrap_or(9120) as u16;

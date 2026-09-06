@@ -310,9 +310,9 @@ pub fn start_server(port: u16) {
                                 let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
                                 crate::discovery::register_node(crate::discovery::DiscoveredDeviceNode {
                                     id,
-                                    name: "POCO Pad Companion".to_string(),
+                                    name: format!("Companion ({})", ip),
                                     device_type: "tablet".to_string(),
-                                    os: "Android 14 (HyperOS)".to_string(),
+                                    os: "Companion Node".to_string(),
                                     ip_address: format!("{}:9120", ip),
                                     http_port: 9120,
                                     status: "online".to_string(),

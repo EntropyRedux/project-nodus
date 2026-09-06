@@ -48,14 +48,30 @@ pub fn spawn_pty_session(req: PtySpawnRequest, app: Option<AppHandle>) -> Result
         })
         .map_err(|e| format!("Failed to open pseudo-terminal: {}", e))?;
 
-    let default_shell = if cfg!(windows) {
-        "powershell.exe".to_string()
+    let (shell_to_run, default_args) = if let Some(custom) = req.shell {
+        (custom, vec![])
+    } else if cfg!(windows) {
+        // Fast-path: Check for PowerShell 7 (pwsh.exe) or fall back to powershell.exe with -NoLogo
+        let pwsh_paths = [
+            "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+            "C:\\Program Files\\PowerShell\\6\\pwsh.exe",
+        ];
+        let mut chosen = "powershell.exe".to_string();
+        for p in &pwsh_paths {
+            if Path::new(p).exists() {
+                chosen = p.to_string();
+                break;
+            }
+        }
+        (chosen, vec!["-NoLogo".to_string()])
     } else {
-        std::env::var("SHELL").unwrap_or_else(|_| "sh".to_string())
+        (std::env::var("SHELL").unwrap_or_else(|_| "sh".to_string()), vec![])
     };
 
-    let shell_to_run = req.shell.unwrap_or(default_shell);
-    let mut cmd = CommandBuilder::new(shell_to_run);
+    let mut cmd = CommandBuilder::new(&shell_to_run);
+    for arg in &default_args {
+        cmd.arg(arg);
+    }
 
     if let Some(ref dir) = req.cwd {
         if Path::new(dir).is_dir() {
@@ -117,10 +133,14 @@ pub fn spawn_pty_session(req: PtySpawnRequest, app: Option<AppHandle>) -> Result
     Ok(true)
 }
 
-/// Spawns a real interactive ConPTY session via Tauri command
+/// Spawns a real interactive ConPTY session via Tauri command (non-blocking)
 #[tauri::command]
-pub fn spawn_pty(app: AppHandle, req: PtySpawnRequest) -> Result<bool, String> {
-    spawn_pty_session(req, Some(app))
+pub async fn spawn_pty(app: AppHandle, req: PtySpawnRequest) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        spawn_pty_session(req, Some(app))
+    })
+    .await
+    .map_err(|e| format!("Spawn PTY task error: {}", e))?
 }
 
 /// Writes raw keystrokes / input to active ConPTY session
@@ -172,3 +192,4 @@ pub fn kill_pty(session_id: String) -> Result<bool, String> {
     }
     Ok(false)
 }
+

@@ -223,8 +223,7 @@ const XTermView: React.FC<XTermViewProps> = ({ session, theme }) => {
       const cols = term.cols || 80;
       const rows = term.rows || 24;
 
-      await TauriService.spawnPty(session.id, cols, rows, session.cwd);
-
+      // 1. Attach listeners FIRST so no startup banner or initial prompt bytes are dropped
       unlistenData = await TauriService.listenPtyData(session.id, (data) => {
         term.write(data);
       });
@@ -232,6 +231,9 @@ const XTermView: React.FC<XTermViewProps> = ({ session, theme }) => {
       unlistenExit = await TauriService.listenPtyExit(session.id, () => {
         term.writeln('\r\n[Process terminated]');
       });
+
+      // 2. Spawn ConPTY process
+      await TauriService.spawnPty(session.id, cols, rows, session.cwd);
     };
 
     initPty();

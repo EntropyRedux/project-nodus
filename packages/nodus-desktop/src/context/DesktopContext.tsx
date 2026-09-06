@@ -485,9 +485,9 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
       id: `clip-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       text: text || (imageData ? 'Image' : ''),
       deviceId: targetDeviceId,
-      deviceName: isHost ? 'Windows PC' : 'POCO Pad',
+      deviceName: isHost ? 'Windows PC' : 'Companion Device',
       deviceType: isHost ? 'desktop' : 'tablet',
-      deviceColor: isHost ? '#34C759' : '#007AFF', // Green for PC, Blue for POCO Pad
+      deviceColor: isHost ? '#34C759' : '#007AFF', // Green for PC, Blue for Companion
       type: imageData ? 'image' : isUrl ? 'link' : isCode ? 'code' : 'text',
       imageData,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -578,9 +578,9 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 const existingIndex = updated.findIndex((d) => d.id === id);
                 const nodeInfo: DeviceInfo = {
                   id,
-                  name: dev.name || 'POCO Pad',
+                  name: dev.name || 'Discovered Peer',
                   type: (dev.type as DeviceType) || 'tablet',
-                  os: dev.os || 'Android 14 (HyperOS)',
+                  os: dev.os || 'Companion Node',
                   status: 'connected',
                   ipAddress: `${dev.ip || '192.168.1.35'}:${dev.port || 9120}`,
                   resolution: dev.resolution || '2560 × 1600',

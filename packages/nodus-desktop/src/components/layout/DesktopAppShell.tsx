@@ -118,6 +118,13 @@ export const DesktopAppShell: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Auto-initialize default local terminal session when terminal tab is selected
+  useEffect(() => {
+    if (activeTab === 'terminal' && terminalSessions.length === 0) {
+      initTerminalDefaultSession();
+    }
+  }, [activeTab, terminalSessions.length, initTerminalDefaultSession]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [deviceFilter, setDeviceFilter] = useState<'all' | 'desktop' | 'laptop' | 'tablet' | 'online'>('all');
 
