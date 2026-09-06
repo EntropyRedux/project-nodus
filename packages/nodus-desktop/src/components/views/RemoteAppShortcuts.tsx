@@ -96,7 +96,7 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
   onRegisterApp,
   onAddMyApp
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'mine' | 'installed' | 'peer'>('mine');
+  const [activeSubTab, setActiveSubTab] = useState<'mine' | 'installed' | 'watched' | 'peer'>('mine');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [launchedAppId, setLaunchedAppId] = useState<string | null>(null);
@@ -104,6 +104,13 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
   // Installed Apps state
   const [installedApps, setInstalledApps] = useState<any[]>([]);
   const [isScanningInstalled, setIsScanningInstalled] = useState(false);
+
+  // Watched Folders state
+  const [watchedFolders, setWatchedFolders] = useState<string[]>([]);
+  const [watchedShortcuts, setWatchedShortcuts] = useState<any[]>([]);
+  const [folderInput, setFolderInput] = useState('');
+  const [isScanningWatched, setIsScanningWatched] = useState(false);
+  const [watchedFeedback, setWatchedFeedback] = useState<string | null>(null);
 
   // Add Custom Modal state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -126,6 +133,80 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
     }
   };
 
+  const fetchWatchedFoldersData = async () => {
+    try {
+      const folders = await TauriService.getWatchedFolders();
+      setWatchedFolders(folders || []);
+
+      const shortcuts = await TauriService.rescanWatchedFolders();
+      if (shortcuts && Array.isArray(shortcuts)) {
+        setWatchedShortcuts(shortcuts);
+      }
+    } catch (_) {}
+  };
+
+  useEffect(() => {
+    fetchWatchedFoldersData();
+
+    // Listen for live background updates emitted when folder contents change
+    let unlistenFn: (() => void) | undefined;
+    TauriService.listenShortcutsUpdated((updatedShortcuts) => {
+      if (updatedShortcuts && Array.isArray(updatedShortcuts)) {
+        setWatchedShortcuts(updatedShortcuts);
+      }
+      TauriService.getWatchedFolders().then(f => setWatchedFolders(f || []));
+    }).then(fn => {
+      unlistenFn = fn;
+    });
+
+    return () => {
+      if (unlistenFn) unlistenFn();
+    };
+  }, []);
+
+  const handleAddWatchedFolder = async (folderPathToAdd?: string) => {
+    const target = (folderPathToAdd || folderInput).trim();
+    if (!target) return;
+    setIsScanningWatched(true);
+    setWatchedFeedback(null);
+    try {
+      const discovered = await TauriService.addWatchedFolder(target);
+      await fetchWatchedFoldersData();
+      setFolderInput('');
+      setWatchedFeedback(`Watched folder added successfully (${discovered?.length || 0} shortcuts detected).`);
+      setTimeout(() => setWatchedFeedback(null), 4000);
+    } catch (err: any) {
+      setWatchedFeedback(`Error: ${err?.message || err}`);
+      setTimeout(() => setWatchedFeedback(null), 5000);
+    } finally {
+      setIsScanningWatched(false);
+    }
+  };
+
+  const handleRemoveWatchedFolder = async (folderPath: string) => {
+    try {
+      const updated = await TauriService.removeWatchedFolder(folderPath);
+      setWatchedFolders(updated || []);
+      await fetchWatchedFoldersData();
+    } catch (_) {}
+  };
+
+  const handleRescanAllWatched = async () => {
+    setIsScanningWatched(true);
+    try {
+      const updated = await TauriService.rescanWatchedFolders();
+      if (updated && Array.isArray(updated)) {
+        setWatchedShortcuts(updated);
+      }
+      setWatchedFeedback('All watched folders rescanned.');
+      setTimeout(() => setWatchedFeedback(null), 3000);
+    } catch (e: any) {
+      setWatchedFeedback(`Rescan error: ${e?.message || e}`);
+    } finally {
+      setIsScanningWatched(false);
+    }
+  };
+
   useEffect(() => {
     if (showAddModal && formPath.trim().length > 1) {
       const timer = setTimeout(async () => {
@@ -144,7 +225,7 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
 
   const handleLaunchLocal = async (app: SharedApp | { id: string; name: string; path?: string; commandOrPackage?: string }) => {
     setLaunchedAppId(app.id);
-    const path = app.path || (app as any).commandOrPackage || app.name;
+    const path = app.path || (app as any).commandOrPackage || (app as any).path_or_appid || app.name;
     try {
       if (onLaunchMyApp) {
         onLaunchMyApp(app as SharedApp);
@@ -238,6 +319,14 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
     return matchesSearch && matchesCat;
   });
 
+  const filteredWatchedShortcuts = watchedShortcuts.filter(app => {
+    const matchesSearch =
+      app.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (app.path_or_appid && app.path_or_appid.toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchesCat = selectedCategory === 'all' || app.category === selectedCategory;
+    return matchesSearch && matchesCat;
+  });
+
   const filteredPeerApps = peerApps.filter(app => {
     const matchesSearch =
       app.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -253,10 +342,10 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
       {/* Header Bar with Sub-Tab Switcher & Action Buttons */}
       <div className="flex flex-wrap items-center justify-between gap-4 mb-4 pb-4 border-b border-[var(--border-subtle)]">
         {/* Navigation Tabs */}
-        <div className="flex items-center gap-1.5 p-1 bg-[var(--surface-base)] rounded-lg border border-[var(--border-subtle)]">
+        <div className="flex items-center gap-1.5 p-1 bg-[var(--surface-base)] rounded-lg border border-[var(--border-subtle)] overflow-x-auto no-scrollbar">
           <button
             onClick={() => setActiveSubTab('mine')}
-            className={`h-8 px-3.5 rounded-md text-xs font-mono font-medium transition flex items-center gap-2 ${
+            className={`h-8 px-3.5 rounded-md text-xs font-mono font-medium transition flex items-center gap-2 whitespace-nowrap cursor-pointer ${
               activeSubTab === 'mine'
                 ? 'bg-[var(--accent-primary)] text-[var(--m3-on-primary)] font-semibold shadow-sm'
                 : 'text-[var(--text-muted)] hover:text-[var(--text-heading)]'
@@ -271,7 +360,7 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
               setActiveSubTab('installed');
               if (installedApps.length === 0) fetchInstalledApps();
             }}
-            className={`h-8 px-3.5 rounded-md text-xs font-mono font-medium transition flex items-center gap-2 ${
+            className={`h-8 px-3.5 rounded-md text-xs font-mono font-medium transition flex items-center gap-2 whitespace-nowrap cursor-pointer ${
               activeSubTab === 'installed'
                 ? 'bg-[var(--accent-primary)] text-[var(--m3-on-primary)] font-semibold shadow-sm'
                 : 'text-[var(--text-muted)] hover:text-[var(--text-heading)]'
@@ -282,8 +371,23 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
           </button>
 
           <button
+            onClick={() => {
+              setActiveSubTab('watched');
+              fetchWatchedFoldersData();
+            }}
+            className={`h-8 px-3.5 rounded-md text-xs font-mono font-medium transition flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+              activeSubTab === 'watched'
+                ? 'bg-[var(--accent-primary)] text-[var(--m3-on-primary)] font-semibold shadow-sm'
+                : 'text-[var(--text-muted)] hover:text-[var(--text-heading)]'
+            }`}
+          >
+            <Folder size={14} />
+            <span>Watched Folders ({watchedFolders.length})</span>
+          </button>
+
+          <button
             onClick={() => setActiveSubTab('peer')}
-            className={`h-8 px-3.5 rounded-md text-xs font-mono font-medium transition flex items-center gap-2 ${
+            className={`h-8 px-3.5 rounded-md text-xs font-mono font-medium transition flex items-center gap-2 whitespace-nowrap cursor-pointer ${
               activeSubTab === 'peer'
                 ? 'bg-[var(--accent-primary)] text-[var(--m3-on-primary)] font-semibold shadow-sm'
                 : 'text-[var(--text-muted)] hover:text-[var(--text-heading)]'
@@ -304,6 +408,17 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
             >
               <RefreshCw size={13} className={isScanningInstalled ? 'animate-spin' : ''} />
               <span>{isScanningInstalled ? 'Scanning System...' : 'Re-Scan Apps'}</span>
+            </button>
+          )}
+
+          {activeSubTab === 'watched' && (
+            <button
+              onClick={handleRescanAllWatched}
+              disabled={isScanningWatched}
+              className="h-8 px-3 rounded-lg bg-[var(--surface-elevated)] hover:bg-[var(--surface-base)] text-xs font-mono font-medium text-[var(--text-heading)] border border-[var(--border-subtle)] flex items-center gap-1.5 transition disabled:opacity-50 cursor-pointer"
+            >
+              <RefreshCw size={13} className={isScanningWatched ? 'animate-spin' : ''} />
+              <span>{isScanningWatched ? 'Scanning Folders...' : 'Re-Scan All'}</span>
             </button>
           )}
 
@@ -583,7 +698,264 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
           </div>
         )}
 
-        {/* VIEW 3: REMOTE PEER LAUNCHPAD */}
+        {/* VIEW 3: WATCHED FOLDERS AUTO-DISCOVERY */}
+        {activeSubTab === 'watched' && (
+          <div className="space-y-4">
+            {/* Top Info Banner with Live Daemon Watcher Status */}
+            <div className="p-4 rounded-xl bg-[var(--surface-elevated)] border border-[var(--border-subtle)] flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-start gap-3.5 min-w-0">
+                <div className="w-10 h-10 rounded-lg bg-[var(--surface-base)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--accent-primary)] shrink-0 shadow-sm">
+                  <Folder size={20} />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xs font-semibold text-[var(--text-heading)]">
+                      Watched Folders Auto-Discovery
+                    </h3>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      Live Watcher Active
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-[var(--text-muted)] mt-1 max-w-2xl">
+                    Any app shortcut (<code className="text-xs text-[var(--accent-primary)] font-mono">.lnk</code>, <code className="text-xs text-[var(--accent-primary)] font-mono">.url</code>, <code className="text-xs text-[var(--accent-primary)] font-mono">.exe</code>) or executable script (<code className="text-xs text-[var(--accent-primary)] font-mono">.bat</code>, <code className="text-xs text-[var(--accent-primary)] font-mono">.cmd</code>, <code className="text-xs text-[var(--accent-primary)] font-mono">.ps1</code>, <code className="text-xs text-[var(--accent-primary)] font-mono">.py</code>, <code className="text-xs text-[var(--accent-primary)] font-mono">.ahk</code>) placed in these folders is automatically scanned, extracted with high-res Win32 icons, and synced to shared shortcuts.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Folder Input Bar & Quick Presets */}
+            <div className="p-4 rounded-xl bg-[var(--surface-base)] border border-[var(--border-subtle)] space-y-3">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={folderInput}
+                    onChange={e => setFolderInput(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') handleAddWatchedFolder();
+                    }}
+                    placeholder="Enter Windows directory path (e.g. C:\Projects\Scripts or ~\Desktop\Shortcuts)..."
+                    className="w-full h-9 px-3 text-xs bg-[var(--surface-container)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-heading)] font-mono placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)]"
+                  />
+                </div>
+                <button
+                  onClick={() => handleAddWatchedFolder()}
+                  disabled={!folderInput.trim() || isScanningWatched}
+                  className="h-9 px-4 rounded-lg bg-[var(--accent-primary)] hover:opacity-90 text-[var(--m3-on-primary)] text-xs font-semibold font-mono flex items-center justify-center gap-1.5 transition shadow disabled:opacity-50 cursor-pointer whitespace-nowrap"
+                >
+                  <Plus size={14} />
+                  <span>Add Watched Folder</span>
+                </button>
+              </div>
+
+              {/* Quick Presets Recommendation Bar */}
+              <div className="flex items-center gap-2 flex-wrap pt-1">
+                <span className="text-[10px] font-mono uppercase font-semibold text-[var(--text-muted)]">
+                  Quick Presets:
+                </span>
+                {[
+                  { label: 'Desktop\\Shortcuts', path: '~\\Desktop\\Shortcuts' },
+                  { label: 'User Scripts', path: '~\\Scripts' },
+                  { label: 'C:\\Projects\\bin', path: 'C:\\Projects\\bin' },
+                  { label: 'Start Menu Programs', path: '%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs' },
+                ].map((preset) => (
+                  <button
+                    key={preset.label}
+                    onClick={() => handleAddWatchedFolder(preset.path)}
+                    className="h-6 px-2 rounded-md bg-[var(--surface-elevated)] hover:bg-[var(--surface-container)] text-[var(--text-body)] hover:text-[var(--text-heading)] border border-[var(--border-subtle)] text-[10px] font-mono transition flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus size={11} className="text-[var(--accent-primary)]" />
+                    <span>{preset.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {watchedFeedback && (
+                <div className="p-2.5 rounded-lg bg-[var(--surface-container)] border border-[var(--border-subtle)] text-xs font-mono text-[var(--accent-primary)] animate-in fade-in duration-150">
+                  {watchedFeedback}
+                </div>
+              )}
+            </div>
+
+            {/* List of Watched Folders */}
+            <div>
+              <div className="flex items-center justify-between mb-2.5">
+                <span className="text-xs font-semibold font-mono uppercase tracking-wider text-[var(--text-muted)]">
+                  Configured Folders ({watchedFolders.length})
+                </span>
+                {watchedFolders.length > 0 && (
+                  <span className="text-[11px] font-mono text-[var(--text-muted)]">
+                    Background polling every 4s
+                  </span>
+                )}
+              </div>
+
+              {watchedFolders.length === 0 ? (
+                <div className="py-8 px-4 text-center rounded-xl bg-[var(--surface-base)] border border-dashed border-[var(--border-subtle)] text-xs text-[var(--text-muted)] font-mono">
+                  No watched folders configured yet. Add a folder above or click a quick preset to start watching.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
+                  {watchedFolders.map((folder) => {
+                    const shortcutsInFolder = watchedShortcuts.filter(s =>
+                      s.path_or_appid && s.path_or_appid.toLowerCase().startsWith(folder.toLowerCase())
+                    );
+
+                    return (
+                      <div
+                        key={folder}
+                        className="p-3.5 rounded-xl bg-[var(--surface-elevated)] border border-[var(--border-subtle)] flex items-center justify-between gap-3 shadow-sm"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-9 h-9 rounded-lg bg-[var(--surface-base)] border border-[var(--border-subtle)] flex items-center justify-center text-amber-400 shrink-0">
+                            <Folder size={18} />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-xs font-mono font-medium text-[var(--text-heading)] truncate" title={folder}>
+                              {folder}
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-[10px] font-mono text-[var(--accent-primary)]">
+                                {shortcutsInFolder.length} shortcuts detected
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => handleAddWatchedFolder(folder)}
+                            title="Scan this folder now"
+                            disabled={isScanningWatched}
+                            className="p-1.5 rounded-lg bg-[var(--surface-base)] hover:bg-[var(--surface-container)] text-[var(--text-muted)] hover:text-[var(--text-heading)] border border-[var(--border-subtle)] transition cursor-pointer"
+                          >
+                            <RefreshCw size={13} className={isScanningWatched ? 'animate-spin' : ''} />
+                          </button>
+                          <button
+                            onClick={() => handleRemoveWatchedFolder(folder)}
+                            title="Remove folder from watched list"
+                            className="p-1.5 rounded-lg bg-[var(--surface-base)] hover:bg-red-500/10 text-[var(--text-muted)] hover:text-red-400 border border-[var(--border-subtle)] transition cursor-pointer"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* List of Shortcuts Discovered in Watched Folders */}
+            <div>
+              <div className="flex items-center justify-between mb-2.5">
+                <span className="text-xs font-semibold font-mono uppercase tracking-wider text-[var(--text-muted)]">
+                  Discovered Shortcuts in Watched Folders ({filteredWatchedShortcuts.length})
+                </span>
+              </div>
+
+              {filteredWatchedShortcuts.length === 0 ? (
+                <div className="py-12 text-center text-xs text-[var(--text-muted)] font-mono bg-[var(--surface-base)] rounded-xl border border-[var(--border-subtle)]">
+                  {watchedFolders.length === 0
+                    ? 'Configure a watched folder above to populate shortcuts.'
+                    : 'No shortcuts (.lnk, .url, .exe) or scripts (.bat, .cmd, .ps1, .py, .ahk) found in configured folders yet.'}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                  {filteredWatchedShortcuts.map((app) => {
+                    const catMeta = CATEGORY_ICONS[app.category as AppCategory] || CATEGORY_ICONS.dev;
+                    const Icon = catMeta.icon;
+                    const isLaunched = launchedAppId === app.id;
+                    const iconSrc = formatIconSrc(app.icon_base64);
+
+                    return (
+                      <div
+                        key={app.id || app.path_or_appid}
+                        className="p-3.5 rounded-xl bg-[var(--surface-elevated)] border border-[var(--border-subtle)] hover:border-[var(--border-active)] transition shadow-sm flex flex-col justify-between gap-3"
+                      >
+                        <div className="flex items-start justify-between gap-2.5">
+                          <div className="flex items-center gap-3 min-w-0">
+                            {iconSrc ? (
+                              <img
+                                src={iconSrc}
+                                alt=""
+                                className="w-10 h-10 rounded-lg shrink-0 object-contain bg-[var(--surface-base)] p-1 border border-[var(--border-subtle)] shadow-sm"
+                              />
+                            ) : (
+                              <div
+                                className="w-10 h-10 rounded-lg flex items-center justify-center shadow-sm shrink-0"
+                                style={{
+                                  backgroundColor: `${catMeta.color}18`,
+                                  color: catMeta.color,
+                                  border: `1px solid ${catMeta.color}30`,
+                                }}
+                              >
+                                <Icon size={19} />
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <h4 className="text-xs font-semibold text-[var(--text-heading)] truncate">
+                                {app.name}
+                              </h4>
+                              <p className="text-[10px] font-mono text-[var(--text-muted)] truncate mt-0.5">
+                                {app.path_or_appid}
+                              </p>
+                            </div>
+                          </div>
+
+                          <span
+                            className="font-mono text-[9px] uppercase font-semibold px-1.5 py-0.5 rounded bg-[var(--surface-base)] border border-[var(--border-subtle)] shrink-0"
+                            style={{ color: catMeta.color }}
+                          >
+                            {catMeta.label}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-2 border-t border-[var(--border-subtle)]">
+                          {/* Share Toggle */}
+                          <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={app.enabled}
+                              onChange={async (e) => {
+                                const newEnabled = e.target.checked;
+                                const updated = watchedShortcuts.map((s) =>
+                                  s.path_or_appid === app.path_or_appid ? { ...s, enabled: newEnabled } : s
+                                );
+                                setWatchedShortcuts(updated);
+                                await TauriService.setSharedShortcuts(updated);
+                              }}
+                              className="w-3.5 h-3.5 rounded accent-[var(--accent-primary)] cursor-pointer"
+                            />
+                            <span className="text-[11px] font-mono text-[var(--text-muted)]">
+                              {app.enabled ? 'Shared to Mesh' : 'Local Only'}
+                            </span>
+                          </label>
+
+                          {/* Launch Button */}
+                          <button
+                            onClick={() => handleLaunchLocal(app)}
+                            className={`h-7 px-3 rounded-lg text-xs font-semibold font-mono flex items-center gap-1 transition active:scale-95 cursor-pointer ${
+                              isLaunched
+                                ? 'bg-emerald-600 text-white shadow'
+                                : 'bg-[var(--accent-primary)] text-[var(--m3-on-primary)] hover:opacity-90 shadow-sm'
+                            }`}
+                          >
+                            {isLaunched ? <Check size={12} /> : <Play size={11} />}
+                            <span>{isLaunched ? 'Launched' : 'Launch'}</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* VIEW 4: REMOTE PEER LAUNCHPAD */}
         {activeSubTab === 'peer' && (
           <div className="space-y-4">
             {/* Device Origin Filter Bar */}

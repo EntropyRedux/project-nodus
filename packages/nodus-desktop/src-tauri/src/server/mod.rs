@@ -756,6 +756,31 @@ pub fn start_server(port: u16) {
                         }
                     }
 
+                    // Remove Watched Folder
+                    (Method::Post, "/api/shortcuts/watched/remove") => {
+                        if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
+                            if let Ok(req) = serde_json::from_str::<FolderScanReq>(&body_str) {
+                                let updated_folders = crate::commands::shortcuts::remove_watched_folder(req.path);
+                                (200, json!({ "status": "success", "watched_folders": updated_folders }))
+                            } else {
+                                (400, json!({ "status": "error", "message": "Invalid JSON body" }))
+                            }
+                        } else {
+                            (400, json!({ "status": "error", "message": "Body exceeds maximum size" }))
+                        }
+                    }
+
+                    // Rescan All Watched Folders
+                    (Method::Post, "/api/shortcuts/watched/rescan") => {
+                        match crate::commands::shortcuts::rescan_all_watched_folders() {
+                            Ok(shortcuts) => {
+                                let cfg = load_shared_config();
+                                (200, json!({ "status": "success", "shortcuts": shortcuts, "watched_folders": cfg.watched_folders }))
+                            }
+                            Err(e) => (500, json!({ "status": "error", "message": e })),
+                        }
+                    }
+
                     // Query Watched Folders Config
                     (Method::Get, "/api/shortcuts/watched") => {
                         let cfg = load_shared_config();

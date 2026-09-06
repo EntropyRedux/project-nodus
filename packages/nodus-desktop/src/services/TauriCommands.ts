@@ -452,13 +452,55 @@ export const TauriService = {
   },
 
   async removeWatchedFolder(path: string): Promise<string[]> {
-    if (!isTauri()) return [];
+    if (!isTauri()) {
+      try {
+        const res = await fetch('http://localhost:9120/api/shortcuts/watched/remove', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          return data.watched_folders || [];
+        }
+      } catch (_) {}
+      return [];
+    }
     try {
       return await invoke<string[]>('remove_watched_folder', { path });
     } catch (e) {
       console.error(`[TauriService] removeWatchedFolder(${path}) error:`, e);
       return [];
     }
+  },
+
+  async rescanWatchedFolders(): Promise<any[]> {
+    if (!isTauri()) {
+      try {
+        const res = await fetch('http://localhost:9120/api/shortcuts/watched/rescan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          return data.shortcuts || [];
+        }
+      } catch (_) {}
+      return [];
+    }
+    try {
+      return await invoke<any[]>('rescan_all_watched_folders');
+    } catch (e) {
+      console.error('[TauriService] rescanWatchedFolders error:', e);
+      return [];
+    }
+  },
+
+  async listenShortcutsUpdated(callback: (shortcuts: any[]) => void): Promise<UnlistenFn> {
+    if (!isTauri()) return () => {};
+    return await listen<any[]>('shortcuts_updated', (event) => {
+      callback(event.payload);
+    });
   },
 
   async getDiscoveredDevices(): Promise<any[]> {

@@ -47,6 +47,7 @@ pub fn run() {
             commands::shortcuts::add_watched_folder,
             commands::shortcuts::get_watched_folders,
             commands::shortcuts::remove_watched_folder,
+            commands::shortcuts::rescan_all_watched_folders,
             discovery::get_discovered_devices,
             discovery::unregister_node,
             discovery::scan_subnet,
@@ -151,6 +152,9 @@ pub fn run() {
             // ─── 4. Start Fleet HTTP API Server & UDP Discovery ───────
             server::start_server(9120);
             discovery::start_discovery(9120);
+
+            // ─── 5. Start Automatic Watched Folders Filesystem Monitor ─
+            commands::shortcuts::start_watched_folders_monitor(Some(app.handle().clone()));
 
             Ok(())
         })

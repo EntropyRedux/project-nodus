@@ -447,12 +447,45 @@ fn categorize_app_name(name: &str) -> String {
     }
 }
 
-/// Scan a watched folder for .lnk, .url, .exe, .bat, and .ps1 shortcuts
+pub fn expand_path_str(raw: &str) -> PathBuf {
+    let mut expanded = raw.trim().to_string();
+    if expanded.starts_with('~') {
+        if let Some(user_profile) = std::env::var_os("USERPROFILE") {
+            expanded = expanded.replacen('~', &user_profile.to_string_lossy(), 1);
+        }
+    }
+    // Expand %VAR%
+    if expanded.contains('%') {
+        for (k, v) in std::env::vars() {
+            let token = format!("%{}%", k);
+            if expanded.to_lowercase().contains(&token.to_lowercase()) {
+                let re = regex_replace_case_insensitive(&expanded, &token, &v);
+                expanded = re;
+            }
+        }
+    }
+    PathBuf::from(expanded)
+}
+
+fn regex_replace_case_insensitive(source: &str, token: &str, replacement: &str) -> String {
+    let lower_src = source.to_lowercase();
+    let lower_token = token.to_lowercase();
+    if let Some(pos) = lower_src.find(&lower_token) {
+        let mut res = source[..pos].to_string();
+        res.push_str(replacement);
+        res.push_str(&source[pos + token.len()..]);
+        res
+    } else {
+        source.to_string()
+    }
+}
+
+/// Scan a watched folder for .lnk, .url, .exe, .bat, .cmd, .ps1, and other executable scripts
 #[tauri::command]
 pub fn scan_shortcuts_folder(folder_path: &str) -> Result<Vec<DiscoveredApp>, String> {
-    let p = Path::new(folder_path);
+    let p = expand_path_str(folder_path);
     if !p.exists() || !p.is_dir() {
-        return Err(format!("Directory '{}' does not exist", folder_path));
+        return Err(format!("Directory '{}' does not exist or is not a directory", p.display()));
     }
 
     let current_cfg = load_shared_config();
@@ -464,28 +497,34 @@ pub fn scan_shortcuts_folder(folder_path: &str) -> Result<Vec<DiscoveredApp>, St
         .collect();
 
     let mut list = Vec::new();
-    if let Ok(entries) = fs::read_dir(p) {
+    if let Ok(entries) = fs::read_dir(&p) {
         for (idx, entry) in entries.flatten().enumerate() {
             let path = entry.path();
             if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
                 let ext_lower = ext.to_lowercase();
-                if ["exe", "lnk", "url", "bat", "cmd", "ps1"].contains(&ext_lower.as_str()) {
+                if ["exe", "lnk", "url", "bat", "cmd", "ps1", "vbs", "py", "ahk"].contains(&ext_lower.as_str()) {
                     let file_stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("Shortcut").to_string();
                     let full_path = path.to_string_lossy().to_string();
 
                     let icon = extract_exe_icon(&full_path).ok();
                     let (icon_name, icon_color) = determine_lucide_icon_and_color(&file_stem, &full_path);
-                    let is_enabled = enabled_ids.contains(&full_path);
+                    let is_enabled = enabled_ids.contains(&full_path) || !current_cfg.shortcuts.iter().any(|s| s.path_or_appid == full_path);
+
+                    let category = if ["bat", "cmd", "ps1", "vbs", "py", "ahk"].contains(&ext_lower.as_str()) {
+                        "dev".to_string()
+                    } else {
+                        categorize_app_name(&file_stem)
+                    };
 
                     list.push(DiscoveredApp {
-                        id: format!("folder_{}_{}", idx, file_stem),
+                        id: format!("watched_{}_{}", idx, file_stem.replace(' ', "_")),
                         name: file_stem,
                         path_or_appid: full_path,
                         is_uwp: false,
                         icon_base64: icon,
                         icon_name: Some(icon_name.to_string()),
                         icon_color: Some(icon_color.to_string()),
-                        category: "tools".to_string(),
+                        category,
                         enabled: is_enabled,
                     });
                 }
@@ -511,12 +550,13 @@ pub fn set_shared_shortcuts(shortcuts: Vec<DiscoveredApp>) {
 
 #[tauri::command]
 pub fn add_watched_folder(path: String) -> Result<Vec<DiscoveredApp>, String> {
+    let expanded = expand_path_str(&path).to_string_lossy().to_string();
     let mut cfg = load_shared_config();
-    if !cfg.watched_folders.contains(&path) {
-        cfg.watched_folders.push(path.clone());
+    if !cfg.watched_folders.contains(&expanded) && !cfg.watched_folders.contains(&path) {
+        cfg.watched_folders.push(expanded.clone());
     }
 
-    let discovered = scan_shortcuts_folder(&path)?;
+    let discovered = scan_shortcuts_folder(&expanded)?;
     for item in &discovered {
         if !cfg.shortcuts.iter().any(|s| s.path_or_appid == item.path_or_appid) {
             cfg.shortcuts.push(item.clone());
@@ -536,8 +576,92 @@ pub fn get_watched_folders() -> Vec<String> {
 #[tauri::command]
 pub fn remove_watched_folder(path: String) -> Vec<String> {
     let mut cfg = load_shared_config();
-    cfg.watched_folders.retain(|f| f != &path);
+    let expanded = expand_path_str(&path).to_string_lossy().to_string();
+    cfg.watched_folders.retain(|f| f != &path && f != &expanded);
     save_shared_config(&cfg);
     cfg.watched_folders
 }
+
+#[tauri::command]
+pub fn rescan_all_watched_folders() -> Result<Vec<DiscoveredApp>, String> {
+    let mut cfg = load_shared_config();
+    let mut added_any = false;
+
+    for folder in &cfg.watched_folders {
+        if let Ok(discovered) = scan_shortcuts_folder(folder) {
+            for item in discovered {
+                if !cfg.shortcuts.iter().any(|s| s.path_or_appid == item.path_or_appid) {
+                    cfg.shortcuts.push(item);
+                    added_any = true;
+                }
+            }
+        }
+    }
+
+    if added_any {
+        save_shared_config(&cfg);
+    }
+
+    Ok(cfg.shortcuts)
+}
+
+/// Continuous background thread monitoring watched folders for added or changed shortcuts
+pub fn start_watched_folders_monitor(app_handle: Option<tauri::AppHandle>) {
+    std::thread::spawn(move || {
+        let mut last_snapshot: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(4));
+
+            let cfg = load_shared_config();
+            if cfg.watched_folders.is_empty() {
+                continue;
+            }
+
+            let mut current_snapshot: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+
+            for folder in &cfg.watched_folders {
+                let p = expand_path_str(folder);
+                if let Ok(entries) = fs::read_dir(&p) {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                            let ext_lower = ext.to_lowercase();
+                            if ["exe", "lnk", "url", "bat", "cmd", "ps1", "vbs", "py", "ahk"].contains(&ext_lower.as_str()) {
+                                let key = path.to_string_lossy().to_string();
+                                let mtime = entry
+                                    .metadata()
+                                    .and_then(|m| m.modified())
+                                    .and_then(|t| {
+                                        t.duration_since(std::time::UNIX_EPOCH)
+                                            .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "time error"))
+                                    })
+                                    .map(|d| d.as_secs())
+                                    .unwrap_or(0);
+                                current_snapshot.insert(key, mtime);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // If snapshot changed, rescan and emit event
+            if current_snapshot != last_snapshot {
+                let is_first_run = last_snapshot.is_empty();
+                last_snapshot = current_snapshot;
+
+                if let Ok(updated_shortcuts) = rescan_all_watched_folders() {
+                    if !is_first_run {
+                        println!("[NodusShortcuts] Auto-detected changes in watched folders. Synced shortcuts to shared store.");
+                    }
+                    if let Some(ref handle) = app_handle {
+                        use tauri::Emitter;
+                        let _ = handle.emit("shortcuts_updated", &updated_shortcuts);
+                    }
+                }
+            }
+        }
+    });
+}
+
 
