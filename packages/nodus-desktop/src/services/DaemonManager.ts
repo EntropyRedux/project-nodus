@@ -16,17 +16,21 @@ export class DaemonManager {
       try {
         const content = await TauriService.getClipboardContent();
         if (content.text || content.image_data) {
-          const sig = `${content.text || ''}_${(content.image_data || '').substring(0, 30)}`;
+          const sig = content.image_data
+            ? `img_${content.image_data.length}_${content.image_data.slice(20, 60)}_${content.image_data.slice(-40)}`
+            : `txt_${content.text?.trim() || ''}`;
+
           if (sig !== this.lastClipSignature) {
             this.lastClipSignature = sig;
-            useClipboardStore.getState().pushClip(content.text || 'Image', 'this-pc', content.image_data);
+            const clipText = content.text || (content.image_data ? 'Image' : '');
+            useClipboardStore.getState().pushClip(clipText, 'this-pc', content.image_data);
 
             const devices = useFleetStore.getState().devices;
             ClipboardBroadcastService.queueBroadcast(content.text || null, content.image_data, devices, token);
           }
         }
       } catch {}
-    }, 1500);
+    }, 1200);
 
     // Headless fleet peer polling
     this.fleetInterval = setInterval(async () => {

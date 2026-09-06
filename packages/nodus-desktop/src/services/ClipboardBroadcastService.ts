@@ -10,7 +10,9 @@ export class ClipboardBroadcastService {
     trustedDevices: DeviceInfo[],
     token: string
   ) {
-    const signature = `${text || ''}_${(imageData || '').substring(0, 40)}`;
+    const signature = imageData
+      ? `img_${imageData.length}_${imageData.slice(20, 60)}_${imageData.slice(-40)}`
+      : `txt_${text || ''}`;
     if (signature === this.lastBroadcastSignature) return;
 
     if (this.debounceTimer) clearTimeout(this.debounceTimer);

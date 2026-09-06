@@ -278,10 +278,18 @@ export const DesktopAppShell: React.FC = () => {
     pushClip(content, 'text', 'Host PC');
   };
 
-  const handleCopyClipboardItem = (item: any) => {
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(item.content);
-    }
+  const handleCopyClipboardItem = async (item: any) => {
+    try {
+      if (item.type === 'image' && item.imageData) {
+        await TauriService.setClipboardImage(item.imageData);
+      } else if (item.text || item.content) {
+        const txt = item.text || item.content;
+        await TauriService.setClipboardText(txt);
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(txt);
+        }
+      }
+    } catch (_) {}
   };
 
   return (

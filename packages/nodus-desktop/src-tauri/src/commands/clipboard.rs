@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 pub struct ClipboardPayload {
     pub content_type: String, // "text" or "image"
     pub text: Option<String>,
-    pub image_data: Option<String>, // base64 PNG data URL or raw base64
+    pub image_data: Option<String>, // base64 data URL
 }
 
 #[tauri::command]
@@ -61,24 +61,56 @@ pub fn set_clipboard_image(base64_png: String) -> Result<bool, String> {
 pub fn get_clipboard_content() -> Result<ClipboardPayload, String> {
     #[cfg(windows)]
     {
-        // First check if clipboard has an image
+        // 1. First check if clipboard has an image (PNG, DIB, DIBV5, or GDI Bitmap)
         if has_win32_clipboard_image() {
             if let Ok(Some(img_data_url)) = get_win32_clipboard_image() {
-                let final_url = if img_data_url.starts_with("data:image/") {
-                    img_data_url
-                } else {
-                    format!("data:image/bmp;base64,{}", img_data_url)
-                };
                 return Ok(ClipboardPayload {
                     content_type: "image".to_string(),
                     text: Some("Image".to_string()),
-                    image_data: Some(final_url),
+                    image_data: Some(img_data_url),
                 });
             }
         }
 
-        // Fallback to text
+        // 2. Read text from clipboard
         let text = get_win32_clipboard().unwrap_or_default();
+        let trimmed = text.trim();
+
+        // 3. Check if text is a path to an existing local image file (e.g. copied from Explorer or dropped)
+        if !trimmed.is_empty() {
+            let path_str = trimmed.trim_matches('"');
+            let p = std::path::Path::new(path_str);
+            if p.is_file() {
+                if let Some(ext) = p.extension().and_then(|e| e.to_str()).map(|e| e.to_lowercase()) {
+                    let mime = match ext.as_str() {
+                        "png" => Some("image/png"),
+                        "jpg" | "jpeg" => Some("image/jpeg"),
+                        "webp" => Some("image/webp"),
+                        "gif" => Some("image/gif"),
+                        "bmp" => Some("image/bmp"),
+                        "svg" => Some("image/svg+xml"),
+                        "ico" => Some("image/x-icon"),
+                        _ => None,
+                    };
+                    if let Some(mime_type) = mime {
+                        if let Ok(bytes) = std::fs::read(p) {
+                            if bytes.len() <= 15 * 1024 * 1024 { // Up to 15MB
+                                use base64::prelude::*;
+                                let encoded = BASE64_STANDARD.encode(&bytes);
+                                let filename = p.file_name().and_then(|n| n.to_str()).unwrap_or("Image").to_string();
+                                return Ok(ClipboardPayload {
+                                    content_type: "image".to_string(),
+                                    text: Some(filename),
+                                    image_data: Some(format!("data:{};base64,{}", mime_type, encoded)),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Fallback to regular text payload
         Ok(ClipboardPayload {
             content_type: "text".to_string(),
             text: Some(text),
@@ -97,15 +129,21 @@ pub fn get_clipboard_content() -> Result<ClipboardPayload, String> {
 
 #[cfg(windows)]
 pub fn has_win32_clipboard_image() -> bool {
-    use windows::Win32::System::DataExchange::IsClipboardFormatAvailable;
+    use windows::core::w;
+    use windows::Win32::System::DataExchange::{IsClipboardFormatAvailable, RegisterClipboardFormatW};
 
     const CF_BITMAP: u32 = 2;
     const CF_DIB: u32 = 8;
     const CF_DIBV5: u32 = 17;
 
     unsafe {
-        IsClipboardFormatAvailable(CF_DIB).is_ok()
+        let png_fmt = RegisterClipboardFormatW(w!("PNG"));
+        let png_mime_fmt = RegisterClipboardFormatW(w!("image/png"));
+
+        (png_fmt != 0 && IsClipboardFormatAvailable(png_fmt).is_ok())
+            || (png_mime_fmt != 0 && IsClipboardFormatAvailable(png_mime_fmt).is_ok())
             || IsClipboardFormatAvailable(CF_DIBV5).is_ok()
+            || IsClipboardFormatAvailable(CF_DIB).is_ok()
             || IsClipboardFormatAvailable(CF_BITMAP).is_ok()
     }
 }
@@ -113,15 +151,17 @@ pub fn has_win32_clipboard_image() -> bool {
 #[cfg(windows)]
 pub fn get_win32_clipboard_image() -> Result<Option<String>, String> {
     use base64::prelude::*;
+    use windows::core::w;
     use windows::Win32::Foundation::{HGLOBAL, HWND};
-    use windows::Win32::System::DataExchange::{CloseClipboard, GetClipboardData, OpenClipboard};
+    use windows::Win32::System::DataExchange::{CloseClipboard, GetClipboardData, OpenClipboard, RegisterClipboardFormatW};
     use windows::Win32::System::Memory::{GlobalLock, GlobalSize, GlobalUnlock};
 
     const CF_DIB: u32 = 8;
+    const CF_DIBV5: u32 = 17;
 
     unsafe {
         let mut opened = false;
-        for _ in 0..5 {
+        for _ in 0..6 {
             if OpenClipboard(HWND::default()).is_ok() {
                 opened = true;
                 break;
@@ -133,84 +173,101 @@ pub fn get_win32_clipboard_image() -> Result<Option<String>, String> {
             return Err("Unable to open Win32 clipboard".to_string());
         }
 
-        let handle = GetClipboardData(CF_DIB);
-        let handle = match handle {
-            Ok(h) => h,
-            Err(_) => {
-                let _ = CloseClipboard();
-                return Ok(None);
+        // 1. First attempt: Direct PNG format (lossless transparency, used by Chrome, Edge, Discord, Snipping Tool, Photoshop)
+        let png_fmt = RegisterClipboardFormatW(w!("PNG"));
+        let png_mime_fmt = RegisterClipboardFormatW(w!("image/png"));
+
+        for fmt in [png_fmt, png_mime_fmt] {
+            if fmt != 0 {
+                if let Ok(handle) = GetClipboardData(fmt) {
+                    let h_global = HGLOBAL(handle.0);
+                    if !h_global.is_invalid() {
+                        let ptr = GlobalLock(h_global);
+                        if !ptr.is_null() {
+                            let size = GlobalSize(h_global);
+                            if size > 8 {
+                                let slice = std::slice::from_raw_parts(ptr as *const u8, size);
+                                if slice.starts_with(b"\x89PNG\r\n\x1a\n") {
+                                    let encoded = BASE64_STANDARD.encode(slice);
+                                    let _ = GlobalUnlock(h_global);
+                                    let _ = CloseClipboard();
+                                    return Ok(Some(format!("data:image/png;base64,{}", encoded)));
+                                }
+                            }
+                            let _ = GlobalUnlock(h_global);
+                        }
+                    }
+                }
             }
-        };
-
-        let h_global = HGLOBAL(handle.0);
-        if h_global.is_invalid() {
-            let _ = CloseClipboard();
-            return Ok(None);
         }
 
-        let ptr = GlobalLock(h_global);
-        if ptr.is_null() {
-            let _ = CloseClipboard();
-            return Ok(None);
+        // 2. Second attempt: CF_DIBV5 or CF_DIB Device-Independent Bitmaps
+        for dib_fmt in [CF_DIBV5, CF_DIB] {
+            if let Ok(handle) = GetClipboardData(dib_fmt) {
+                let h_global = HGLOBAL(handle.0);
+                if !h_global.is_invalid() {
+                    let ptr = GlobalLock(h_global);
+                    if !ptr.is_null() {
+                        let dib_size = GlobalSize(h_global);
+                        if dib_size >= 40 {
+                            let dib_slice = std::slice::from_raw_parts(ptr as *const u8, dib_size);
+
+                            let bi_size = u32::from_le_bytes([dib_slice[0], dib_slice[1], dib_slice[2], dib_slice[3]]);
+                            let bi_bit_count = if dib_size >= 16 {
+                                u16::from_le_bytes([dib_slice[14], dib_slice[15]])
+                            } else {
+                                0
+                            };
+                            let bi_compression = if dib_size >= 20 {
+                                u32::from_le_bytes([dib_slice[16], dib_slice[17], dib_slice[18], dib_slice[19]])
+                            } else {
+                                0
+                            };
+                            let bi_clr_used = if dib_size >= 36 {
+                                u32::from_le_bytes([dib_slice[32], dib_slice[33], dib_slice[34], dib_slice[35]])
+                            } else {
+                                0
+                            };
+
+                            let palette_entries = if bi_clr_used > 0 {
+                                bi_clr_used
+                            } else if bi_bit_count <= 8 && bi_bit_count > 0 {
+                                1u32 << bi_bit_count
+                            } else {
+                                0
+                            };
+
+                            let mut mask_size = 0u32;
+                            if bi_size == 40 && (bi_compression == 3 || bi_compression == 6) {
+                                mask_size = 12; // 3 DWORD masks
+                            }
+
+                            let off_bits = 14 + bi_size + (palette_entries * 4) + mask_size;
+                            let file_size = 14 + dib_size as u32;
+
+                            // Construct valid 14-byte BITMAPFILEHEADER
+                            let mut bmp_data = Vec::with_capacity(file_size as usize);
+                            bmp_data.extend_from_slice(b"BM"); // bfType
+                            bmp_data.extend_from_slice(&file_size.to_le_bytes()); // bfSize
+                            bmp_data.extend_from_slice(&0u16.to_le_bytes()); // bfReserved1
+                            bmp_data.extend_from_slice(&0u16.to_le_bytes()); // bfReserved2
+                            bmp_data.extend_from_slice(&off_bits.to_le_bytes()); // bfOffBits
+                            bmp_data.extend_from_slice(dib_slice);
+
+                            let _ = GlobalUnlock(h_global);
+                            let _ = CloseClipboard();
+
+                            let encoded = BASE64_STANDARD.encode(&bmp_data);
+                            return Ok(Some(format!("data:image/bmp;base64,{}", encoded)));
+                        }
+                        let _ = GlobalUnlock(h_global);
+                    }
+                }
+            }
         }
 
-        let dib_size = GlobalSize(h_global);
-        if dib_size < 40 {
-            let _ = GlobalUnlock(h_global);
-            let _ = CloseClipboard();
-            return Ok(None);
-        }
-
-        let dib_slice = std::slice::from_raw_parts(ptr as *const u8, dib_size);
-
-        // Parse BITMAPINFOHEADER
-        let bi_size = u32::from_le_bytes([dib_slice[0], dib_slice[1], dib_slice[2], dib_slice[3]]);
-        let bi_bit_count = if dib_size >= 16 {
-            u16::from_le_bytes([dib_slice[14], dib_slice[15]])
-        } else {
-            0
-        };
-        let bi_compression = if dib_size >= 20 {
-            u32::from_le_bytes([dib_slice[16], dib_slice[17], dib_slice[18], dib_slice[19]])
-        } else {
-            0
-        };
-        let bi_clr_used = if dib_size >= 36 {
-            u32::from_le_bytes([dib_slice[32], dib_slice[33], dib_slice[34], dib_slice[35]])
-        } else {
-            0
-        };
-
-        let palette_entries = if bi_clr_used > 0 {
-            bi_clr_used
-        } else if bi_bit_count <= 8 && bi_bit_count > 0 {
-            1u32 << bi_bit_count
-        } else {
-            0
-        };
-
-        let mut mask_size = 0u32;
-        if bi_size == 40 && (bi_compression == 3 || bi_compression == 6) {
-            mask_size = 12; // 3 DWORD masks
-        }
-
-        let off_bits = 14 + bi_size + (palette_entries * 4) + mask_size;
-        let file_size = 14 + dib_size as u32;
-
-        // Construct 14-byte BITMAPFILEHEADER
-        let mut bmp_data = Vec::with_capacity(file_size as usize);
-        bmp_data.extend_from_slice(b"BM"); // bfType
-        bmp_data.extend_from_slice(&file_size.to_le_bytes()); // bfSize
-        bmp_data.extend_from_slice(&0u16.to_le_bytes()); // bfReserved1
-        bmp_data.extend_from_slice(&0u16.to_le_bytes()); // bfReserved2
-        bmp_data.extend_from_slice(&off_bits.to_le_bytes()); // bfOffBits
-        bmp_data.extend_from_slice(dib_slice);
-
-        let _ = GlobalUnlock(h_global);
         let _ = CloseClipboard();
-
-        let encoded = BASE64_STANDARD.encode(&bmp_data);
-        Ok(Some(format!("data:image/bmp;base64,{}", encoded)))
+        Ok(None)
     }
 }
 

@@ -205,8 +205,8 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
         let newClipText: string | null = null;
         let newClipImage: string | undefined = undefined;
 
-        if (content.content_type === 'image' && content.image_data) {
-          const imgKey = content.image_data.substring(0, 80); // unique signature of base64
+        if ((content.content_type === 'image' || content.image_data) && content.image_data) {
+          const imgKey = `img_${content.image_data.length}_${content.image_data.slice(20, 60)}_${content.image_data.slice(-40)}`;
           if (imgKey && imgKey !== lastLocalClipRef.current) {
             lastLocalClipRef.current = imgKey;
             newClipText = content.text || 'Image';

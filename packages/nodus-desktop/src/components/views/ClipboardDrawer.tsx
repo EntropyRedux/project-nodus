@@ -81,15 +81,32 @@ export const ClipboardDrawer: React.FC<ClipboardDrawerProps> = ({
               key={item.id}
               className="p-3 rounded-lg bg-[var(--surface-elevated)] border border-[var(--border-subtle)] hover:border-[var(--border-active)] transition group"
             >
-              <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)] mb-1">
-                <span>{item.deviceName}</span>
+              <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)] mb-1.5">
+                <div className="flex items-center gap-1.5">
+                  {item.type === 'image' && (
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                      IMAGE
+                    </span>
+                  )}
+                  <span>{item.deviceName}</span>
+                </div>
                 <span>{item.timestamp}</span>
               </div>
-              <p className="text-xs text-[var(--text-body)] font-mono break-all line-clamp-3">{item.text}</p>
+              {item.type === 'image' && item.imageData ? (
+                <div className="my-1.5 rounded-lg overflow-hidden border border-[var(--border-subtle)] bg-black/40 flex items-center justify-center max-h-36">
+                  <img
+                    src={item.imageData}
+                    alt="Clipboard preview"
+                    className="max-h-36 w-auto object-contain"
+                  />
+                </div>
+              ) : (
+                <p className="text-xs text-[var(--text-body)] font-mono break-all line-clamp-3">{item.text}</p>
+              )}
               <div className="mt-2 flex justify-end">
                 <button
                   onClick={() => handleCopy(item)}
-                  className="h-6 px-2 rounded bg-[var(--surface-container)] hover:bg-[var(--surface-base)] text-[10px] text-[var(--text-body)] hover:text-[var(--text-heading)] border border-[var(--border-subtle)] flex items-center gap-1 transition"
+                  className="h-6 px-2.5 rounded bg-[var(--surface-container)] hover:bg-[var(--surface-base)] text-[10px] text-[var(--text-body)] hover:text-[var(--text-heading)] border border-[var(--border-subtle)] flex items-center gap-1 transition"
                 >
                   {copiedId === item.id ? <Check size={11} className="text-emerald-500" /> : <Copy size={11} />}
                   <span>{copiedId === item.id ? 'Copied' : 'Copy'}</span>

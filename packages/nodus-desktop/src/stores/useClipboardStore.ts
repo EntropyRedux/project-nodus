@@ -32,7 +32,12 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
     };
 
     set((state) => {
-      const filtered = state.items.filter((i) => i.text !== text || (imageData && i.imageData !== imageData));
+      const filtered = state.items.filter((i) => {
+        if (imageData) {
+          return i.imageData !== imageData;
+        }
+        return i.type === 'image' || i.text !== text;
+      });
       return { items: [newItem, ...filtered].slice(0, 100) };
     });
   },
