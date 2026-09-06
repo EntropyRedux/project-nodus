@@ -356,8 +356,12 @@ fn adler32(data: &[u8]) -> u32 {
 }
 
 #[tauri::command]
-pub fn extract_app_icon(path: String) -> Result<String, String> {
-    extract_exe_icon(&path)
+pub async fn extract_app_icon(path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        extract_exe_icon(&path)
+    })
+    .await
+    .map_err(|e| format!("Task error: {}", e))?
 }
 
 #[cfg(not(windows))]

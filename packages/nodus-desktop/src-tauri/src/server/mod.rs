@@ -13,12 +13,16 @@ use tiny_http::{Header, Method, Response, Server, StatusCode};
 
 use crate::commands::{
     clipboard::{get_clipboard_content, set_win32_clipboard, set_win32_clipboard_image},
-    exec::execute_shortcut,
+    exec::{execute_shortcut, run_terminal_command_internal},
     icon::extract_exe_icon,
     input::{simulate_hotkey, simulate_mouse_click, simulate_mouse_move, simulate_mouse_scroll, simulate_text},
     media::send_media_appcommand,
-    process::get_processes,
-    shortcuts::{get_installed_windows_apps, get_shared_shortcuts, load_shared_config, scan_shortcuts_folder, DiscoveredApp},
+    process::{get_processes_internal, kill_process_internal},
+    shortcuts::{
+        add_watched_folder_internal, get_installed_windows_apps_internal, get_shared_shortcuts,
+        load_shared_config, remove_watched_folder_internal, rescan_all_watched_folders_internal,
+        scan_shortcuts_folder_internal, DiscoveredApp,
+    },
     system::get_system_stats,
 };
 
@@ -355,7 +359,7 @@ pub fn start_server(port: u16) {
                     | (Method::Post, "/api/processes")
                     | (Method::Get, "/rpc/processes")
                     | (Method::Post, "/rpc/processes") => {
-                        match get_processes() {
+                        match get_processes_internal() {
                             Ok(procs) => (200, json!({ "status": "success", "processes": procs })),
                             Err(e) => (500, json!({ "status": "error", "message": e })),
                         }
@@ -368,7 +372,7 @@ pub fn start_server(port: u16) {
                     | (Method::Post, "/rpc/processes/kill") => {
                         if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
                             if let Ok(req) = serde_json::from_str::<KillProcReq>(&body_str) {
-                                match crate::commands::process::kill_process(req.pid) {
+                                match kill_process_internal(req.pid) {
                                     Ok(_) => (200, json!({ "status": "success", "message": format!("Killed PID {}", req.pid) })),
                                     Err(e) => (500, json!({ "status": "error", "message": e })),
                                 }
@@ -696,7 +700,7 @@ pub fn start_server(port: u16) {
 
                     // Query Installed Windows Apps (Full Scan)
                     (Method::Get, "/api/shortcuts/installed") => {
-                        match get_installed_windows_apps() {
+                        match get_installed_windows_apps_internal() {
                             Ok(apps) => (200, json!({ "status": "success", "apps": apps })),
                             Err(e) => (500, json!({ "status": "error", "message": e })),
                         }
@@ -722,7 +726,7 @@ pub fn start_server(port: u16) {
                     (Method::Post, "/api/shortcuts/scan") | (Method::Post, "/api/shortcuts/folder") => {
                         if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
                             if let Ok(req) = serde_json::from_str::<FolderScanReq>(&body_str) {
-                                match scan_shortcuts_folder(&req.path) {
+                                match scan_shortcuts_folder_internal(&req.path) {
                                     Ok(apps) => {
                                         let cfg = load_shared_config();
                                         (200, json!({ "status": "success", "apps": apps, "watched_folders": cfg.watched_folders }))
@@ -741,7 +745,7 @@ pub fn start_server(port: u16) {
                     (Method::Post, "/api/shortcuts/watched/add") => {
                         if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
                             if let Ok(req) = serde_json::from_str::<FolderScanReq>(&body_str) {
-                                match crate::commands::shortcuts::add_watched_folder(req.path) {
+                                match add_watched_folder_internal(req.path) {
                                     Ok(apps) => {
                                         let cfg = load_shared_config();
                                         (200, json!({ "status": "success", "apps": apps, "watched_folders": cfg.watched_folders }))
@@ -760,7 +764,7 @@ pub fn start_server(port: u16) {
                     (Method::Post, "/api/shortcuts/watched/remove") => {
                         if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
                             if let Ok(req) = serde_json::from_str::<FolderScanReq>(&body_str) {
-                                let updated_folders = crate::commands::shortcuts::remove_watched_folder(req.path);
+                                let updated_folders = remove_watched_folder_internal(req.path);
                                 (200, json!({ "status": "success", "watched_folders": updated_folders }))
                             } else {
                                 (400, json!({ "status": "error", "message": "Invalid JSON body" }))
@@ -772,7 +776,7 @@ pub fn start_server(port: u16) {
 
                     // Rescan All Watched Folders
                     (Method::Post, "/api/shortcuts/watched/rescan") => {
-                        match crate::commands::shortcuts::rescan_all_watched_folders() {
+                        match rescan_all_watched_folders_internal() {
                             Ok(shortcuts) => {
                                 let cfg = load_shared_config();
                                 (200, json!({ "status": "success", "shortcuts": shortcuts, "watched_folders": cfg.watched_folders }))
@@ -806,12 +810,7 @@ pub fn start_server(port: u16) {
                         if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
                             if let Ok(req) = serde_json::from_str::<ExecReq>(&body_str) {
                                 let cmd = req.command_or_path.or(req.command).unwrap_or_default();
-                                match crate::commands::exec::execute_local_command(crate::commands::exec::ExecRequest {
-                                    command_or_path: cmd,
-                                    args: req.args,
-                                    working_dir: req.working_dir,
-                                    run_as_admin: req.run_as_admin,
-                                }) {
+                                match execute_shortcut(&cmd, req.args.as_deref(), req.working_dir.as_deref(), req.run_as_admin.unwrap_or(false)) {
                                     Ok(_) => (200, json!({ "status": "success", "message": "Command executed successfully" })),
                                     Err(e) => (500, json!({ "status": "error", "message": e })),
                                 }
@@ -829,7 +828,7 @@ pub fn start_server(port: u16) {
                             if let Ok(req) = serde_json::from_str::<serde_json::Value>(&body_str) {
                                 let cmd = req.get("command").and_then(|v| v.as_str()).unwrap_or_default().to_string();
                                 let cwd = req.get("cwd").and_then(|v| v.as_str()).map(|s| s.to_string());
-                                match crate::commands::exec::run_terminal_command(cmd, cwd) {
+                                match run_terminal_command_internal(cmd, cwd) {
                                     Ok(res) => (200, json!({
                                         "status": "success",
                                         "stdout": res.stdout,

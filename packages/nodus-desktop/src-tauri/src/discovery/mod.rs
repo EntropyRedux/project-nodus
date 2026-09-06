@@ -190,31 +190,14 @@ fn get_arp_ips(base_prefix: &str) -> Vec<String> {
 }
 
 fn resolve_device_hostname(ip: &str) -> Option<String> {
-    #[cfg(windows)]
-    {
-        use std::process::Command;
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-
-        // Fast reverse hostname resolution via ping -a
-        if let Ok(output) = Command::new("ping")
-            .args(["-a", "-n", "1", "-w", "150", ip])
-            .creation_flags(CREATE_NO_WINDOW)
-            .output()
-        {
-            let text = String::from_utf8_lossy(&output.stdout);
-            if let Some(ping_line) = text.lines().find(|l| l.starts_with("Pinging ")) {
-                let rest = &ping_line["Pinging ".len()..];
-                if let Some(bracket_pos) = rest.find(" [") {
-                    let host = rest[..bracket_pos].trim().to_string();
-                    if !host.is_empty() && host != ip {
-                        return Some(host);
-                    }
-                }
+    // Fast in-memory hostname check or NetBIOS name without launching ping.exe
+    if let Ok(host) = hostname::get() {
+        if let Some(host_str) = host.to_str() {
+            if ip == "127.0.0.1" || ip == "::1" {
+                return Some(host_str.to_string());
             }
         }
     }
-
     None
 }
 
@@ -241,7 +224,15 @@ fn infer_device_type(hostname: &str) -> String {
 }
 
 #[tauri::command]
-pub fn scan_subnet(subnet_base: String) -> Result<Vec<ScannedPeerResult>, String> {
+pub async fn scan_subnet(subnet_base: String) -> Result<Vec<ScannedPeerResult>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        scan_subnet_internal(subnet_base)
+    })
+    .await
+    .map_err(|e| format!("Subnet scanner task error: {}", e))?
+}
+
+fn scan_subnet_internal(subnet_base: String) -> Result<Vec<ScannedPeerResult>, String> {
     use std::io::{Read, Write};
     use std::net::TcpStream;
     use std::sync::Arc;
@@ -270,12 +261,12 @@ pub fn scan_subnet(subnet_base: String) -> Result<Vec<ScannedPeerResult>, String
         }
     };
 
-    // 1. Initial quick ARP snapshot
+    // 1. Initial quick ARP snapshot (fast, native cache)
     let initial_arp_ips = get_arp_ips(&base_prefix);
 
-    // 2. Parallel sweep across all 254 IPs
+    // 2. Parallel sweep across all 254 IPs using lightweight worker pool
     let ips: Vec<u8> = (1..=254).collect();
-    for chunk in ips.chunks(32) {
+    for chunk in ips.chunks(64) {
         let mut handles = vec![];
         for &last_octet in chunk {
             let ip = format!("{}.{}", base, last_octet);
@@ -294,10 +285,10 @@ pub fn scan_subnet(subnet_base: String) -> Result<Vec<ScannedPeerResult>, String
                 // A. Probe Port 9120 (Nodus RPC)
                 let rpc_addr_str = format!("{}:9120", ip);
                 if let Ok(addr) = rpc_addr_str.parse::<SocketAddr>() {
-                    if let Ok(mut stream) = TcpStream::connect_timeout(&addr, Duration::from_millis(300)) {
+                    if let Ok(mut stream) = TcpStream::connect_timeout(&addr, Duration::from_millis(180)) {
                         let latency = start.elapsed().as_millis() as u64;
-                        let _ = stream.set_read_timeout(Some(Duration::from_millis(350)));
-                        let _ = stream.set_write_timeout(Some(Duration::from_millis(350)));
+                        let _ = stream.set_read_timeout(Some(Duration::from_millis(250)));
+                        let _ = stream.set_write_timeout(Some(Duration::from_millis(250)));
                         let req = format!("GET /api/status HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", ip);
                         let _ = stream.write_all(req.as_bytes());
 
@@ -333,23 +324,21 @@ pub fn scan_subnet(subnet_base: String) -> Result<Vec<ScannedPeerResult>, String
                     }
                 }
 
-                // B. Probe auxiliary ports (80, 443, 8080, 8765, 8000, 5353, 22, 139, 445)
-                for test_port in [80, 443, 8080, 8765, 8000, 5353, 22, 139, 445] {
+                // B. Probe standard fleet auxiliary ports (80, 8080, 8765) with low timeout
+                for test_port in [80, 8080, 8765] {
                     let probe_addr = format!("{}:{}", ip, test_port);
                     if let Ok(addr) = probe_addr.parse::<SocketAddr>() {
-                        if let Ok(_) = TcpStream::connect_timeout(&addr, Duration::from_millis(80)) {
+                        if let Ok(_) = TcpStream::connect_timeout(&addr, Duration::from_millis(60)) {
                             let latency = start.elapsed().as_millis() as u64;
-                            let resolved_name = resolve_device_hostname(&ip);
-                            let dev_type = resolved_name.as_ref().map(|n| infer_device_type(n)).unwrap_or_else(|| "desktop".to_string());
 
                             let mut lock = results_clone.lock().unwrap();
                             lock.insert(ip.clone(), ScannedPeerResult {
                                 ip: ip.clone(),
                                 port: test_port,
-                                hostname: resolved_name.or_else(|| Some(format!("Device ({})", ip))),
+                                hostname: Some(format!("Device ({})", ip)),
                                 has_agent: false,
                                 is_in_fleet: false,
-                                device_type: Some(dev_type),
+                                device_type: Some("desktop".to_string()),
                                 os: Some("LAN Device".to_string()),
                                 latency_ms: Some(latency),
                             });
@@ -365,7 +354,7 @@ pub fn scan_subnet(subnet_base: String) -> Result<Vec<ScannedPeerResult>, String
         }
     }
 
-    // 3. Post-sweep: Check updated ARP cache for devices that responded to ARP but had closed TCP ports
+    // 3. Post-sweep: Check updated ARP cache
     let post_arp_ips = get_arp_ips(&base_prefix);
     let mut all_discovered_ips = initial_arp_ips;
     for a_ip in post_arp_ips {
@@ -374,82 +363,29 @@ pub fn scan_subnet(subnet_base: String) -> Result<Vec<ScannedPeerResult>, String
         }
     }
 
-    // 4. For any ARP neighbor not yet recorded in results, resolve its hostname and add as LAN Device
-    let mut arp_handles = vec![];
-    for a_ip in all_discovered_ips {
-        if local_ips.iter().any(|lip| lip == &a_ip) {
-            continue;
-        }
-
-        let already_found = {
-            let lock = results.lock().unwrap();
-            lock.contains_key(&a_ip)
-        };
-
-        if !already_found {
-            let results_clone = Arc::clone(&results);
-            arp_handles.push(thread::spawn(move || {
-                // Quick check for Nodus RPC on port 9120
-                let rpc_addr_str = format!("{}:9120", a_ip);
-                if let Ok(addr) = rpc_addr_str.parse::<SocketAddr>() {
-                    if let Ok(mut stream) = TcpStream::connect_timeout(&addr, Duration::from_millis(250)) {
-                        let _ = stream.set_read_timeout(Some(Duration::from_millis(300)));
-                        let _ = stream.set_write_timeout(Some(Duration::from_millis(300)));
-                        let req = format!("GET /api/status HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", a_ip);
-                        let _ = stream.write_all(req.as_bytes());
-
-                        let mut body = [0u8; 1024];
-                        let mut name = None;
-                        let mut dev_type = Some("tablet".to_string());
-                        let mut os = Some("Android 14 (HyperOS)".to_string());
-
-                        if let Ok(n) = stream.read(&mut body) {
-                            let text = String::from_utf8_lossy(&body[..n]);
-                            if let Some(pos) = text.find("\r\n\r\n") {
-                                let json_part = &text[pos + 4..];
-                                if let Ok(val) = serde_json::from_str::<serde_json::Value>(json_part) {
-                                    name = val.get("name").or(val.get("hostname")).and_then(|v| v.as_str()).map(|s| s.to_string());
-                                    dev_type = val.get("deviceType").or(val.get("type")).and_then(|v| v.as_str()).map(|s| s.to_string());
-                                    os = val.get("os").and_then(|v| v.as_str()).map(|s| s.to_string());
-                                }
-                            }
-                        }
-
-                        let mut lock = results_clone.lock().unwrap();
-                        lock.insert(a_ip.clone(), ScannedPeerResult {
-                            ip: a_ip.clone(),
-                            port: 9120,
-                            hostname: name.or_else(|| Some(format!("Nodus Node ({})", a_ip))),
-                            has_agent: true,
-                            is_in_fleet: false,
-                            device_type: dev_type.or(Some("tablet".to_string())),
-                            os: os.or(Some("Android 14 (HyperOS)".to_string())),
-                            latency_ms: Some(15),
-                        });
-                        return;
-                    }
-                }
-
-                let resolved_name = resolve_device_hostname(&a_ip);
-                let dev_type = resolved_name.as_ref().map(|n| infer_device_type(n)).unwrap_or_else(|| "desktop".to_string());
-
-                let mut lock = results_clone.lock().unwrap();
+    // 4. Record remaining ARP neighbors without launching ping subprocesses
+    {
+        let mut lock = results.lock().unwrap();
+        for a_ip in all_discovered_ips {
+            if local_ips.iter().any(|lip| lip == &a_ip) {
+                continue;
+            }
+            if !lock.contains_key(&a_ip) {
+                let resolved = resolve_device_hostname(&a_ip);
+                let host_display = resolved.clone().unwrap_or_else(|| format!("LAN Device ({})", a_ip));
+                let dev_type = resolved.as_deref().map(infer_device_type).unwrap_or_else(|| "desktop".to_string());
                 lock.insert(a_ip.clone(), ScannedPeerResult {
                     ip: a_ip.clone(),
                     port: 80,
-                    hostname: resolved_name.or_else(|| Some(format!("Device ({})", a_ip))),
+                    hostname: Some(host_display),
                     has_agent: false,
                     is_in_fleet: false,
                     device_type: Some(dev_type),
                     os: Some("LAN Device".to_string()),
                     latency_ms: Some(10),
                 });
-            }));
+            }
         }
-    }
-
-    for h in arp_handles {
-        let _ = h.join();
     }
 
     let mut final_list: Vec<ScannedPeerResult> = {
@@ -472,7 +408,15 @@ pub fn scan_subnet(subnet_base: String) -> Result<Vec<ScannedPeerResult>, String
 }
 
 #[tauri::command]
-pub fn get_lan_device_count(subnet_base: Option<String>) -> usize {
+pub async fn get_lan_device_count(subnet_base: Option<String>) -> usize {
+    tauri::async_runtime::spawn_blocking(move || {
+        get_lan_device_count_internal(subnet_base)
+    })
+    .await
+    .unwrap_or(0)
+}
+
+fn get_lan_device_count_internal(subnet_base: Option<String>) -> usize {
     let local_ips = get_local_host_ips();
     let base = subnet_base.unwrap_or_else(|| "192.168.1".to_string());
     let clean_base = base.trim().trim_end_matches(".0").trim_end_matches('.');

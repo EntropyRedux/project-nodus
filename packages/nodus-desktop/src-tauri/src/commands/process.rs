@@ -28,7 +28,15 @@ fn get_logical_cores() -> usize {
 
 /// List all running processes on Windows
 #[tauri::command]
-pub fn get_processes() -> Result<Vec<ProcessInfo>, String> {
+pub async fn get_processes() -> Result<Vec<ProcessInfo>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        get_processes_internal()
+    })
+    .await
+    .map_err(|e| format!("Task error: {}", e))?
+}
+
+pub fn get_processes_internal() -> Result<Vec<ProcessInfo>, String> {
     #[cfg(windows)]
     {
         get_processes_windows()
@@ -212,7 +220,15 @@ fn get_processes_windows() -> Result<Vec<ProcessInfo>, String> {
 
 /// Kill a process by PID
 #[tauri::command]
-pub fn kill_process(pid: u32) -> Result<bool, String> {
+pub async fn kill_process(pid: u32) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        kill_process_internal(pid)
+    })
+    .await
+    .map_err(|e| format!("Task error: {}", e))?
+}
+
+pub fn kill_process_internal(pid: u32) -> Result<bool, String> {
     #[cfg(windows)]
     {
         kill_process_windows(pid)

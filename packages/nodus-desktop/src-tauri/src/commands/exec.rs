@@ -4,6 +4,8 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecRequest {
@@ -23,8 +25,12 @@ pub struct TerminalExecResult {
 }
 
 #[tauri::command]
-pub fn execute_local_command(req: ExecRequest) -> Result<bool, String> {
-    execute_shortcut(&req.command_or_path, req.args.as_deref(), req.working_dir.as_deref(), req.run_as_admin.unwrap_or(false))
+pub async fn execute_local_command(req: ExecRequest) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        execute_shortcut(&req.command_or_path, req.args.as_deref(), req.working_dir.as_deref(), req.run_as_admin.unwrap_or(false))
+    })
+    .await
+    .map_err(|e| format!("Task error: {}", e))?
 }
 
 #[tauri::command]
@@ -45,7 +51,15 @@ pub fn get_default_working_dir() -> String {
 }
 
 #[tauri::command]
-pub fn run_terminal_command(command: String, cwd: Option<String>) -> Result<TerminalExecResult, String> {
+pub async fn run_terminal_command(command: String, cwd: Option<String>) -> Result<TerminalExecResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        run_terminal_command_internal(command, cwd)
+    })
+    .await
+    .map_err(|e| format!("Task error: {}", e))?
+}
+
+pub fn run_terminal_command_internal(command: String, cwd: Option<String>) -> Result<TerminalExecResult, String> {
     let trimmed = command.trim();
     let default_dir = get_default_working_dir();
 
@@ -76,6 +90,8 @@ pub fn run_terminal_command(command: String, cwd: Option<String>) -> Result<Term
 
         let mut cmd = Command::new("powershell");
         cmd.args(["-NoProfile", "-NonInteractive", "-Command", &script]);
+        #[cfg(windows)]
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
         if Path::new(&valid_cwd).is_dir() {
             cmd.current_dir(&valid_cwd);
         }

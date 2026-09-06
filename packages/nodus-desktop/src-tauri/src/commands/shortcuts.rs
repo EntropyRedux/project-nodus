@@ -7,6 +7,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Mutex;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 
 use crate::commands::icon::extract_exe_icon;
 
@@ -268,7 +270,15 @@ pub fn determine_lucide_icon_and_color(name: &str, app_id: &str) -> (&'static st
 
 /// Scan all installed Windows applications using PowerShell Get-StartApps
 #[tauri::command]
-pub fn get_installed_windows_apps() -> Result<Vec<DiscoveredApp>, String> {
+pub async fn get_installed_windows_apps() -> Result<Vec<DiscoveredApp>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        get_installed_windows_apps_internal()
+    })
+    .await
+    .map_err(|e| format!("Task error: {}", e))?
+}
+
+pub fn get_installed_windows_apps_internal() -> Result<Vec<DiscoveredApp>, String> {
     #[cfg(windows)]
     {
         let mut results = Vec::new();
@@ -303,7 +313,12 @@ pub fn get_installed_windows_apps() -> Result<Vec<DiscoveredApp>, String> {
 
         // 2. Scan Get-StartApps for UWP & Registry Registered Apps
         let ps_cmd = "Get-StartApps | Select-Object Name, AppID | ConvertTo-Json -Compress";
-        if let Ok(output) = Command::new("powershell").args(["-NoProfile", "-Command", ps_cmd]).output() {
+        let mut cmd = Command::new("powershell");
+        cmd.args(["-NoProfile", "-Command", ps_cmd]);
+        #[cfg(windows)]
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+
+        if let Ok(output) = cmd.output() {
             let out_str = String::from_utf8_lossy(&output.stdout);
             let trimmed = out_str.trim();
 
@@ -482,7 +497,15 @@ fn regex_replace_case_insensitive(source: &str, token: &str, replacement: &str) 
 
 /// Scan a watched folder for .lnk, .url, .exe, .bat, .cmd, .ps1, and other executable scripts
 #[tauri::command]
-pub fn scan_shortcuts_folder(folder_path: &str) -> Result<Vec<DiscoveredApp>, String> {
+pub async fn scan_shortcuts_folder(folder_path: String) -> Result<Vec<DiscoveredApp>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        scan_shortcuts_folder_internal(&folder_path)
+    })
+    .await
+    .map_err(|e| format!("Task error: {}", e))?
+}
+
+pub fn scan_shortcuts_folder_internal(folder_path: &str) -> Result<Vec<DiscoveredApp>, String> {
     let p = expand_path_str(folder_path);
     if !p.exists() {
         let _ = fs::create_dir_all(&p);
@@ -552,7 +575,15 @@ pub fn set_shared_shortcuts(shortcuts: Vec<DiscoveredApp>) {
 }
 
 #[tauri::command]
-pub fn add_watched_folder(path: String) -> Result<Vec<DiscoveredApp>, String> {
+pub async fn add_watched_folder(path: String) -> Result<Vec<DiscoveredApp>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        add_watched_folder_internal(path)
+    })
+    .await
+    .map_err(|e| format!("Task error: {}", e))?
+}
+
+pub fn add_watched_folder_internal(path: String) -> Result<Vec<DiscoveredApp>, String> {
     let p = expand_path_str(&path);
     if !p.exists() {
         let _ = fs::create_dir_all(&p);
@@ -563,7 +594,7 @@ pub fn add_watched_folder(path: String) -> Result<Vec<DiscoveredApp>, String> {
         cfg.watched_folders.push(expanded.clone());
     }
 
-    let discovered = scan_shortcuts_folder(&expanded)?;
+    let discovered = scan_shortcuts_folder_internal(&expanded)?;
     for item in &discovered {
         if !cfg.shortcuts.iter().any(|s| s.path_or_appid == item.path_or_appid) {
             cfg.shortcuts.push(item.clone());
@@ -581,7 +612,15 @@ pub fn get_watched_folders() -> Vec<String> {
 }
 
 #[tauri::command]
-pub fn remove_watched_folder(path: String) -> Vec<String> {
+pub async fn remove_watched_folder(path: String) -> Vec<String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        remove_watched_folder_internal(path)
+    })
+    .await
+    .unwrap_or_default()
+}
+
+pub fn remove_watched_folder_internal(path: String) -> Vec<String> {
     let mut cfg = load_shared_config();
     let expanded = expand_path_str(&path).to_string_lossy().to_string();
     cfg.watched_folders.retain(|f| f != &path && f != &expanded);
@@ -590,12 +629,20 @@ pub fn remove_watched_folder(path: String) -> Vec<String> {
 }
 
 #[tauri::command]
-pub fn rescan_all_watched_folders() -> Result<Vec<DiscoveredApp>, String> {
+pub async fn rescan_all_watched_folders() -> Result<Vec<DiscoveredApp>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        rescan_all_watched_folders_internal()
+    })
+    .await
+    .map_err(|e| format!("Task error: {}", e))?
+}
+
+pub fn rescan_all_watched_folders_internal() -> Result<Vec<DiscoveredApp>, String> {
     let mut cfg = load_shared_config();
     let mut added_any = false;
 
     for folder in &cfg.watched_folders {
-        if let Ok(discovered) = scan_shortcuts_folder(folder) {
+        if let Ok(discovered) = scan_shortcuts_folder_internal(folder) {
             for item in discovered {
                 if !cfg.shortcuts.iter().any(|s| s.path_or_appid == item.path_or_appid) {
                     cfg.shortcuts.push(item);
@@ -657,7 +704,7 @@ pub fn start_watched_folders_monitor(app_handle: Option<tauri::AppHandle>) {
                 let is_first_run = last_snapshot.is_empty();
                 last_snapshot = current_snapshot;
 
-                if let Ok(updated_shortcuts) = rescan_all_watched_folders() {
+                if let Ok(updated_shortcuts) = rescan_all_watched_folders_internal() {
                     if !is_first_run {
                         println!("[NodusShortcuts] Auto-detected changes in watched folders. Synced shortcuts to shared store.");
                     }
