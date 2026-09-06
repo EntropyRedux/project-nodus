@@ -286,6 +286,12 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
     }, 2400);
   };
 
+  const getDeviceEndpoint = (ip: string, path: string): string => {
+    const host = ip.includes(':') ? ip : `${ip}:9120`;
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    return `http://${host}${cleanPath}`;
+  };
+
   const handleTrackpadMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!targetDevice || !targetDevice.ipAddress) return;
     const rect = e.currentTarget.getBoundingClientRect();
@@ -296,8 +302,9 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
     const dx = Math.round((e.movementX || 0) * (sensitivity === 'fast' ? 2.5 : sensitivity === 'precision' ? 0.6 : 1.2));
     const dy = Math.round((e.movementY || 0) * (sensitivity === 'fast' ? 2.5 : sensitivity === 'precision' ? 0.6 : 1.2));
     if (dx !== 0 || dy !== 0) {
-      universalNetworkFetch(`http://${targetDevice.ipAddress}/api/input/mouse/move`, {
+      universalNetworkFetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/mouse/move'), {
         method: 'POST',
+        headers: { 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
         body: { dx, dy },
         timeoutMs: 1500,
       }).catch(() => {});
@@ -332,8 +339,9 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
     setCursorPos({ x, y });
 
     if (dx !== 0 || dy !== 0) {
-      universalNetworkFetch(`http://${targetDevice.ipAddress}/api/input/mouse/move`, {
+      universalNetworkFetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/mouse/move'), {
         method: 'POST',
+        headers: { 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
         body: { dx, dy },
         timeoutMs: 1500,
       }).catch(() => {});
@@ -365,8 +373,9 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
     triggerRipple(x, y, buttonName === 'left' ? '#9ECAFF' : buttonName === 'middle' ? '#82D5A5' : '#D4AAFF');
     showTelemetry(`${buttonName.toUpperCase()} Click sent to ${targetDevice.name}`);
 
-    universalNetworkFetch(`http://${targetDevice.ipAddress}/api/input/mouse/click`, {
+    universalNetworkFetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/mouse/click'), {
       method: 'POST',
+      headers: { 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
       body: { button: buttonName },
       timeoutMs: 1500,
     }).catch(() => {});
@@ -378,8 +387,9 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
     const dy = Math.round(e.deltaY);
     showTelemetry(dy > 0 ? 'Scroll Down' : 'Scroll Up');
 
-    universalNetworkFetch(`http://${targetDevice.ipAddress}/api/input/mouse/scroll`, {
+    universalNetworkFetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/mouse/scroll'), {
       method: 'POST',
+      headers: { 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
       body: { dx: 0, dy },
       timeoutMs: 1500,
     }).catch(() => {});
@@ -392,8 +402,9 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
     triggerRipple(cursorPos.x, cursorPos.y, color);
     showTelemetry(`${buttonName.toUpperCase()} Click sent to ${targetDevice.name}`);
 
-    universalNetworkFetch(`http://${targetDevice.ipAddress}/api/input/mouse/click`, {
+    universalNetworkFetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/mouse/click'), {
       method: 'POST',
+      headers: { 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
       body: { button: buttonName },
       timeoutMs: 1500,
     }).catch(() => {});
@@ -402,6 +413,8 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
   const handleMediaAction = (action: string) => {
     if (!targetDevice || !targetDevice.ipAddress) return;
     triggerHaptic(12);
+    const mappedAction = action === 'prev' ? 'prev_track' : action === 'next' ? 'next_track' : action;
+
     if (action === 'play_pause') {
       setIsPlaying(!isPlaying);
       showTelemetry(!isPlaying ? 'Media Play command sent' : 'Media Pause command sent');
@@ -409,11 +422,46 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
       showTelemetry(`Media ${action.toUpperCase()} command sent`);
     }
 
-    universalNetworkFetch(`http://${targetDevice.ipAddress}/api/media/control`, {
+    universalNetworkFetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/media'), {
       method: 'POST',
-      body: { action },
+      headers: { 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+      body: { action: mappedAction },
       timeoutMs: 2000,
     }).catch(() => {});
+  };
+
+  const handleToggleMute = () => {
+    if (!targetDevice || !targetDevice.ipAddress) return;
+    setIsMuted(prev => !prev);
+    triggerHaptic(12);
+    showTelemetry(!isMuted ? 'Muted workstation audio' : 'Unmuted workstation audio');
+
+    universalNetworkFetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/media'), {
+      method: 'POST',
+      headers: { 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+      body: { action: 'volume_mute' },
+      timeoutMs: 2000,
+    }).catch(() => {});
+  };
+
+  const handleVolumeChange = (newVal: number) => {
+    if (!targetDevice || !targetDevice.ipAddress) return;
+    const diff = newVal - volume;
+    setVolume(newVal);
+    setIsMuted(false);
+
+    const action = diff > 0 ? 'volume_up' : 'volume_down';
+    const steps = Math.min(5, Math.max(1, Math.round(Math.abs(diff) / 5)));
+    showTelemetry(`Volume set to ${newVal}%`);
+
+    for (let i = 0; i < steps; i++) {
+      universalNetworkFetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/media'), {
+        method: 'POST',
+        headers: { 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+        body: { action },
+        timeoutMs: 2000,
+      }).catch(() => {});
+    }
   };
 
   const handleHotkeyClick = (hk: Hotkey) => {
@@ -421,8 +469,9 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
     triggerHaptic(12);
     showTelemetry(`Hotkey [${hk.label}] executed on ${targetDevice.name}`);
 
-    universalNetworkFetch(`http://${targetDevice.ipAddress}/api/input/keyboard/hotkey`, {
+    universalNetworkFetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/keyboard/hotkey'), {
       method: 'POST',
+      headers: { 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
       body: { keys: hk.keys },
       timeoutMs: 2000,
     }).catch(() => {});
@@ -433,9 +482,10 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
     triggerHaptic([25, 50, 25]);
     showTelemetry(`Lock Workstation command sent to ${targetDevice.name}`);
 
-    universalNetworkFetch(`http://${targetDevice.ipAddress}/api/lock`, {
+    universalNetworkFetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/system/control'), {
       method: 'POST',
-      body: {},
+      headers: { 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+      body: { action: 'lock' },
       timeoutMs: 2000,
     }).catch(() => {});
   };
@@ -447,8 +497,9 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
     showTelemetry(`Injected "${clean.slice(0, 18)}${clean.length > 18 ? '...' : ''}"`);
     setRecentInjections(prev => [clean, ...prev.filter(t => t !== clean)].slice(0, 6));
 
-    universalNetworkFetch(`http://${targetDevice.ipAddress}/api/input/keyboard/text`, {
+    universalNetworkFetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/keyboard/text'), {
       method: 'POST',
+      headers: { 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
       body: { text: clean },
       timeoutMs: 2000,
     }).catch(() => {});
@@ -995,12 +1046,10 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
             {/* Volume Slider & Mute Toggle */}
             <div className="flex items-center gap-3 pt-1">
               <button
-                onClick={() => {
-                  setIsMuted(!isMuted);
-                  showTelemetry(!isMuted ? 'Muted workstation audio' : 'Unmuted workstation audio');
-                }}
+                onClick={handleToggleMute}
                 disabled={!targetDevice}
-                className="w-9 h-9 rounded-lg bg-[#1D2024] hover:bg-[#33353A] text-slate-300 disabled:opacity-40 transition border border-white/5 flex items-center justify-center"
+                className="w-9 h-9 rounded-lg bg-[#1D2024] hover:bg-[#33353A] text-slate-300 disabled:opacity-40 transition border border-white/5 flex items-center justify-center cursor-pointer"
+                title={isMuted ? 'Unmute Audio' : 'Mute Audio'}
               >
                 <VolumeIcon className="w-4 h-4" />
               </button>
@@ -1010,12 +1059,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
                 min="0"
                 max="100"
                 value={isMuted ? 0 : volume}
-                onChange={e => {
-                  const val = Number(e.target.value);
-                  setVolume(val);
-                  setIsMuted(false);
-                  showTelemetry(`Volume set to ${val}%`);
-                }}
+                onChange={e => handleVolumeChange(Number(e.target.value))}
                 disabled={!targetDevice}
                 className="flex-1 accent-[#A8C7FA] cursor-pointer disabled:opacity-40"
               />

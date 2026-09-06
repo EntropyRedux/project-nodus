@@ -23,7 +23,7 @@ use crate::commands::{
         load_shared_config, remove_watched_folder_internal, rescan_all_watched_folders_internal,
         scan_shortcuts_folder_internal, DiscoveredApp,
     },
-    system::get_system_stats,
+    system::{get_system_stats, lock_workstation},
 };
 
 static SERVER_RUNNING: AtomicBool = AtomicBool::new(false);
@@ -557,6 +557,53 @@ pub fn start_server(port: u16) {
                             }
                         } else {
                             (400, json!({ "status": "error", "message": "Body exceeds maximum size" }))
+                        }
+                    }
+
+                    // Media & Sound Control Deck
+                    (Method::Post, "/api/media") | (Method::Post, "/api/media/control") => {
+                        if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
+                            if let Ok(req) = serde_json::from_str::<MediaControlReq>(&body_str) {
+                                match send_media_appcommand(&req.action) {
+                                    Ok(_) => (200, json!({ "status": "success", "action": req.action })),
+                                    Err(e) => (500, json!({ "status": "error", "message": e })),
+                                }
+                            } else {
+                                (400, json!({ "status": "error", "message": "Invalid JSON body for media control" }))
+                            }
+                        } else {
+                            (400, json!({ "status": "error", "message": "Body exceeds maximum size" }))
+                        }
+                    }
+
+                    // System Control Deck (Lock Workstation)
+                    (Method::Post, "/api/system/control") | (Method::Post, "/api/lock") => {
+                        if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
+                            let action = serde_json::from_str::<SystemControlReq>(&body_str)
+                                .map(|r| r.action)
+                                .unwrap_or_else(|_| "lock".to_string());
+                            
+                            match action.as_str() {
+                                "lock" => match lock_workstation() {
+                                    Ok(_) => (200, json!({ "status": "success", "message": "Workstation locked" })),
+                                    Err(e) => (500, json!({ "status": "error", "message": e })),
+                                },
+                                other => (400, json!({ "status": "error", "message": format!("Unsupported system action: {}", other) })),
+                            }
+                        } else {
+                            // Fallback for empty body lock request
+                            match lock_workstation() {
+                                Ok(_) => (200, json!({ "status": "success", "message": "Workstation locked" })),
+                                Err(e) => (500, json!({ "status": "error", "message": e })),
+                            }
+                        }
+                    }
+
+                    // System Telemetry & Stats Query
+                    (Method::Get, "/api/system/stats") | (Method::Get, "/api/stats") => {
+                        match get_system_stats() {
+                            Ok(stats) => (200, json!({ "status": "success", "stats": stats })),
+                            Err(e) => (500, json!({ "status": "error", "message": e })),
                         }
                     }
 
