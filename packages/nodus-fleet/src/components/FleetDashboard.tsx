@@ -48,7 +48,7 @@ import { RemoteTerminal } from './RemoteTerminal';
 import { DevicePairingModal } from './DevicePairingModal';
 import { RemoteAppShortcuts } from './RemoteAppShortcuts';
 import { ClipboardDrawer } from './ClipboardDrawer';
-import { SharedApp, ScannedPeer } from '../types/ui-contracts';
+import { SharedApp, ScannedPeer, TrustedEntry } from '../types/ui-contracts';
 
 import { universalNetworkFetch } from '../services/FleetDirectClient';
 
@@ -115,6 +115,47 @@ export const FleetDashboard: React.FC = () => {
   const [isScanningSubnet, setIsScanningSubnet] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
   const [scannedPeers, setScannedPeers] = useState<ScannedPeer[]>([]);
+
+  // Trusted devices & inline nickname registry
+  const [trustedDevices, setTrustedDevices] = useState<Record<string, TrustedEntry>>(() => {
+    try {
+      const raw = localStorage.getItem('nodus_trusted_devices');
+      if (raw) return JSON.parse(raw);
+    } catch (_) {}
+    return {};
+  });
+
+  const setDeviceNickname = (ip: string, nickname: string, trusted = true) => {
+    const cleanIp = ip.trim();
+    const cleanNick = nickname.trim();
+    const updated = {
+      ...trustedDevices,
+      [cleanIp]: {
+        nickname: cleanNick,
+        trusted,
+        firstSeen: trustedDevices[cleanIp]?.firstSeen || Date.now(),
+      },
+    };
+
+    try {
+      localStorage.setItem('nodus_trusted_devices', JSON.stringify(updated));
+    } catch (_) {}
+
+    setTrustedDevices(updated);
+
+    setScannedPeers(prev =>
+      prev.map(p =>
+        p.ip === cleanIp
+          ? {
+              ...p,
+              nickname: cleanNick || undefined,
+              isTrusted: trusted,
+              isUnknown: !trusted,
+            }
+          : p
+      )
+    );
+  };
 
   // Remote app shortcuts (dynamically loaded from local storage & connected peer daemon)
   const [myApps, setMyApps] = useState<SharedApp[]>(() => {
@@ -251,7 +292,7 @@ export const FleetDashboard: React.FC = () => {
     }));
   };
 
-  // Subnet Scanning native call
+  // Subnet Scanning native call & web fallback
   const handleStartScan = async (targetSubnet: string) => {
     setIsScanningSubnet(true);
     setScanProgress(10);
@@ -267,10 +308,17 @@ export const FleetDashboard: React.FC = () => {
         setScanProgress(90);
         if (rawJson && rawJson.startsWith('[')) {
           const list: ScannedPeer[] = JSON.parse(rawJson);
-          const mapped = list.map(p => ({
-            ...p,
-            isInFleet: devices.some(d => d.ipAddress === p.ip)
-          }));
+          const mapped: ScannedPeer[] = list.map(p => {
+            const trustInfo = trustedDevices[p.ip];
+            const isTrusted = trustInfo ? trustInfo.trusted : p.hasAgent;
+            return {
+              ...p,
+              nickname: trustInfo?.nickname || undefined,
+              isTrusted,
+              isUnknown: !isTrusted,
+              isInFleet: devices.some(d => d.ipAddress === p.ip),
+            };
+          });
           setScannedPeers(mapped);
         }
       } catch (e) {
@@ -282,20 +330,80 @@ export const FleetDashboard: React.FC = () => {
       return;
     }
 
-    // Web simulation fallback
-    setIsScanningSubnet(false);
-    setScanProgress(100);
+    // Web simulation / HTTP probing fallback
+    try {
+      setScanProgress(25);
+      const discovered: ScannedPeer[] = [];
+      const probes = [];
+
+      for (let i = 1; i <= 254; i++) {
+        const ip = `${cleanSubnet}.${i}`;
+        probes.push(
+          (async () => {
+            try {
+              const url = `http://${ip}:9120/api/status`;
+              const res = await universalNetworkFetch<{ name?: string; hostname?: string; os?: string; deviceType?: string }>(url, { timeoutMs: 600 });
+              if (res && res.ok) {
+                const trustInfo = trustedDevices[ip];
+                discovered.push({
+                  ip,
+                  port: 9120,
+                  hostname: res.data?.name || res.data?.hostname || `Nodus Node (${ip})`,
+                  nickname: trustInfo?.nickname,
+                  hasAgent: true,
+                  isTrusted: trustInfo ? trustInfo.trusted : true,
+                  isUnknown: trustInfo ? !trustInfo.trusted : false,
+                  isInFleet: devices.some(d => d.ipAddress === ip),
+                  deviceType: (res.data?.deviceType as any) || 'desktop',
+                  os: res.data?.os || 'windows',
+                });
+              }
+            } catch (_) {}
+          })()
+        );
+      }
+
+      await Promise.all(probes);
+      setScannedPeers(discovered);
+    } catch (err) {
+      console.warn('Web scan failed', err);
+    } finally {
+      setScanProgress(100);
+      setIsScanningSubnet(false);
+    }
   };
 
-  const handlePairDevice = (ip: string, port: number, token: string) => {
-    const peer = scannedPeers.find(p => p.ip === ip);
+  const handlePairDevice = (ip: string, port: number, token: string, peer?: ScannedPeer) => {
+    const cleanIp = ip.trim();
+    const cleanName = peer?.nickname || peer?.hostname || `Device (${cleanIp})`;
+    const deviceType = peer?.deviceType || (cleanName.toLowerCase().includes('tab') ? 'tablet' : 'desktop');
+    const os = peer?.os || (deviceType === 'desktop' ? 'windows' : 'android');
+
+    // 1. Persist trusted registry
+    setDeviceNickname(cleanIp, cleanName, true);
+
+    // 2. Add to live FleetContext
+    if (fleetContext?.addPairedDevice) {
+      fleetContext.addPairedDevice({
+        ipAddress: cleanIp,
+        port,
+        name: cleanName,
+        type: deviceType as any,
+        os,
+        status: 'connected',
+      });
+    }
+
+    // 3. Dispatch to Android Native Bridge
     const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
     if (bridge && typeof bridge.addPairedDevice === 'function') {
-      bridge.addPairedDevice(ip, port, peer?.hostname || '');
+      bridge.addPairedDevice(cleanIp, port, cleanName);
     }
+
     if (fleetContext && typeof fleetContext.refreshState === 'function') {
       fleetContext.refreshState();
     }
+
     setShowPairingModal(false);
   };
 
@@ -464,11 +572,23 @@ export const FleetDashboard: React.FC = () => {
             </span>
           </div>
 
-          <div className="flex items-center gap-3 text-xs text-slate-400">
+          <div className="flex items-center gap-2 sm:gap-3 text-xs text-slate-400">
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#1D2024] border border-white/5">
               <div className="w-1.5 h-1.5 rounded-full bg-[#6DD58C] animate-pulse" />
               <span className="font-mono text-slate-200">{devices.filter(d => !d.isLocal).length} Peers</span>
             </div>
+
+            <button
+              onClick={() => {
+                triggerHaptic(12);
+                setShowPairingModal(true);
+              }}
+              title="Pair New Mesh Node"
+              className="h-8 px-2.5 sm:px-3 rounded-lg bg-[#A8C7FA] hover:bg-[#C2E7FF] text-[#062E6F] text-xs font-semibold font-mono flex items-center gap-1.5 transition active:scale-95 shadow-sm shrink-0 touch-manipulation"
+            >
+              <Plus size={15} className="stroke-[2.5]" />
+              <span className="hidden sm:inline">Pair</span>
+            </button>
           </div>
 
           <div className="text-right shrink-0 pl-1">
@@ -1006,6 +1126,11 @@ export const FleetDashboard: React.FC = () => {
         scanProgress={scanProgress}
         subnet={subnetInput}
         scannedPeers={scannedPeers}
+        trustedDevices={trustedDevices}
+        lanDeviceCount={scannedPeers.length}
+        isServerRunning={isServerRunning}
+        onStartServer={toggleServer}
+        onUpdateNickname={setDeviceNickname}
         onClose={() => setShowPairingModal(false)}
         onStartScan={handleStartScan}
         onSubnetChange={s => setSubnetInput(s)}

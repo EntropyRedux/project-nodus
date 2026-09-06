@@ -18,6 +18,7 @@ interface FleetContextType {
   selectDevice: (id: string) => void;
   removeDevice: (id: string) => void;
   rebootDevice: (id: string) => void;
+  addPairedDevice?: (device: Partial<DeviceInfo>) => void;
   clearClipboard: () => void;
   deleteClipboardItem: (id: string) => void;
   setClipboardText: (text: string) => void;
@@ -160,6 +161,38 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, []);
 
+  const addPairedDevice = useCallback((device: Partial<DeviceInfo>) => {
+    const ip = device.ipAddress || (device as any).ip;
+    if (!ip) return;
+    const cleanIp = ip.trim();
+    const id = device.id || `node-${cleanIp.replace(/\./g, '-')}`;
+    const newDev: DeviceInfo = {
+      id,
+      name: device.name || `Remote Node (${cleanIp})`,
+      type: device.type || 'desktop',
+      os: device.os || 'windows',
+      status: 'connected',
+      ipAddress: cleanIp,
+      batteryPercent: device.batteryPercent ?? 100,
+      cpuUsagePercent: device.cpuUsagePercent ?? 0,
+      isLocal: false,
+      latencyMs: device.latencyMs ?? 5,
+    };
+
+    setDevices(prev => {
+      const exists = prev.some(d => d.ipAddress === cleanIp || d.id === id);
+      return exists
+        ? prev.map(d => (d.ipAddress === cleanIp || d.id === id ? { ...d, ...newDev } : d))
+        : [...prev, newDev];
+    });
+    setActiveDeviceId(id);
+
+    const bridge = (window as any).NodusNativeBridge;
+    if (bridge && typeof bridge.addPairedDevice === 'function') {
+      bridge.addPairedDevice(cleanIp, (device as any).port || 9120, newDev.name);
+    }
+  }, []);
+
   const clearClipboard = useCallback(() => {
     setClipboardItems([]);
     const bridge = (window as any).NodusNativeBridge;
@@ -215,6 +248,7 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         selectDevice,
         removeDevice,
         rebootDevice,
+        addPairedDevice,
         clearClipboard,
         deleteClipboardItem,
         setClipboardText,

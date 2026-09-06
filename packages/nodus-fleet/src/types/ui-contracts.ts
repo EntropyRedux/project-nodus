@@ -37,15 +37,26 @@ export interface RemoteTerminalProps {
 }
 
 // 5. Subnet Pairing Modal
+export interface TrustedEntry {
+  nickname?: string;
+  trusted: boolean;
+  firstSeen?: number;
+  mac?: string;
+}
+
 export interface ScannedPeer {
   ip: string;
   port: number;
   hostname?: string;
+  nickname?: string;
   hasAgent: boolean;
   isInFleet?: boolean;
+  isTrusted?: boolean;
+  isUnknown?: boolean;
   deviceType?: 'desktop' | 'laptop' | 'tablet' | 'phone';
   os?: string;
   latencyMs?: number;
+  mac?: string;
 }
 
 export interface DevicePairingModalProps {
@@ -53,11 +64,16 @@ export interface DevicePairingModalProps {
   isScanning: boolean;
   scanProgress: number;
   subnet: string;
-  scannedPeers: any[];
+  scannedPeers: ScannedPeer[];
+  trustedDevices?: Record<string, TrustedEntry>;
+  lanDeviceCount?: number;
+  isServerRunning?: boolean;
+  onStartServer?: () => void;
+  onUpdateNickname?: (ip: string, nickname: string, trusted: boolean) => void;
   onClose: () => void;
   onStartScan: (subnet: string) => void;
   onSubnetChange: (subnet: string) => void;
-  onPair: (ip: string, port: number, token: string) => void;
+  onPair: (ip: string, port: number, token: string, peer?: ScannedPeer) => void;
 }
 
 // Terminal line and session types
