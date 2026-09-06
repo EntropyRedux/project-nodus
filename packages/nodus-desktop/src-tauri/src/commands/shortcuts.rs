@@ -484,8 +484,11 @@ fn regex_replace_case_insensitive(source: &str, token: &str, replacement: &str) 
 #[tauri::command]
 pub fn scan_shortcuts_folder(folder_path: &str) -> Result<Vec<DiscoveredApp>, String> {
     let p = expand_path_str(folder_path);
-    if !p.exists() || !p.is_dir() {
-        return Err(format!("Directory '{}' does not exist or is not a directory", p.display()));
+    if !p.exists() {
+        let _ = fs::create_dir_all(&p);
+    }
+    if !p.is_dir() {
+        return Err(format!("Path '{}' is not a directory", p.display()));
     }
 
     let current_cfg = load_shared_config();
@@ -550,7 +553,11 @@ pub fn set_shared_shortcuts(shortcuts: Vec<DiscoveredApp>) {
 
 #[tauri::command]
 pub fn add_watched_folder(path: String) -> Result<Vec<DiscoveredApp>, String> {
-    let expanded = expand_path_str(&path).to_string_lossy().to_string();
+    let p = expand_path_str(&path);
+    if !p.exists() {
+        let _ = fs::create_dir_all(&p);
+    }
+    let expanded = p.to_string_lossy().to_string();
     let mut cfg = load_shared_config();
     if !cfg.watched_folders.contains(&expanded) && !cfg.watched_folders.contains(&path) {
         cfg.watched_folders.push(expanded.clone());
