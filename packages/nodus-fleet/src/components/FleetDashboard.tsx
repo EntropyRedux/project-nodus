@@ -108,86 +108,60 @@ export const FleetDashboard: React.FC = () => {
   const [scanProgress, setScanProgress] = useState(0);
   const [scannedPeers, setScannedPeers] = useState<ScannedPeer[]>([]);
 
-  // Remote app shortcuts
-  const [myApps, setMyApps] = useState<SharedApp[]>([
-    {
-      id: 'app-1',
-      name: 'Chrome Browser',
-      category: 'browser',
-      deviceId: 'local',
-      deviceName: 'Nodus Tablet Prime',
-      deviceType: 'tablet',
-      deviceColor: '#9ECAFF',
-      path: 'com.android.chrome',
-      sharedBy: 'me',
-      enabled: true
-    },
-    {
-      id: 'app-2',
-      name: 'Fleet Terminal Shell',
-      category: 'dev',
-      deviceId: 'local',
-      deviceName: 'Nodus Tablet Prime',
-      deviceType: 'tablet',
-      deviceColor: '#9ECAFF',
-      path: 'org.nodus.fleet.terminal',
-      sharedBy: 'me',
-      enabled: true
-    }
-  ]);
+  // Remote app shortcuts (dynamically loaded from local storage & connected peer daemon)
+  const [myApps, setMyApps] = useState<SharedApp[]>(() => {
+    try {
+      const saved = localStorage.getItem('nodus_fleet_my_apps');
+      if (saved) return JSON.parse(saved);
+    } catch (_) {}
+    return [];
+  });
 
-  const [peerApps, setPeerApps] = useState<SharedApp[]>([
-    {
-      id: 'papp-1',
-      name: 'Visual Studio Code',
-      category: 'dev',
-      deviceId: 'dev-pc',
-      deviceName: 'Workstation Rig (Win11)',
-      deviceType: 'desktop',
-      deviceColor: '#82D5A5',
-      sharedBy: 'peer',
-      enabled: true
-    },
-    {
-      id: 'papp-2',
-      name: 'Google Chrome',
-      category: 'browser',
-      deviceId: 'dev-pc',
-      deviceName: 'Workstation Rig (Win11)',
-      deviceType: 'desktop',
-      deviceColor: '#82D5A5',
-      sharedBy: 'peer',
-      enabled: true
-    },
-    {
-      id: 'papp-3',
-      name: 'Spotify Music',
-      category: 'media',
-      deviceId: 'macbook-pro',
-      deviceName: 'MacBook Pro M3 Max',
-      deviceType: 'laptop',
-      deviceColor: '#D4AAFF',
-      sharedBy: 'peer',
-      enabled: true
-    },
-    {
-      id: 'papp-4',
-      name: 'Steam Big Picture',
-      category: 'game',
-      deviceId: 'livingroom-tv',
-      deviceName: 'Media Server Node',
-      deviceType: 'desktop',
-      deviceColor: '#FFD87A',
-      sharedBy: 'peer',
-      enabled: true
-    }
-  ]);
+  const [peerApps, setPeerApps] = useState<SharedApp[]>([]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('nodus_fleet_my_apps', JSON.stringify(myApps));
+    } catch (_) {}
+  }, [myApps]);
 
   // Target device resolution
   const targetDevice =
     devices.find(d => d.id === selectedDeviceId) ||
     devices.find(d => !d.isLocal) ||
     devices[0];
+
+  // Dynamically load shared shortcuts from target workstation
+  useEffect(() => {
+    if (!targetDevice || !targetDevice.ipAddress || targetDevice.ipAddress === '127.0.0.1') return;
+    const fetchPeerShortcuts = async () => {
+      try {
+        const url = `http://${targetDevice.ipAddress}:9120/api/shortcuts`;
+        const res = await universalNetworkFetch<any>(url);
+        if (res && res.data) {
+          const raw = res.data.shortcuts || res.data.apps || [];
+          if (Array.isArray(raw)) {
+            setPeerApps(
+              raw.map((a: any) => ({
+                id: a.id || `peer-${a.name}`,
+                name: a.name,
+                category: a.category || 'productivity',
+                deviceId: targetDevice.id,
+                deviceName: targetDevice.name,
+                deviceType: targetDevice.type || 'desktop',
+                deviceColor: '#A8C7FA',
+                path: a.path_or_appid || a.path || a.commandOrPackage,
+                description: a.description,
+                sharedBy: 'peer' as const,
+                enabled: a.enabled ?? true,
+              }))
+            );
+          }
+        }
+      } catch (_) {}
+    };
+    fetchPeerShortcuts();
+  }, [targetDevice?.id, targetDevice?.ipAddress, activeTab]);
 
   // Material 3 Fleet Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
