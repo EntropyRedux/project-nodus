@@ -41,6 +41,7 @@ class FleetDaemonService : Service() {
     private val discoveredPeers = ConcurrentHashMap<String, JSONObject>()
     private val httpRpcClient = HttpRpcClient()
     private var udpDiscoveryManager: UdpDiscoveryManager? = null
+    private var httpServer: com.nodus.fleet.net.FleetHttpServer? = null
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private var telemetryRunnable: Runnable? = null
@@ -53,6 +54,11 @@ class FleetDaemonService : Service() {
 
         // Register local tablet node
         registerLocalDevice()
+
+        // Start Embedded HTTP Server on Port 9120 for companion status & RPC
+        httpServer = com.nodus.fleet.net.FleetHttpServer(this, 9120).apply {
+            start()
+        }
 
         // Start UDP Discovery Engine (Populates discoveredPeers for pairing modal, does NOT auto-connect un-paired peers)
         udpDiscoveryManager = UdpDiscoveryManager(this) { discoveredDevice ->
@@ -304,6 +310,8 @@ class FleetDaemonService : Service() {
         telemetryRunnable?.let { mainHandler.removeCallbacks(it) }
         udpDiscoveryManager?.stop()
         udpDiscoveryManager = null
+        httpServer?.stop()
+        httpServer = null
         instance = null
         Log.i(TAG, "FleetDaemonService destroyed")
     }

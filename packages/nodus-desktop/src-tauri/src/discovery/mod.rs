@@ -18,6 +18,7 @@ const BEACON_INTERVAL: Duration = Duration::from_secs(4);
 
 static DISCOVERY_RUNNING: AtomicBool = AtomicBool::new(false);
 static DISCOVERED_DEVICES: Mutex<Option<HashMap<String, DiscoveredDeviceNode>>> = Mutex::new(None);
+static PEER_BEACONS_CACHE: Mutex<Option<HashMap<String, ScannedPeerResult>>> = Mutex::new(None);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiscoveredDeviceNode {
@@ -389,6 +390,19 @@ fn scan_subnet_internal(subnet_base: String) -> Result<Vec<ScannedPeerResult>, S
         }
     }
 
+    // 5. Merge any UDP discovered beacons from PEER_BEACONS_CACHE
+    {
+        let beacon_lock = PEER_BEACONS_CACHE.lock().unwrap();
+        if let Some(ref map) = *beacon_lock {
+            let mut lock = results.lock().unwrap();
+            for (p_ip, peer) in map {
+                if p_ip.starts_with(&base_prefix) && !local_ips.iter().any(|lip| lip == p_ip) {
+                    lock.insert(p_ip.clone(), peer.clone());
+                }
+            }
+        }
+    }
+
     let mut final_list: Vec<ScannedPeerResult> = {
         let lock = results.lock().unwrap();
         lock.values().cloned().collect()
@@ -527,11 +541,35 @@ pub fn start_discovery(server_port: u16) {
     });
 }
 
-fn handle_probe(socket: &UdpSocket, src: SocketAddr, _msg: &str, http_port: u16) {
+fn handle_probe(socket: &UdpSocket, src: SocketAddr, msg: &str, http_port: u16) {
     let stats = get_system_stats().ok();
     let hostname = stats.as_ref().map(|s| s.hostname.clone()).unwrap_or_else(|| "Workstation (PC)".to_string());
 
-    // We respond to discovery probes without auto-registering unauthenticated devices into active fleet
+    // Record incoming peer beacon in PEER_BEACONS_CACHE for subnet pairing modal
+    let sender_ip = src.ip().to_string();
+    if let Ok(val) = serde_json::from_str::<serde_json::Value>(msg) {
+        let name = val.get("name").or(val.get("hostname")).and_then(|v| v.as_str()).map(|s| s.to_string());
+        let dev_type = val.get("deviceType").or(val.get("type")).and_then(|v| v.as_str()).map(|s| s.to_string());
+        let os = val.get("os").and_then(|v| v.as_str()).map(|s| s.to_string());
+        let port = val.get("port").or(val.get("httpPort")).and_then(|v| v.as_u64()).map(|p| p as u16).unwrap_or(9120);
+
+        let mut lock = PEER_BEACONS_CACHE.lock().unwrap();
+        if lock.is_none() {
+            *lock = Some(HashMap::new());
+        }
+        if let Some(ref mut map) = *lock {
+            map.insert(sender_ip.clone(), ScannedPeerResult {
+                ip: sender_ip.clone(),
+                port,
+                hostname: name.or_else(|| Some(format!("Nodus Node ({})", sender_ip))),
+                has_agent: true,
+                is_in_fleet: false,
+                device_type: dev_type.or(Some("tablet".to_string())),
+                os: os.or(Some("Android 14 (HyperOS)".to_string())),
+                latency_ms: Some(5),
+            });
+        }
+    }
 
     let ram_used = stats.as_ref().map(|s| s.ram_used_mb).unwrap_or(0);
     let ram_total = stats.as_ref().map(|s| s.ram_total_mb).unwrap_or(0);

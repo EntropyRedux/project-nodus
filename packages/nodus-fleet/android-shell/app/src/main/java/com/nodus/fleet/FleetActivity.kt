@@ -419,7 +419,31 @@ class FleetActivity : AppCompatActivity() {
                 }
                 executor.shutdown()
 
-                // 5. Convert to sorted array (Nodus Agents first, then IP numerical order)
+                // 5. Merge any UDP discovered peers from FleetDaemonService
+                val udpPeersJson = FleetDaemonService.instance?.getDiscoveredPeersJson() ?: "[]"
+                try {
+                    val udpArray = JSONArray(udpPeersJson)
+                    for (idx in 0 until udpArray.length()) {
+                        val p = udpArray.getJSONObject(idx)
+                        val pIp = p.optString("ipAddress")
+                        if (pIp.isNotEmpty() && pIp != localIp && pIp != "127.0.0.1") {
+                            val existing = discoveredMap[pIp]
+                            val obj = JSONObject().apply {
+                                put("ip", pIp)
+                                put("port", p.optInt("httpPort", 9120))
+                                put("hostname", p.optString("name", "Nodus Node ($pIp)"))
+                                put("hasAgent", true)
+                                put("isInFleet", false)
+                                put("deviceType", p.optString("type", "desktop"))
+                                put("os", p.optString("os", "windows"))
+                                put("latencyMs", existing?.optLong("latencyMs", 5) ?: 5)
+                            }
+                            discoveredMap[pIp] = obj
+                        }
+                    }
+                } catch (_: Exception) {}
+
+                // 6. Convert to sorted array (Nodus Agents first, then IP numerical order)
                 val sortedList = discoveredMap.values.sortedWith(Comparator { a, b ->
                     val aAgent = a.optBoolean("hasAgent", false)
                     val bAgent = b.optBoolean("hasAgent", false)
@@ -448,6 +472,11 @@ class FleetActivity : AppCompatActivity() {
                 Log.e(TAG, "Subnet scan error", e)
                 "[]"
             }
+        }
+
+        @JavascriptInterface
+        fun getDiscoveredPeers(): String {
+            return FleetDaemonService.instance?.getDiscoveredPeersJson() ?: "[]"
         }
 
         @JavascriptInterface

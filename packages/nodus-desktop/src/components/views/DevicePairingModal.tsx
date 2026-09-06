@@ -442,29 +442,22 @@ export const DevicePairingModal: React.FC<DevicePairingModalProps> = ({
                       </button>
                     )}
 
-                    {/* Connect Action Button: Enabled strictly for Nodus Agents, Disabled for non-agents */}
-                    {!peer.hasAgent ? (
-                      <button
-                        disabled
-                        className="h-8 px-3.5 rounded-lg text-xs font-semibold font-mono flex items-center gap-1.5 opacity-40 cursor-not-allowed bg-[var(--surface-elevated)] text-[var(--text-muted)] border border-[var(--border-subtle)]"
-                        title="No active Nodus Fleet RPC agent listening on this device. Install or start Nodus Fleet to pair."
-                      >
-                        <span>Connect</span>
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => handlePairClick(peer)}
-                        disabled={isPaired}
-                        className={`h-8 px-3.5 rounded-lg text-xs font-semibold font-mono flex items-center gap-1.5 transition active:scale-95 ${
-                          isPaired
-                            ? 'bg-emerald-600 text-white border border-emerald-500/30 cursor-default'
-                            : 'bg-[var(--accent-primary)] hover:opacity-90 text-[var(--m3-on-primary)] shadow-sm'
-                        }`}
-                      >
-                        {isPaired ? <Check size={14} /> : <Plus size={14} />}
-                        <span>{isPaired ? 'Connected' : 'Connect'}</span>
-                      </button>
-                    )}
+                    {/* Connect Action Button */}
+                    <button
+                      onClick={() => handlePairClick(peer)}
+                      disabled={isPaired}
+                      className={`h-8 px-3.5 rounded-lg text-xs font-semibold font-mono flex items-center gap-1.5 transition active:scale-95 ${
+                        isPaired
+                          ? 'bg-emerald-600 text-white border border-emerald-500/30 cursor-default'
+                          : peer.hasAgent
+                          ? 'bg-[var(--accent-primary)] hover:opacity-90 text-[var(--m3-on-primary)] shadow-sm'
+                          : 'bg-[var(--surface-elevated)] hover:bg-[var(--surface-container)] text-[var(--text-heading)] border border-[var(--border-active)] hover:border-[var(--accent-primary)] shadow-sm'
+                      }`}
+                      title={isPaired ? 'Device already connected to fleet' : peer.hasAgent ? 'Pair with Nodus node' : `Pair with endpoint ${peer.ip}:${peer.port || 9120}`}
+                    >
+                      {isPaired ? <Check size={14} /> : <Plus size={14} />}
+                      <span>{isPaired ? 'Connected' : 'Connect'}</span>
+                    </button>
                   </div>
                 </div>
               );
