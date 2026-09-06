@@ -21,7 +21,11 @@ import {
   Check,
   Sparkles,
   ExternalLink,
-  Layers
+  Layers,
+  Search,
+  X,
+  Compass,
+  Trash2
 } from 'lucide-react';
 
 const CATEGORY_ICONS: Record<AppCategory, { label: string; icon: React.ElementType; color: string }> = {
@@ -56,7 +60,15 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
   onAddMyApp
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'peer' | 'mine'>('peer');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [launchedAppId, setLaunchedAppId] = useState<string | null>(null);
+
+  // Add Custom Modal state for tablet
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [formName, setFormName] = useState('');
+  const [formPath, setFormPath] = useState('');
+  const [formCategory, setFormCategory] = useState<AppCategory>('utility');
 
   const handleLaunch = (app: SharedApp) => {
     setLaunchedAppId(app.id);
@@ -66,10 +78,38 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
     }, 2200);
   };
 
+  const handleCreateCustom = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formName.trim()) return;
+    if (onAddMyApp) {
+      onAddMyApp();
+    }
+    setShowAddModal(false);
+    setFormName('');
+    setFormPath('');
+  };
+
+  const filteredPeerApps = peerApps.filter(app => {
+    const matchesSearch =
+      app.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (app.path && app.path.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      app.deviceName.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCat = selectedCategory === 'all' || app.category === selectedCategory;
+    return matchesSearch && matchesCat;
+  });
+
+  const filteredMyApps = myApps.filter(app => {
+    const matchesSearch =
+      app.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (app.path && app.path.toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchesCat = selectedCategory === 'all' || app.category === selectedCategory;
+    return matchesSearch && matchesCat;
+  });
+
   return (
-    <div className="flex flex-col min-h-full md:h-full bg-[#1D2024] border border-white/5 rounded-xl overflow-hidden shadow-xl text-slate-100 p-3 sm:p-5 md:p-6">
+    <div className="flex flex-col min-h-full md:h-full bg-[#1D2024] border border-white/5 rounded-xl overflow-hidden shadow-xl text-slate-100 p-3 sm:p-5 md:p-6 select-none">
       {/* Header Bar with Sub-Tab Switcher */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3 sm:mb-5 pb-3 sm:pb-4 border-b border-white/5 shrink-0">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3 sm:mb-4 pb-3 sm:pb-4 border-b border-white/5 shrink-0">
         <div className="flex items-center gap-1 p-1 bg-[#111318] rounded-lg border border-white/5 overflow-x-auto no-scrollbar w-full sm:w-auto">
           <button
             onClick={() => setActiveSubTab('peer')}
@@ -98,7 +138,7 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
 
         {activeSubTab === 'mine' && (
           <button
-            onClick={onAddMyApp}
+            onClick={() => setShowAddModal(true)}
             className="h-8 px-3.5 rounded-lg bg-[#A8C7FA] hover:bg-[#C2E7FF] text-[#062E6F] text-xs font-semibold font-mono flex items-center justify-center gap-1.5 transition shadow shrink-0 touch-manipulation w-full sm:w-auto"
           >
             <Plus size={15} />
@@ -107,16 +147,67 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
         )}
       </div>
 
+      {/* Filter and Search Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 mb-3.5">
+        {/* Search */}
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#111318] border border-white/10 max-w-sm w-full">
+          <Search size={14} className="text-slate-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search peer apps, shortcuts..."
+            className="flex-1 bg-transparent text-xs text-white placeholder-slate-500 focus:outline-none"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="text-xs text-slate-400 hover:text-white"
+            >
+              <X size={13} />
+            </button>
+          )}
+        </div>
+
+        {/* Category Filter Pills */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full no-scrollbar">
+          <button
+            onClick={() => setSelectedCategory('all')}
+            className={`h-7 px-2.5 rounded-md text-[11px] font-mono transition ${
+              selectedCategory === 'all'
+                ? 'bg-[#A8C7FA] text-[#062E6F] font-semibold'
+                : 'bg-[#111318] text-slate-400 hover:text-white border border-white/5'
+            }`}
+          >
+            All
+          </button>
+          {Object.entries(CATEGORY_ICONS).map(([key, cat]) => (
+            <button
+              key={key}
+              onClick={() => setSelectedCategory(key)}
+              className={`h-7 px-2.5 rounded-md text-[11px] font-mono transition flex items-center gap-1.5 ${
+                selectedCategory === key
+                  ? 'bg-[#A8C7FA] text-[#062E6F] font-semibold'
+                  : 'bg-[#111318] text-slate-400 hover:text-white border border-white/5'
+              }`}
+            >
+              <cat.icon size={12} style={{ color: selectedCategory === key ? 'inherit' : cat.color }} />
+              <span>{cat.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Shortcuts List Body */}
       <div className="flex-1 overflow-y-auto pr-1 min-h-0">
         {activeSubTab === 'peer' ? (
-          peerApps.length === 0 ? (
+          filteredPeerApps.length === 0 ? (
             <div className="py-20 text-center text-xs text-slate-500 font-mono">
-              No peer application shortcuts shared across mesh nodes yet.
+              No peer application shortcuts discovered on the connected workstation node.
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3.5">
-              {peerApps.map(app => {
+              {filteredPeerApps.map(app => {
                 const catMeta = CATEGORY_ICONS[app.category] || CATEGORY_ICONS.utility;
                 const Icon = catMeta.icon;
                 const isLaunched = launchedAppId === app.id;
@@ -173,13 +264,13 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
               })}
             </div>
           )
-        ) : myApps.length === 0 ? (
+        ) : filteredMyApps.length === 0 ? (
           <div className="py-20 text-center text-xs text-slate-500 font-mono">
             You have not registered any shortcuts on this tablet yet.
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3.5">
-            {myApps.map(app => {
+            {filteredMyApps.map(app => {
               const catMeta = CATEGORY_ICONS[app.category] || CATEGORY_ICONS.utility;
               const Icon = catMeta.icon;
 
@@ -226,6 +317,77 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
           </div>
         )}
       </div>
+
+      {/* Add Shortcut Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#1D2024] border border-white/10 rounded-2xl p-5 max-w-sm w-full shadow-2xl animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 mb-3 border-b border-white/5">
+              <h3 className="text-sm font-semibold text-white">Register Tablet Shortcut</h3>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="p-1 text-slate-400 hover:text-white"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <form onSubmit={handleCreateCustom} className="space-y-3">
+              <div>
+                <label className="text-[11px] font-mono text-slate-400 block mb-1">Shortcut Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Browser, Terminal"
+                  value={formName}
+                  onChange={e => setFormName(e.target.value)}
+                  className="w-full h-9 px-3 text-xs bg-[#111318] border border-white/10 rounded-lg text-white focus:outline-none focus:border-[#A8C7FA]"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-mono text-slate-400 block mb-1">Package / URL</label>
+                <input
+                  type="text"
+                  placeholder="e.g. com.android.chrome"
+                  value={formPath}
+                  onChange={e => setFormPath(e.target.value)}
+                  className="w-full h-9 px-3 text-xs bg-[#111318] border border-white/10 rounded-lg text-white font-mono focus:outline-none focus:border-[#A8C7FA]"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-mono text-slate-400 block mb-1">Category</label>
+                <select
+                  value={formCategory}
+                  onChange={e => setFormCategory(e.target.value as AppCategory)}
+                  className="w-full h-9 px-3 text-xs bg-[#111318] border border-white/10 rounded-lg text-white focus:outline-none focus:border-[#A8C7FA]"
+                >
+                  <option value="utility">Utility</option>
+                  <option value="browser">Browser</option>
+                  <option value="dev">Development</option>
+                  <option value="media">Media</option>
+                  <option value="productivity">Productivity</option>
+                  <option value="game">Gaming</option>
+                  <option value="system">System</option>
+                </select>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="h-8 px-3 rounded-lg bg-[#282A2F] text-xs text-slate-300 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="h-8 px-4 rounded-lg bg-[#A8C7FA] text-[#062E6F] text-xs font-semibold font-mono hover:bg-[#C2E7FF]"
+                >
+                  Save
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
