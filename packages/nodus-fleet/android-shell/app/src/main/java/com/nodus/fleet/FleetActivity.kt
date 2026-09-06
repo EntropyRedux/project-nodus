@@ -236,9 +236,11 @@ class FleetActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun getLanDeviceCount(subnet: String = "192.168.1"): Int {
-            val arpCount = getArpDevices(subnet).size
+            val prefs = context.getSharedPreferences("nodus_fleet_prefs", Context.MODE_PRIVATE)
+            val savedCount = prefs.getInt("last_scanned_lan_count", 0)
             val udpCount = FleetDaemonService.instance?.getDiscoveredPeersCount() ?: 0
-            return maxOf(lastScannedLanCount, arpCount, udpCount)
+            val current = maxOf(lastScannedLanCount, savedCount, udpCount)
+            return if (current > 0) current else 1
         }
 
         @JavascriptInterface
@@ -330,16 +332,20 @@ class FleetActivity : AppCompatActivity() {
                             var devType = "desktop"
                             var osName = "LAN Device"
                             var isReachable = false
+                            var latencyMs: Long = 10
+
+                            val startTime = System.currentTimeMillis()
 
                             // 1. Fast TCP probe on port 9120 for Nodus Companion API
                             try {
                                 val s9120 = java.net.Socket()
-                                s9120.connect(java.net.InetSocketAddress(ip, 9120), 160)
+                                s9120.connect(java.net.InetSocketAddress(ip, 9120), 180)
                                 s9120.close()
                                 hasNodusAgent = true
                                 isReachable = true
                                 openPort = 9120
                                 finalName = "Nodus Node ($ip)"
+                                latencyMs = (System.currentTimeMillis() - startTime).coerceAtLeast(1)
                             } catch (_: Exception) {}
 
                             // 2. If Nodus Agent active, fetch real telemetry & device name
@@ -359,16 +365,34 @@ class FleetActivity : AppCompatActivity() {
                                     }
                                 } catch (_: Exception) {}
                             } else {
-                                // 3. Probe common network ports with low timeout (50ms)
-                                val commonPorts = intArrayOf(80, 8080, 8765, 443, 5353, 445, 22, 5555)
+                                // 3. Probe common network ports (80, 8080, 443, 8765, 5555, 22)
+                                val commonPorts = intArrayOf(80, 8080, 443, 8765, 5555, 22)
                                 for (port in commonPorts) {
                                     try {
                                         val s = java.net.Socket()
-                                        s.connect(java.net.InetSocketAddress(ip, port), 55)
+                                        s.connect(java.net.InetSocketAddress(ip, port), 70)
                                         s.close()
                                         isReachable = true
                                         openPort = port
+                                        latencyMs = (System.currentTimeMillis() - startTime).coerceAtLeast(1)
+                                        devType = inferDeviceType(finalName, ip)
                                         break
+                                    } catch (_: Exception) {}
+                                }
+
+                                // 4. If TCP closed, use Native ICMP Ping to detect firewalled/sleeping LAN devices
+                                if (!isReachable) {
+                                    try {
+                                        val pingProc = Runtime.getRuntime().exec(arrayOf("/system/bin/ping", "-c", "1", "-W", "1", "-w", "1", ip))
+                                        val exit = pingProc.waitFor()
+                                        if (exit == 0) {
+                                            isReachable = true
+                                            openPort = 80
+                                            latencyMs = (System.currentTimeMillis() - startTime).coerceAtLeast(1)
+                                            finalName = "LAN Device ($ip)"
+                                            devType = inferDeviceType(finalName, ip)
+                                            osName = "LAN Device"
+                                        }
                                     } catch (_: Exception) {}
                                 }
                             }
@@ -379,8 +403,10 @@ class FleetActivity : AppCompatActivity() {
                                     put("port", openPort)
                                     put("hostname", finalName)
                                     put("hasAgent", hasNodusAgent)
+                                    put("isInFleet", false)
                                     put("deviceType", devType)
                                     put("os", osName)
+                                    put("latencyMs", latencyMs)
                                 }
                                 discoveredMap[ip] = obj
                             }
@@ -389,44 +415,34 @@ class FleetActivity : AppCompatActivity() {
                 }
 
                 for (f in futures) {
-                    try { f.get(2500, java.util.concurrent.TimeUnit.MILLISECONDS) } catch (_: Exception) {}
+                    try { f.get(3500, java.util.concurrent.TimeUnit.MILLISECONDS) } catch (_: Exception) {}
                 }
                 executor.shutdown()
 
-                // 4. Post-Sweep: Check ARP cache for any responsive neighbors that didn't have the tested TCP ports open
-                val arpDevices = getArpDevices(cleanPrefix)
-                for ((arpIp, mac) in arpDevices) {
-                    if (arpIp != localIp && arpIp != "127.0.0.1" && !discoveredMap.containsKey(arpIp)) {
-                        val obj = JSONObject().apply {
-                            put("ip", arpIp)
-                            put("port", 80)
-                            put("hostname", "LAN Device ($arpIp)")
-                            put("hasAgent", false)
-                            put("deviceType", "desktop")
-                            put("os", "LAN Device")
-                            put("mac", mac)
-                        }
-                        discoveredMap[arpIp] = obj
-                    }
-                }
-
-                // 5. Convert to sorted array (Nodus Agents first, then IP order)
-                val jsonArray = JSONArray()
+                // 5. Convert to sorted array (Nodus Agents first, then IP numerical order)
                 val sortedList = discoveredMap.values.sortedWith(Comparator { a, b ->
                     val aAgent = a.optBoolean("hasAgent", false)
                     val bAgent = b.optBoolean("hasAgent", false)
                     if (aAgent != bAgent) {
                         if (aAgent) -1 else 1
                     } else {
-                        a.optString("ip").compareTo(b.optString("ip"))
+                        val aLast = a.optString("ip").substringAfterLast(".", "0").toIntOrNull() ?: 0
+                        val bLast = b.optString("ip").substringAfterLast(".", "0").toIntOrNull() ?: 0
+                        aLast.compareTo(bLast)
                     }
                 })
 
+                val jsonArray = JSONArray()
                 for (item in sortedList) {
                     jsonArray.put(item)
                 }
 
                 lastScannedLanCount = jsonArray.length()
+                context.getSharedPreferences("nodus_fleet_prefs", Context.MODE_PRIVATE)
+                    .edit()
+                    .putInt("last_scanned_lan_count", lastScannedLanCount)
+                    .apply()
+
                 jsonArray.toString()
             } catch (e: Exception) {
                 Log.e(TAG, "Subnet scan error", e)
