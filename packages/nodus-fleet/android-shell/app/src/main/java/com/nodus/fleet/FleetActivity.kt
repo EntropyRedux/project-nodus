@@ -315,7 +315,7 @@ class FleetActivity : AppCompatActivity() {
                 val cleanPrefix = subnetPrefix.trim().removeSuffix(".")
                 val localIp = getLocalWifiIp() ?: "127.0.0.1"
                 val discoveredMap = java.util.concurrent.ConcurrentHashMap<String, JSONObject>()
-                val executor = java.util.concurrent.Executors.newFixedThreadPool(48)
+                val executor = java.util.concurrent.Executors.newFixedThreadPool(96)
                 val futures = java.util.concurrent.CopyOnWriteArrayList<java.util.concurrent.Future<*>>()
 
                 for (i in 1..254) {
@@ -334,7 +334,7 @@ class FleetActivity : AppCompatActivity() {
                             // 1. Fast TCP probe on port 9120 for Nodus Companion API
                             try {
                                 val s9120 = java.net.Socket()
-                                s9120.connect(java.net.InetSocketAddress(ip, 9120), 300)
+                                s9120.connect(java.net.InetSocketAddress(ip, 9120), 160)
                                 s9120.close()
                                 hasNodusAgent = true
                                 isReachable = true
@@ -347,8 +347,8 @@ class FleetActivity : AppCompatActivity() {
                                 try {
                                     val u = java.net.URL("http://$ip:9120/api/status")
                                     val c = u.openConnection() as java.net.HttpURLConnection
-                                    c.connectTimeout = 400
-                                    c.readTimeout = 400
+                                    c.connectTimeout = 300
+                                    c.readTimeout = 300
                                     if (c.responseCode == 200) {
                                         val text = c.inputStream.bufferedReader().readText()
                                         val st = JSONObject(text)
@@ -359,28 +359,17 @@ class FleetActivity : AppCompatActivity() {
                                     }
                                 } catch (_: Exception) {}
                             } else {
-                                // 3. Probe common network ports: HTTP 80, HTTPS 443, Alt-HTTP 8080, Fleet UDP/TCP 8765, mDNS 5353, SMB 445, SSH 22, ADB 5555, AirPlay 62078
-                                val commonPorts = intArrayOf(80, 443, 8080, 8765, 5353, 445, 22, 5555, 62078, 1900)
+                                // 3. Probe common network ports with low timeout (50ms)
+                                val commonPorts = intArrayOf(80, 8080, 8765, 443, 5353, 445, 22, 5555)
                                 for (port in commonPorts) {
                                     try {
                                         val s = java.net.Socket()
-                                        s.connect(java.net.InetSocketAddress(ip, port), 120)
+                                        s.connect(java.net.InetSocketAddress(ip, port), 55)
                                         s.close()
                                         isReachable = true
                                         openPort = port
                                         break
                                     } catch (_: Exception) {}
-                                }
-
-                                if (isReachable) {
-                                    try {
-                                        val addr = java.net.InetAddress.getByName(ip)
-                                        val host = addr.canonicalHostName
-                                        if (!host.isNullOrBlank() && host != ip) {
-                                            finalName = host
-                                        }
-                                    } catch (_: Exception) {}
-                                    devType = inferDeviceType(finalName, ip)
                                 }
                             }
 
@@ -400,29 +389,20 @@ class FleetActivity : AppCompatActivity() {
                 }
 
                 for (f in futures) {
-                    try { f.get(650, java.util.concurrent.TimeUnit.MILLISECONDS) } catch (_: Exception) {}
+                    try { f.get(2500, java.util.concurrent.TimeUnit.MILLISECONDS) } catch (_: Exception) {}
                 }
-                executor.shutdownNow()
+                executor.shutdown()
 
                 // 4. Post-Sweep: Check ARP cache for any responsive neighbors that didn't have the tested TCP ports open
                 val arpDevices = getArpDevices(cleanPrefix)
                 for ((arpIp, mac) in arpDevices) {
                     if (arpIp != localIp && arpIp != "127.0.0.1" && !discoveredMap.containsKey(arpIp)) {
-                        var resolvedHost = "LAN Device ($arpIp)"
-                        try {
-                            val addr = java.net.InetAddress.getByName(arpIp)
-                            val host = addr.canonicalHostName
-                            if (!host.isNullOrBlank() && host != arpIp) {
-                                resolvedHost = host
-                            }
-                        } catch (_: Exception) {}
-
                         val obj = JSONObject().apply {
                             put("ip", arpIp)
                             put("port", 80)
-                            put("hostname", resolvedHost)
+                            put("hostname", "LAN Device ($arpIp)")
                             put("hasAgent", false)
-                            put("deviceType", inferDeviceType(resolvedHost, arpIp))
+                            put("deviceType", "desktop")
                             put("os", "LAN Device")
                             put("mac", mac)
                         }
