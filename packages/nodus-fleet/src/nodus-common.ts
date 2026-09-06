@@ -15,6 +15,7 @@ export interface DeviceInfo {
   ramUsedMb?: number;
   cpuUsagePercent?: number;
   latencyMs?: number;
+  resolution?: string;
 }
 
 export interface DeviceProcess {
@@ -36,7 +37,24 @@ export interface ClipboardItem {
   deviceId?: string;
   deviceType?: 'tablet' | 'desktop' | 'phone' | 'laptop';
   deviceColor?: string;
-  type?: string;
+  type?: 'text' | 'link' | 'code' | 'image' | string;
+  pinned?: boolean;
+  imageData?: string; // base64 PNG data
+}
+
+export interface AutoExportSettings {
+  enabled: boolean;
+  threshold: number; // Number of clips (e.g. 25, 50, 100) before auto-saving
+  format: 'json' | 'txt' | 'md';
+  lastAutoExportedAt: string | null;
+  totalAutoExports: number;
+}
+
+export interface SystemStats {
+  cpu_load_percent: number;
+  ram_used_mb: number;
+  ram_total_mb: number;
+  hostname: string;
 }
 
 export interface NetworkServerConfig {

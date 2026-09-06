@@ -47,6 +47,7 @@ import { ProcessMonitorTable } from './ProcessMonitorTable';
 import { RemoteTerminal } from './RemoteTerminal';
 import { DevicePairingModal } from './DevicePairingModal';
 import { RemoteAppShortcuts } from './RemoteAppShortcuts';
+import { ClipboardDrawer } from './ClipboardDrawer';
 import { SharedApp, ScannedPeer } from '../types/ui-contracts';
 
 import { universalNetworkFetch } from '../services/FleetDirectClient';
@@ -983,166 +984,20 @@ export const FleetDashboard: React.FC = () => {
       </nav>
 
       {/* ── Universal Clipboard Drawer ── */}
-      {showClipboardDrawer && (
-        <div className="fixed inset-y-0 right-0 z-50 w-full sm:w-96 bg-[#1D2024] border-l border-white/10 shadow-2xl p-6 pt-safe pb-safe flex flex-col gap-4 animate-in slide-in-from-right duration-200 rounded-l-xl">
-          <div className="flex items-center justify-between pb-3 border-b border-white/5">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-[#0F5223] text-[#C4EED0] flex items-center justify-center">
-                <Clipboard className="w-4 h-4" />
-              </div>
-              <h3 className="text-sm font-semibold text-white">Universal Mesh Clipboard</h3>
-            </div>
-            <div className="flex items-center gap-1.5">
-              {/* Quick Export Menu */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowExportMenu(!showExportMenu)}
-                  disabled={clipboardItems.length === 0}
-                  title="Export clipboard history"
-                  className="w-8 h-8 rounded-lg bg-[#282A2F] hover:bg-[#33353A] text-slate-300 hover:text-white flex items-center justify-center transition text-xs disabled:opacity-30 disabled:cursor-not-allowed"
-                >
-                  <Download size={14} />
-                </button>
-                {showExportMenu && (
-                  <div className="absolute right-0 top-full mt-1.5 w-44 bg-[#282A2F] border border-white/10 rounded-lg shadow-2xl py-1 z-50 text-xs flex flex-col">
-                    <button
-                      onClick={() => handleExportClipboard('json')}
-                      className="px-3 py-2 text-left hover:bg-[#33353A] flex items-center gap-2 text-white"
-                    >
-                      <FileJson size={14} className="text-amber-400" />
-                      <span>JSON Backup</span>
-                    </button>
-                    <button
-                      onClick={() => handleExportClipboard('md')}
-                      className="px-3 py-2 text-left hover:bg-[#33353A] flex items-center gap-2 text-white"
-                    >
-                      <FileCode size={14} className="text-blue-400" />
-                      <span>Markdown (.md)</span>
-                    </button>
-                    <button
-                      onClick={() => handleExportClipboard('txt')}
-                      className="px-3 py-2 text-left hover:bg-[#33353A] flex items-center gap-2 text-white"
-                    >
-                      <FileText size={14} className="text-emerald-400" />
-                      <span>Plain Text (.txt)</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <button
-                onClick={() => setShowClipboardDrawer(false)}
-                className="w-8 h-8 rounded-lg bg-[#282A2F] hover:bg-[#33353A] text-slate-300 hover:text-white flex items-center justify-center transition text-xs"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-
-          {/* Broadcast Input Container */}
-          <form onSubmit={handleBroadcastClipboard} className="space-y-2">
-            <span className="text-[11px] text-slate-400 font-medium">Broadcast snippet to mesh nodes:</span>
-            <div className="flex gap-2 items-center">
-              <input
-                type="text"
-                value={broadcastInput}
-                onChange={e => setBroadcastInput(e.target.value)}
-                placeholder="Type or paste text..."
-                className="flex-1 px-3.5 py-2 rounded-lg bg-[#111318] border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#A8C7FA]"
-              />
-              <button
-                type="submit"
-                disabled={!broadcastInput.trim()}
-                className="w-9 h-9 rounded-lg bg-[#A8C7FA] hover:bg-[#C2E7FF] text-[#062E6F] disabled:opacity-50 flex items-center justify-center transition shadow-sm shrink-0"
-              >
-                <Send size={15} />
-              </button>
-            </div>
-          </form>
-
-          {/* Drawer Sub-Header: Feed Stats & Clear Action */}
-          <div className="flex items-center justify-between text-[11px] text-slate-400 py-1 px-1 border-b border-white/5">
-            <span>{clipboardItems.length} snippet{clipboardItems.length === 1 ? '' : 's'}</span>
-            {exportFeedback ? (
-              <span className="text-emerald-400 font-medium">{exportFeedback}</span>
-            ) : (
-              clipboardItems.length > 0 && (
-                confirmClearAll ? (
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={handleClearClipboard}
-                      className="text-red-400 font-bold hover:underline"
-                    >
-                      Confirm Clear
-                    </button>
-                    <button
-                      onClick={() => setConfirmClearAll(false)}
-                      className="text-slate-400 hover:text-white"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setConfirmClearAll(true)}
-                    className="text-red-400 hover:text-red-300 transition"
-                  >
-                    Clear History
-                  </button>
-                )
-              )
-            )}
-          </div>
-
-          {/* Clipboard History Feed */}
-          <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
-            {clipboardItems.length === 0 ? (
-              <div className="text-center py-10 text-xs text-slate-500">Clipboard history is empty</div>
-            ) : (
-              clipboardItems.map(item => (
-                <div
-                  key={item.id}
-                  className="p-3.5 rounded-lg bg-[#282A2F] border border-white/5 space-y-2 hover:border-white/10 transition"
-                >
-                  <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
-                    <span className="text-[#A8C7FA] font-medium">{item.deviceName || 'Device'}</span>
-                    <span>{item.timestamp}</span>
-                  </div>
-                  <p className="text-xs font-mono text-slate-200 break-all select-all leading-relaxed">
-                    {item.text}
-                  </p>
-                  <div className="flex items-center justify-between pt-1 border-t border-white/5">
-                    <button
-                      onClick={() => handleDeleteClipboardItem(item.id)}
-                      className="flex items-center gap-1 h-7 px-2 rounded-md bg-[#1D2024] hover:bg-red-500/20 text-xs font-medium text-slate-400 hover:text-red-400 border border-white/5 hover:border-red-500/30 transition active:scale-95"
-                      title="Delete entry"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-
-                    <button
-                      onClick={() => handleCopyClipboardItem(item)}
-                      className="flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-[#1D2024] hover:bg-[#111318] text-xs font-medium text-[#6DD58C] border border-[#6DD58C]/20 transition active:scale-95"
-                    >
-                      {copiedClipId === item.id ? (
-                        <>
-                          <Check size={13} />
-                          <span>Copied</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy size={13} />
-                          <span>Copy snippet</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      )}
+      <ClipboardDrawer
+        isOpen={showClipboardDrawer}
+        onClose={() => setShowClipboardDrawer(false)}
+        items={clipboardItems}
+        onBroadcast={text => {
+          if (fleetContext && typeof fleetContext.setClipboardText === 'function') {
+            fleetContext.setClipboardText(text);
+          }
+        }}
+        onCopyItem={item => handleCopyClipboardItem(item)}
+        onDeleteItem={id => handleDeleteClipboardItem(id)}
+        onClearAll={() => handleClearClipboard()}
+        onExport={format => handleExportClipboard(format)}
+      />
 
       {/* ── Subnet Pairing Modal ── */}
       <DevicePairingModal
