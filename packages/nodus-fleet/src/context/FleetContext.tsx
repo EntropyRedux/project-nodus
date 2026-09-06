@@ -19,6 +19,7 @@ interface FleetContextType {
   removeDevice: (id: string) => void;
   rebootDevice: (id: string) => void;
   clearClipboard: () => void;
+  deleteClipboardItem: (id: string) => void;
   setClipboardText: (text: string) => void;
   copyToClipboard: (text: string) => void;
   openInHome: () => void;
@@ -167,6 +168,14 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, []);
 
+  const deleteClipboardItem = useCallback((id: string) => {
+    setClipboardItems(prev => prev.filter(i => i.id !== id));
+    const bridge = (window as any).NodusNativeBridge;
+    if (bridge && typeof bridge.deleteClipboardItem === 'function') {
+      bridge.deleteClipboardItem(id);
+    }
+  }, []);
+
   const setClipboardText = useCallback((text: string) => {
     const bridge = (window as any).NodusNativeBridge;
     if (bridge && typeof bridge.setClipboardText === 'function') {
@@ -207,6 +216,7 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         removeDevice,
         rebootDevice,
         clearClipboard,
+        deleteClipboardItem,
         setClipboardText,
         copyToClipboard,
         openInHome,

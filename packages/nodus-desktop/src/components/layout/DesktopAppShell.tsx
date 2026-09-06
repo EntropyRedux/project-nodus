@@ -80,6 +80,11 @@ export const DesktopAppShell: React.FC = () => {
   const {
     items: clipboardItems,
     pushClip,
+    deleteClip,
+    togglePin,
+    clearUnpinned,
+    clearAll,
+    exportToFile,
   } = useClipboardStore();
 
   const {
@@ -769,6 +774,11 @@ export const DesktopAppShell: React.FC = () => {
         items={clipboardItems}
         onBroadcast={handleBroadcastClipboard}
         onCopyItem={handleCopyClipboardItem}
+        onDeleteItem={deleteClip}
+        onTogglePin={togglePin}
+        onClearUnpinned={clearUnpinned}
+        onClearAll={clearAll}
+        onExport={exportToFile}
       />
 
       {/* Subnet Pairing Modal */}

@@ -34,7 +34,11 @@ import {
   Search,
   Filter,
   Play,
-  Pause
+  Pause,
+  Download,
+  FileJson,
+  FileText,
+  FileCode
 } from 'lucide-react';
 
 import { MeshTopologyVisualizer } from './MeshTopologyVisualizer';
@@ -79,6 +83,9 @@ export const FleetDashboard: React.FC = () => {
   const [showClipboardDrawer, setShowClipboardDrawer] = useState(false);
   const [broadcastInput, setBroadcastInput] = useState('');
   const [copiedClipId, setCopiedClipId] = useState<string | null>(null);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [confirmClearAll, setConfirmClearAll] = useState(false);
+  const [exportFeedback, setExportFeedback] = useState<string | null>(null);
 
   // Live clock & uppercase date for Immersive UI header
   const [currentTime, setCurrentTime] = useState<string>('14:42:08');
@@ -291,7 +298,7 @@ export const FleetDashboard: React.FC = () => {
     setShowPairingModal(false);
   };
 
-  // Universal clipboard broadcasting
+  // Universal clipboard broadcasting & actions
   const handleBroadcastClipboard = (e: React.FormEvent) => {
     e.preventDefault();
     if (!broadcastInput.trim()) return;
@@ -306,6 +313,80 @@ export const FleetDashboard: React.FC = () => {
     navigator.clipboard.writeText(item.text).catch(() => {});
     setCopiedClipId(item.id);
     setTimeout(() => setCopiedClipId(null), 2000);
+  };
+
+  const handleDeleteClipboardItem = (id: string) => {
+    if (fleetContext && typeof fleetContext.deleteClipboardItem === 'function') {
+      fleetContext.deleteClipboardItem(id);
+    }
+  };
+
+  const handleClearClipboard = () => {
+    if (fleetContext && typeof fleetContext.clearClipboard === 'function') {
+      fleetContext.clearClipboard();
+    }
+    setConfirmClearAll(false);
+  };
+
+  const handleExportClipboard = (format: 'json' | 'txt' | 'md' = 'json') => {
+    if (clipboardItems.length === 0) return;
+    const dateStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+
+    if (format === 'json') {
+      const payload = {
+        app: 'Nodus Fleet Companion',
+        version: '1.1.1',
+        exportedAt: new Date().toISOString(),
+        totalItems: clipboardItems.length,
+        items: clipboardItems,
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `nodus-fleet-clipboard-${dateStr}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } else if (format === 'md') {
+      let md = `# Nodus Fleet Universal Clipboard History Export\n\n*Exported on ${new Date().toLocaleString()} · Total items: ${clipboardItems.length}*\n\n---\n\n`;
+      for (const item of clipboardItems) {
+        md += `### ${item.timestamp} · ${item.deviceName || 'Device'}\n\n\`\`\`text\n${item.text}\n\`\`\`\n\n---\n\n`;
+      }
+      const blob = new Blob([md], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `nodus-fleet-clipboard-${dateStr}.md`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } else {
+      let txt = `=======================================================\n`;
+      txt += `NODUS FLEET CLIPBOARD HISTORY EXPORT\n`;
+      txt += `Export Date: ${new Date().toLocaleString()}\n`;
+      txt += `Total Items: ${clipboardItems.length}\n`;
+      txt += `=======================================================\n\n`;
+      for (const item of clipboardItems) {
+        txt += `[${item.timestamp}] ${item.deviceName || 'Device'}\n${item.text}\n`;
+        txt += `-------------------------------------------------------\n`;
+      }
+      const blob = new Blob([txt], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `nodus-fleet-clipboard-${dateStr}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    setShowExportMenu(false);
+    setExportFeedback(`Exported .${format.toUpperCase()}`);
+    setTimeout(() => setExportFeedback(null), 2000);
   };
 
   // Filtered devices based on Material 3 Search and Filter Chips
@@ -911,12 +992,51 @@ export const FleetDashboard: React.FC = () => {
               </div>
               <h3 className="text-sm font-semibold text-white">Universal Mesh Clipboard</h3>
             </div>
-            <button
-              onClick={() => setShowClipboardDrawer(false)}
-              className="w-8 h-8 rounded-lg bg-[#282A2F] hover:bg-[#33353A] text-slate-300 hover:text-white flex items-center justify-center transition text-xs"
-            >
-              ✕
-            </button>
+            <div className="flex items-center gap-1.5">
+              {/* Quick Export Menu */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowExportMenu(!showExportMenu)}
+                  disabled={clipboardItems.length === 0}
+                  title="Export clipboard history"
+                  className="w-8 h-8 rounded-lg bg-[#282A2F] hover:bg-[#33353A] text-slate-300 hover:text-white flex items-center justify-center transition text-xs disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  <Download size={14} />
+                </button>
+                {showExportMenu && (
+                  <div className="absolute right-0 top-full mt-1.5 w-44 bg-[#282A2F] border border-white/10 rounded-lg shadow-2xl py-1 z-50 text-xs flex flex-col">
+                    <button
+                      onClick={() => handleExportClipboard('json')}
+                      className="px-3 py-2 text-left hover:bg-[#33353A] flex items-center gap-2 text-white"
+                    >
+                      <FileJson size={14} className="text-amber-400" />
+                      <span>JSON Backup</span>
+                    </button>
+                    <button
+                      onClick={() => handleExportClipboard('md')}
+                      className="px-3 py-2 text-left hover:bg-[#33353A] flex items-center gap-2 text-white"
+                    >
+                      <FileCode size={14} className="text-blue-400" />
+                      <span>Markdown (.md)</span>
+                    </button>
+                    <button
+                      onClick={() => handleExportClipboard('txt')}
+                      className="px-3 py-2 text-left hover:bg-[#33353A] flex items-center gap-2 text-white"
+                    >
+                      <FileText size={14} className="text-emerald-400" />
+                      <span>Plain Text (.txt)</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={() => setShowClipboardDrawer(false)}
+                className="w-8 h-8 rounded-lg bg-[#282A2F] hover:bg-[#33353A] text-slate-300 hover:text-white flex items-center justify-center transition text-xs"
+              >
+                ✕
+              </button>
+            </div>
           </div>
 
           {/* Broadcast Input Container */}
@@ -932,47 +1052,94 @@ export const FleetDashboard: React.FC = () => {
               />
               <button
                 type="submit"
-                className="w-9 h-9 rounded-lg bg-[#A8C7FA] hover:bg-[#C2E7FF] text-[#062E6F] flex items-center justify-center transition shadow-sm shrink-0"
+                disabled={!broadcastInput.trim()}
+                className="w-9 h-9 rounded-lg bg-[#A8C7FA] hover:bg-[#C2E7FF] text-[#062E6F] disabled:opacity-50 flex items-center justify-center transition shadow-sm shrink-0"
               >
                 <Send size={15} />
               </button>
             </div>
           </form>
 
+          {/* Drawer Sub-Header: Feed Stats & Clear Action */}
+          <div className="flex items-center justify-between text-[11px] text-slate-400 py-1 px-1 border-b border-white/5">
+            <span>{clipboardItems.length} snippet{clipboardItems.length === 1 ? '' : 's'}</span>
+            {exportFeedback ? (
+              <span className="text-emerald-400 font-medium">{exportFeedback}</span>
+            ) : (
+              clipboardItems.length > 0 && (
+                confirmClearAll ? (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={handleClearClipboard}
+                      className="text-red-400 font-bold hover:underline"
+                    >
+                      Confirm Clear
+                    </button>
+                    <button
+                      onClick={() => setConfirmClearAll(false)}
+                      className="text-slate-400 hover:text-white"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmClearAll(true)}
+                    className="text-red-400 hover:text-red-300 transition"
+                  >
+                    Clear History
+                  </button>
+                )
+              )
+            )}
+          </div>
+
           {/* Clipboard History Feed */}
           <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
-            {clipboardItems.map(item => (
-              <div
-                key={item.id}
-                className="p-3.5 rounded-lg bg-[#282A2F] border border-white/5 space-y-2 hover:border-white/10 transition"
-              >
-                <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
-                  <span className="text-[#A8C7FA] font-medium">{item.deviceName}</span>
-                  <span>{item.timestamp}</span>
+            {clipboardItems.length === 0 ? (
+              <div className="text-center py-10 text-xs text-slate-500">Clipboard history is empty</div>
+            ) : (
+              clipboardItems.map(item => (
+                <div
+                  key={item.id}
+                  className="p-3.5 rounded-lg bg-[#282A2F] border border-white/5 space-y-2 hover:border-white/10 transition"
+                >
+                  <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
+                    <span className="text-[#A8C7FA] font-medium">{item.deviceName || 'Device'}</span>
+                    <span>{item.timestamp}</span>
+                  </div>
+                  <p className="text-xs font-mono text-slate-200 break-all select-all leading-relaxed">
+                    {item.text}
+                  </p>
+                  <div className="flex items-center justify-between pt-1 border-t border-white/5">
+                    <button
+                      onClick={() => handleDeleteClipboardItem(item.id)}
+                      className="flex items-center gap-1 h-7 px-2 rounded-md bg-[#1D2024] hover:bg-red-500/20 text-xs font-medium text-slate-400 hover:text-red-400 border border-white/5 hover:border-red-500/30 transition active:scale-95"
+                      title="Delete entry"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+
+                    <button
+                      onClick={() => handleCopyClipboardItem(item)}
+                      className="flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-[#1D2024] hover:bg-[#111318] text-xs font-medium text-[#6DD58C] border border-[#6DD58C]/20 transition active:scale-95"
+                    >
+                      {copiedClipId === item.id ? (
+                        <>
+                          <Check size={13} />
+                          <span>Copied</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={13} />
+                          <span>Copy snippet</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
-                <p className="text-xs font-mono text-slate-200 break-all select-all leading-relaxed">
-                  {item.text}
-                </p>
-                <div className="flex justify-end pt-1">
-                  <button
-                    onClick={() => handleCopyClipboardItem(item)}
-                    className="flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-[#1D2024] hover:bg-[#111318] text-xs font-medium text-[#6DD58C] border border-[#6DD58C]/20 transition active:scale-95"
-                  >
-                    {copiedClipId === item.id ? (
-                      <>
-                        <Check size={13} />
-                        <span>Copied</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy size={13} />
-                        <span>Copy snippet</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       )}

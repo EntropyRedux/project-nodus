@@ -17,14 +17,24 @@ export const ClipboardPanel: React.FC = () => {
     deleteClip: removeClipboardItem,
     togglePin: togglePinClipboardItem,
     clearUnpinned: clearClipboardHistory,
+    clearAll: clearAllClipboardHistory,
+    exportToFile,
+    autoExportSettings,
+    updateAutoExportSettings,
   } = useClipboardStore();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [inputText, setInputText] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [showAutoSettings, setShowAutoSettings] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [confirmClearAll, setConfirmClearAll] = useState(false);
+  const [exportFeedback, setExportFeedback] = useState<string | null>(null);
 
   const filteredItems = clipboardItems.filter((item) =>
-    item.text.toLowerCase().includes(searchQuery.toLowerCase())
+    (item.text || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (item.deviceName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    item.type.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleCopy = async (item: ClipboardItem) => {
@@ -52,6 +62,13 @@ export const ClipboardPanel: React.FC = () => {
     setInputText('');
   };
 
+  const handleExport = (format: 'json' | 'txt' | 'md') => {
+    exportToFile(format);
+    setShowExportMenu(false);
+    setExportFeedback(`Exported .${format.toUpperCase()}`);
+    setTimeout(() => setExportFeedback(null), 2000);
+  };
+
   const getItemTypeBadge = (type: ClipboardItem['type']) => {
     switch (type) {
       case 'link':
@@ -68,19 +85,234 @@ export const ClipboardPanel: React.FC = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Header */}
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-          <div style={{ width: 30, height: 30, borderRadius: 10, background: 'var(--m3-primary-container)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Icon name="content_paste" size={16} style={{ color: 'var(--m3-on-primary-container)' }} />
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+            <div style={{ width: 30, height: 30, borderRadius: 10, background: 'var(--m3-primary-container)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="content_paste" size={16} style={{ color: 'var(--m3-on-primary-container)' }} />
+            </div>
+            <h1 style={{ fontSize: 18, fontWeight: 400, color: 'var(--m3-on-background)' }}>
+              Universal Clipboard Hub
+            </h1>
           </div>
-          <h1 style={{ fontSize: 18, fontWeight: 400, color: 'var(--m3-on-background)' }}>
-            Universal Clipboard Hub
-          </h1>
+          <p style={{ fontSize: 12, color: 'var(--m3-on-surface-variant)', marginLeft: 40 }}>
+            Real-time bi-directional clipboard sync between Windows host and connected tablet fleet
+          </p>
         </div>
-        <p style={{ fontSize: 12, color: 'var(--m3-on-surface-variant)', marginLeft: 40 }}>
-          Real-time bi-directional clipboard sync between Windows host and connected tablet fleet
-        </p>
+
+        {/* Top Actions: Export & Auto-Save */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative' }}>
+          <button
+            onClick={() => setShowAutoSettings(!showAutoSettings)}
+            className="m3-tonal-button"
+            style={{
+              background: autoExportSettings.enabled ? 'var(--m3-tertiary-container)' : 'var(--m3-surface-container-high)',
+              color: autoExportSettings.enabled ? 'var(--m3-on-tertiary-container)' : 'var(--m3-on-surface)',
+              fontSize: 12,
+              padding: '6px 12px',
+              borderRadius: 8,
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <Icon name="save" size={15} />
+            Auto-Save {autoExportSettings.enabled ? `(${autoExportSettings.threshold})` : 'Off'}
+          </button>
+
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              disabled={clipboardItems.length === 0}
+              style={{
+                background: 'var(--m3-primary)',
+                color: 'var(--m3-on-primary)',
+                fontSize: 12,
+                fontWeight: 500,
+                padding: '6px 14px',
+                borderRadius: 8,
+                border: 'none',
+                cursor: clipboardItems.length === 0 ? 'not-allowed' : 'pointer',
+                opacity: clipboardItems.length === 0 ? 0.5 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              <Icon name="download" size={15} />
+              {exportFeedback || 'Export to File'}
+              <Icon name="arrow_drop_down" size={16} />
+            </button>
+
+            {/* Export Dropdown Menu */}
+            {showExportMenu && (
+              <div
+                style={{
+                  position: 'absolute',
+                  right: 0,
+                  top: '100%',
+                  marginTop: 6,
+                  background: 'var(--m3-surface-container-high)',
+                  border: '1px solid var(--m3-outline-variant)',
+                  borderRadius: 10,
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+                  zIndex: 30,
+                  minWidth: 180,
+                  overflow: 'hidden',
+                  display: 'flex',
+                  flexDirection: 'column',
+                }}
+              >
+                <button
+                  onClick={() => handleExport('json')}
+                  style={{
+                    padding: '10px 14px',
+                    textAlign: 'left',
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--m3-on-surface)',
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--m3-surface-container-highest)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <Icon name="code" size={15} style={{ color: '#F57C00' }} />
+                  JSON Backup (.json)
+                </button>
+                <button
+                  onClick={() => handleExport('md')}
+                  style={{
+                    padding: '10px 14px',
+                    textAlign: 'left',
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--m3-on-surface)',
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--m3-surface-container-highest)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <Icon name="description" size={15} style={{ color: '#0078D4' }} />
+                  Markdown Report (.md)
+                </button>
+                <button
+                  onClick={() => handleExport('txt')}
+                  style={{
+                    padding: '10px 14px',
+                    textAlign: 'left',
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--m3-on-surface)',
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--m3-surface-container-highest)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <Icon name="article" size={15} style={{ color: '#34A853' }} />
+                  Plain Text File (.txt)
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
+
+      {/* Auto-Save Configuration Drawer/Banner */}
+      {showAutoSettings && (
+        <div
+          style={{
+            background: 'var(--m3-surface-container-high)',
+            border: '1px solid var(--m3-outline-variant)',
+            borderRadius: 12,
+            padding: '14px 16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Icon name="settings_backup_restore" size={18} style={{ color: 'var(--m3-primary)' }} />
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--m3-on-surface)' }}>
+                Auto-Backup Configuration
+              </span>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, color: 'var(--m3-on-surface)' }}>
+              <input
+                type="checkbox"
+                checked={autoExportSettings.enabled}
+                onChange={(e) => updateAutoExportSettings({ enabled: e.target.checked })}
+              />
+              Enable Auto-Save
+            </label>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', fontSize: 12, color: 'var(--m3-on-surface-variant)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>Threshold Size:</span>
+              <select
+                value={autoExportSettings.threshold}
+                onChange={(e) => updateAutoExportSettings({ threshold: Number(e.target.value) })}
+                style={{
+                  background: 'var(--m3-surface-container-low)',
+                  color: 'var(--m3-on-surface)',
+                  border: '1px solid var(--m3-outline-variant)',
+                  borderRadius: 6,
+                  padding: '4px 8px',
+                  fontSize: 12,
+                  outline: 'none',
+                }}
+              >
+                <option value={20}>20 clips</option>
+                <option value={50}>50 clips (Recommended)</option>
+                <option value={100}>100 clips</option>
+                <option value={200}>200 clips</option>
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>Export Format:</span>
+              <select
+                value={autoExportSettings.format}
+                onChange={(e) => updateAutoExportSettings({ format: e.target.value as any })}
+                style={{
+                  background: 'var(--m3-surface-container-low)',
+                  color: 'var(--m3-on-surface)',
+                  border: '1px solid var(--m3-outline-variant)',
+                  borderRadius: 6,
+                  padding: '4px 8px',
+                  fontSize: 12,
+                  outline: 'none',
+                }}
+              >
+                <option value="json">JSON (Full lossless backup)</option>
+                <option value="md">Markdown (.md)</option>
+                <option value="txt">Plain Text (.txt)</option>
+              </select>
+            </div>
+
+            {autoExportSettings.lastAutoExportedAt && (
+              <span style={{ fontSize: 11, color: 'var(--m3-primary)', fontFamily: 'Space Mono, monospace' }}>
+                Last Auto-Saved: {autoExportSettings.lastAutoExportedAt} ({autoExportSettings.totalAutoExports} exports)
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Broadcast Bar */}
       <div
@@ -135,8 +367,8 @@ export const ClipboardPanel: React.FC = () => {
       </div>
 
       {/* Search & Actions */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-        <div style={{ position: 'relative', flex: 1 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
           <Icon name="search" size={15} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--m3-on-surface-variant)', pointerEvents: 'none' }} />
           <input
             value={searchQuery}
@@ -156,26 +388,93 @@ export const ClipboardPanel: React.FC = () => {
             }}
           />
         </div>
-        <button
-          onClick={clearClipboardHistory}
-          style={{
-            background: 'transparent',
-            border: '1px solid var(--m3-outline-variant)',
-            borderRadius: 10,
-            padding: '8px 14px',
-            fontSize: 12,
-            fontWeight: 500,
-            color: 'var(--m3-error)',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 5,
-            fontFamily: 'Roboto, sans-serif',
-          }}
-        >
-          <Icon name="delete" size={15} />
-          Clear Unpinned
-        </button>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button
+            onClick={clearClipboardHistory}
+            disabled={clipboardItems.length === 0}
+            style={{
+              background: 'transparent',
+              border: '1px solid var(--m3-outline-variant)',
+              borderRadius: 10,
+              padding: '8px 14px',
+              fontSize: 12,
+              fontWeight: 500,
+              color: 'var(--m3-on-surface-variant)',
+              cursor: clipboardItems.length === 0 ? 'not-allowed' : 'pointer',
+              opacity: clipboardItems.length === 0 ? 0.5 : 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+              fontFamily: 'Roboto, sans-serif',
+            }}
+            title="Remove all unpinned items, keeping pinned clips"
+          >
+            <Icon name="cleaning_services" size={15} />
+            Clear Unpinned
+          </button>
+
+          {confirmClearAll ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <button
+                onClick={() => {
+                  clearAllClipboardHistory();
+                  setConfirmClearAll(false);
+                }}
+                style={{
+                  background: 'var(--m3-error)',
+                  color: 'var(--m3-on-error)',
+                  border: 'none',
+                  borderRadius: 10,
+                  padding: '8px 12px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Confirm Clear All
+              </button>
+              <button
+                onClick={() => setConfirmClearAll(false)}
+                style={{
+                  background: 'transparent',
+                  border: '1px solid var(--m3-outline-variant)',
+                  color: 'var(--m3-on-surface)',
+                  borderRadius: 10,
+                  padding: '8px 10px',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmClearAll(true)}
+              disabled={clipboardItems.length === 0}
+              style={{
+                background: 'transparent',
+                border: '1px solid var(--m3-error)',
+                borderRadius: 10,
+                padding: '8px 14px',
+                fontSize: 12,
+                fontWeight: 500,
+                color: 'var(--m3-error)',
+                cursor: clipboardItems.length === 0 ? 'not-allowed' : 'pointer',
+                opacity: clipboardItems.length === 0 ? 0.5 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                fontFamily: 'Roboto, sans-serif',
+              }}
+              title="Clear entire clipboard history including pinned items"
+            >
+              <Icon name="delete_sweep" size={15} />
+              Clear All
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Clip Cards List */}
@@ -223,13 +522,13 @@ export const ClipboardPanel: React.FC = () => {
                     </span>
                   </div>
                   <span style={{ fontSize: 11, fontFamily: 'Space Mono, monospace', color: 'var(--m3-on-surface-variant)' }}>
-                    {item.timestamp} &bull; {item.text.length} chars
+                    {item.timestamp} &bull; {item.type === 'image' ? 'Image' : `${item.text.length} chars`}
                   </span>
                 </div>
 
                 {item.type === 'image' && item.imageData ? (
-                  <div style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid var(--m3-surface-container-high)', maxHeight: 180, display: 'flex', justifyContent: 'center', background: 'black' }}>
-                    <img src={item.imageData} alt="clip" style={{ maxHeight: 180, objectFit: 'contain' }} />
+                  <div style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid var(--m3-surface-container-high)', maxHeight: 200, display: 'flex', justifyContent: 'center', background: '#0a0a0f' }}>
+                    <img src={item.imageData} alt="clip" style={{ maxHeight: 200, maxWidth: '100%', objectFit: 'contain' }} />
                   </div>
                 ) : (
                   <div
@@ -260,6 +559,7 @@ export const ClipboardPanel: React.FC = () => {
                       padding: 6,
                       borderRadius: 6,
                     }}
+                    title={item.pinned ? 'Unpin snippet' : 'Pin snippet to keep in history'}
                   >
                     <Icon name={item.pinned ? 'push_pin' : 'keep'} size={18} />
                   </button>
@@ -269,10 +569,11 @@ export const ClipboardPanel: React.FC = () => {
                       background: 'transparent',
                       border: 'none',
                       cursor: 'pointer',
-                      color: 'var(--m3-on-surface-variant)',
+                      color: 'var(--m3-error)',
                       padding: 6,
                       borderRadius: 6,
                     }}
+                    title="Delete clip"
                   >
                     <Icon name="delete" size={18} />
                   </button>
@@ -305,4 +606,5 @@ export const ClipboardPanel: React.FC = () => {
     </div>
   );
 };
+
 
