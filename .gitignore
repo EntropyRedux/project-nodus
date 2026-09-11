@@ -36,14 +36,23 @@ keystore.properties
 .env.*.local
 *.env
 
-# Binaries & Outputs
+# Binaries & Outputs (NEVER commit APKs)
 *.apk
-!releases/*.apk
 *.aab
+releases/*.apk
 *.exe
 *.dll
 *.so
 *.dylib
+
+# Test Artifacts
+.cargo/test-output.txt
+.cargo/cargo-test.log
+
+# Transient Android Shell Assets
+packages/*/android-shell/app/src/main/assets/frontend/assets/index-*.js
+packages/*/android-shell/app/src/main/assets/frontend/assets/index-*.css
+packages/*/android-shell/app/src/main/assets/frontend/assets/vendor-*.js
 
 # Temporary Screenshots & Screen Captures
 *.png
