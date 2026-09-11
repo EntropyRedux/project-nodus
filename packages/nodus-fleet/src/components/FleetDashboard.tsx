@@ -38,7 +38,8 @@ import {
   Download,
   FileJson,
   FileText,
-  FileCode
+  FileCode,
+  Settings
 } from 'lucide-react';
 
 import { MeshTopologyVisualizer } from './MeshTopologyVisualizer';
@@ -49,7 +50,9 @@ import { DevicePairingModal } from './DevicePairingModal';
 import { IncomingPairModal, IncomingPairRequest } from './IncomingPairModal';
 import { RemoteAppShortcuts } from './RemoteAppShortcuts';
 import { ClipboardDrawer } from './ClipboardDrawer';
+import { SettingsTab } from './SettingsTab';
 import { SharedApp, ScannedPeer, TrustedEntry } from '../types/ui-contracts';
+import { ThemePicker, Theme } from './ThemePicker';
 
 import { universalNetworkFetch } from '../services/FleetDirectClient';
 
@@ -68,8 +71,41 @@ export const FleetDashboard: React.FC = () => {
   const isServerRunning = fleetContext?.isServerRunning ?? true;
   const toggleServer = fleetContext?.toggleServer || (() => {});
 
-  // Navigation tabs: 'Topology' | 'Control Deck' | 'Processes' | 'Terminal' | 'Shortcuts'
-  const [activeTab, setActiveTab] = useState<'topology' | 'control' | 'processes' | 'terminal' | 'shortcuts'>('topology');
+  // Navigation tabs: 'Topology' | 'Control Deck' | 'Processes' | 'Terminal' | 'Shortcuts' | 'Settings'
+  const [activeTab, setActiveTab] = useState<'topology' | 'control' | 'processes' | 'terminal' | 'shortcuts' | 'settings'>('topology');
+
+  const [theme, setTheme] = useState<Theme>(() => {
+    try {
+      const saved = localStorage.getItem('nodus_fleet_theme') as Theme;
+      if (saved === 'midnight' || saved === 'light' || saved === 'obsidian') return saved;
+      return 'midnight';
+    } catch (_) {
+      return 'midnight';
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('nodus_fleet_theme', theme);
+      if (typeof document !== 'undefined') {
+        document.documentElement.className = `theme-${theme}`;
+        document.body.className = `theme-${theme} bg-[var(--app-bg)] text-[var(--text-body)] antialiased select-none`;
+      }
+    } catch (_) {}
+  }, [theme]);
+
+  const lockRemoteWorkstation = async () => {
+    triggerHaptic(15);
+    const target = devices.find(d => !d.isLocal && d.ipAddress) || targetDevice;
+    if (target && target.ipAddress) {
+      try {
+        await universalNetworkFetch(`http://${target.ipAddress}:9120/api/system/control`, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'lock' }),
+        });
+      } catch (_) {}
+    }
+  };
 
   // Multi-device state hooked to live Context with fallback
   const devices = liveDevices.length > 0 ? liveDevices : INITIAL_DEVICES;
@@ -77,6 +113,45 @@ export const FleetDashboard: React.FC = () => {
   const clipboardItems = liveClipboard.length > 0 ? liveClipboard : [];
   const [deviceProcesses, setDeviceProcesses] = useState<Record<string, DeviceProcess[]>>({});
   const [isProcLoading, setIsProcLoading] = useState(false);
+
+  // Granular Feature & Polling Preferences
+  const [isMonitoringEnabled, setIsMonitoringEnabled] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('nodus_fleet_monitoring_enabled');
+      return saved !== null ? saved === 'true' : true;
+    } catch (_) {
+      return true;
+    }
+  });
+
+  const [procRefreshIntervalMs, setProcRefreshIntervalMs] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('nodus_fleet_proc_interval');
+      return saved ? parseInt(saved, 10) || 3000 : 3000;
+    } catch (_) {
+      return 3000;
+    }
+  });
+
+  const [procLimitTopN, setProcLimitTopN] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('nodus_fleet_proc_limit');
+      return saved ? parseInt(saved, 10) || 35 : 35;
+    } catch (_) {
+      return 35;
+    }
+  });
+
+  const [hapticsEnabled, setHapticsEnabled] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('nodus_fleet_haptics_enabled');
+      return saved !== null ? saved === 'true' : true;
+    } catch (_) {
+      return true;
+    }
+  });
+
+  const [procSystemMetrics, setProcSystemMetrics] = useState<any>(null);
 
   // Active processes for the currently selected device
   const activeProcesses = deviceProcesses[selectedDeviceId] || [];
@@ -301,26 +376,35 @@ export const FleetDashboard: React.FC = () => {
 
   // Refresh process list via real API
   const handleRefreshProcesses = async () => {
-    triggerHaptic(10);
     if (!targetDevice) return;
+    triggerHaptic(10);
     setIsProcLoading(true);
     try {
       const url = `http://${targetDevice.ipAddress}:9120/api/processes`;
-      const res = await universalNetworkFetch<{ processes?: Array<{ pid: number; name: string; memory_kb: number }> }>(url);
-      if (res && res.data?.processes && Array.isArray(res.data.processes)) {
-        const mapped: DeviceProcess[] = res.data.processes.map((p: { pid: number; name: string; memory_kb: number }) => ({
-          pid: p.pid,
-          name: p.name,
-          user: 'SYSTEM',
-          cpu: 0,
-          memoryMb: Math.round((p.memory_kb / 1024) * 10) / 10,
-          status: 'running' as const,
-          category: 'system'
-        }));
-        setDeviceProcesses(prev => ({
-          ...prev,
-          [selectedDeviceId]: mapped
-        }));
+      const res = await universalNetworkFetch<{
+        processes?: Array<{ pid: number; name: string; memory_kb?: number; memoryMb?: number; cpu?: number; user?: string }>;
+        system?: any;
+      }>(url);
+      if (res && res.data) {
+        if (res.data.system) {
+          setProcSystemMetrics(res.data.system);
+        }
+        if (res.data.processes && Array.isArray(res.data.processes)) {
+          const rawProcs = procLimitTopN > 0 ? res.data.processes.slice(0, procLimitTopN) : res.data.processes;
+          const mapped: DeviceProcess[] = rawProcs.map((p: any) => ({
+            pid: p.pid,
+            name: p.name,
+            user: p.user || 'SYSTEM',
+            cpu: typeof p.cpu === 'number' ? Math.round(p.cpu * 10) / 10 : 0,
+            memoryMb: typeof p.memoryMb === 'number' ? p.memoryMb : Math.round(((p.memory_kb || 0) / 1024) * 10) / 10,
+            status: 'running' as const,
+            category: 'system'
+          }));
+          setDeviceProcesses(prev => ({
+            ...prev,
+            [selectedDeviceId]: mapped
+          }));
+        }
       }
     } catch (err) {
       console.warn('Failed to fetch processes from target device', err);
@@ -329,12 +413,18 @@ export const FleetDashboard: React.FC = () => {
     }
   };
 
-  // Auto-fetch processes on tab select or target device change
+  // Tab Lifecycle Polling Guard for Process Monitor
   useEffect(() => {
-    if (activeTab === 'processes' && targetDevice) {
+    if (activeTab === 'processes' && targetDevice && isMonitoringEnabled) {
       handleRefreshProcesses();
+      if (procRefreshIntervalMs > 0) {
+        const timer = setInterval(() => {
+          handleRefreshProcesses();
+        }, procRefreshIntervalMs);
+        return () => clearInterval(timer);
+      }
     }
-  }, [activeTab, selectedDeviceId]);
+  }, [activeTab, selectedDeviceId, isMonitoringEnabled, procRefreshIntervalMs]);
 
   // Kill process action via real API
   const handleKillProcess = async (pid: number) => {
@@ -570,7 +660,11 @@ export const FleetDashboard: React.FC = () => {
   };
 
   const handleCopyClipboardItem = (item: ClipboardItem) => {
-    navigator.clipboard.writeText(item.text).catch(() => {});
+    if (fleetContext && typeof fleetContext.copyToClipboard === 'function') {
+      fleetContext.copyToClipboard(item.text || 'Image', item.imageData);
+    } else if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(item.text || '').catch(() => {});
+    }
     setCopiedClipId(item.id);
     setTimeout(() => setCopiedClipId(null), 2000);
   };
@@ -578,6 +672,21 @@ export const FleetDashboard: React.FC = () => {
   const handleDeleteClipboardItem = (id: string) => {
     if (fleetContext && typeof fleetContext.deleteClipboardItem === 'function') {
       fleetContext.deleteClipboardItem(id);
+    }
+  };
+
+  const handleTogglePinClipboardItem = (id: string) => {
+    if (fleetContext && typeof fleetContext.toggleClipboardPin === 'function') {
+      fleetContext.toggleClipboardPin(id);
+    }
+  };
+
+  const handleClearUnpinnedClipboard = () => {
+    const unpinned = clipboardItems.filter(i => !i.pinned);
+    for (const item of unpinned) {
+      if (fleetContext && typeof fleetContext.deleteClipboardItem === 'function') {
+        fleetContext.deleteClipboardItem(item.id);
+      }
     }
   };
 
@@ -612,7 +721,13 @@ export const FleetDashboard: React.FC = () => {
     } else if (format === 'md') {
       let md = `# Nodus Fleet Universal Clipboard History Export\n\n*Exported on ${new Date().toLocaleString()} · Total items: ${clipboardItems.length}*\n\n---\n\n`;
       for (const item of clipboardItems) {
-        md += `### ${item.timestamp} · ${item.deviceName || 'Device'}\n\n\`\`\`text\n${item.text}\n\`\`\`\n\n---\n\n`;
+        md += `### [${(item.type || 'TEXT').toUpperCase()}] ${item.timestamp} · ${item.deviceName || 'Device'}${item.pinned ? ' 📌' : ''}\n\n`;
+        if (item.type === 'image' && item.imageData) {
+          md += `![Clipboard Image](${item.imageData})\n\n`;
+        } else {
+          md += `\`\`\`text\n${item.text}\n\`\`\`\n\n`;
+        }
+        md += `---\n\n`;
       }
       const blob = new Blob([md], { type: 'text/markdown' });
       const url = URL.createObjectURL(blob);
@@ -630,7 +745,12 @@ export const FleetDashboard: React.FC = () => {
       txt += `Total Items: ${clipboardItems.length}\n`;
       txt += `=======================================================\n\n`;
       for (const item of clipboardItems) {
-        txt += `[${item.timestamp}] ${item.deviceName || 'Device'}\n${item.text}\n`;
+        txt += `[${item.timestamp}] ${item.deviceName || 'Device'} (${(item.type || 'TEXT').toUpperCase()})${item.pinned ? ' [PINNED]' : ''}\n`;
+        if (item.type === 'image') {
+          txt += `[Image Payload: ${item.imageData ? Math.round(item.imageData.length * 0.75 / 1024) + ' KB' : 'None'}]\n`;
+        } else {
+          txt += `${item.text}\n`;
+        }
         txt += `-------------------------------------------------------\n`;
       }
       const blob = new Blob([txt], { type: 'text/plain' });
@@ -665,9 +785,9 @@ export const FleetDashboard: React.FC = () => {
   });
 
   return (
-    <div className="h-screen h-dvh w-full bg-[#111318] text-[#E2E2E9] font-sans overflow-hidden flex flex-col relative selection:bg-[#0842A0] selection:text-[#D3E3FD]">
-      {/* ── Google Material 3 Top App Bar with Android Safe-Area Inset ── */}
-      <header className="pt-safe border-b border-white/5 bg-[#111318]/90 backdrop-blur-xl flex items-center justify-between px-3 sm:px-6 min-h-[3.75rem] sm:min-h-[4.25rem] py-1.5 sm:py-2 z-20 shrink-0">
+    <div className={`theme-${theme} flex flex-col h-screen h-dvh w-full overflow-hidden bg-[var(--app-bg)] text-[var(--text-body)] antialiased select-none relative selection:bg-[var(--accent-container)] selection:text-[var(--accent-on-container)]`}>
+      {/* ── Top Application Header (1:1 with Nodus Desktop) ── */}
+      <header className="pt-safe border-b border-[var(--border-subtle)] bg-[var(--surface-header)] backdrop-blur-xl flex items-center justify-between px-3 sm:px-6 min-h-[3.75rem] sm:min-h-[4.25rem] py-1.5 sm:py-2 z-20 shrink-0">
         {/* Brand & M3 Emblem */}
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-[#0842A0] text-[#D3E3FD] flex items-center justify-center shadow-md shadow-blue-950/30 shrink-0">
@@ -676,34 +796,49 @@ export const FleetDashboard: React.FC = () => {
 
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
-              <h1 className="text-lg font-semibold tracking-tight text-white">
-                Nodus <span className="text-[#A8C7FA] font-light">Fleet</span>
+              <h1 className="text-lg font-semibold tracking-tight text-[var(--text-heading)]">
+                Nodus <span className="text-[var(--accent-primary)] font-light">Fleet</span>
               </h1>
-              <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-md bg-[#0F5223] text-[#C4EED0] border border-[#6DD58C]/20 text-[10px] font-medium tracking-wide">
-                Mesh Active
+              <span className="px-1.5 py-0.5 rounded bg-[var(--surface-container)] text-[var(--accent-primary)] font-mono text-[10px] font-semibold border border-[var(--border-subtle)]">
+                Android
               </span>
+              <button
+                onClick={() => {
+                  triggerHaptic(12);
+                  toggleServer();
+                }}
+                title={isServerRunning ? 'Mesh Active (Click to Pause)' : 'Mesh Paused (Click to Activate)'}
+                className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[10px] font-medium tracking-wide transition border active:scale-95 ${
+                  isServerRunning
+                    ? 'bg-[#0F5223] hover:bg-[#1B6D36] text-[#C4EED0] border-[#6DD58C]/30'
+                    : 'bg-[#3A1D1D] hover:bg-[#5C2424] text-[#FFB4AB] border-red-500/30'
+                }`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${isServerRunning ? 'bg-[#6DD58C] animate-pulse' : 'bg-[#FFB4AB]'}`} />
+                <span>{isServerRunning ? 'Mesh Active' : 'Mesh Paused'}</span>
+              </button>
             </div>
-            <span className="text-[11px] text-slate-400 hidden sm:block">
-              Cross-Device Control Hub
-            </span>
+            <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-[var(--text-muted)]">
+              <span>Cross-Device Companion & Control Hub</span>
+            </div>
           </div>
         </div>
 
         {/* Integrated Search Bar */}
         <div className="hidden md:flex items-center flex-1 max-w-md mx-6">
-          <div className="w-full flex items-center gap-2.5 px-3.5 py-2 rounded-lg bg-[#1D2024] hover:bg-[#282A2F] focus-within:bg-[#282A2F] border border-white/5 focus-within:border-[#A8C7FA] transition-all text-xs">
+          <div className="w-full flex items-center gap-2.5 px-3.5 py-2 rounded-lg bg-[var(--surface-container)] hover:bg-[var(--surface-elevated)] focus-within:bg-[var(--surface-elevated)] border border-[var(--border-subtle)] focus-within:border-[var(--border-active)] transition-all text-xs">
             <Search size={16} className="text-slate-400 shrink-0" />
             <input
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="Search fleet nodes, IP, OS..."
-              className="flex-1 bg-transparent text-white placeholder-slate-500 focus:outline-none text-xs"
+              className="flex-1 bg-transparent text-[var(--text-heading)] placeholder:text-[var(--text-muted)] focus:outline-none text-xs"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="text-slate-400 hover:text-white text-[11px] px-1"
+                className="text-[var(--text-muted)] hover:text-[var(--text-heading)] text-[11px] px-1"
               >
                 Clear
               </button>
@@ -711,56 +846,30 @@ export const FleetDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Telemetry, Host Node Chip & Clock */}
+        {/* Right Controls: Lock Workstation + ThemePicker + Clock */}
         <div className="flex items-center gap-3 sm:gap-4">
-          <div className="hidden lg:flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-[#1D2024] border border-white/5 text-xs text-slate-300">
-            <Smartphone size={14} className="text-[#6DD58C]" />
-            <span className="font-medium text-white">Nodus Tablet Prime</span>
-            <span className="text-slate-500">·</span>
-            <span className="flex items-center gap-1 text-[#FFDDAF]">
-              <Battery size={14} />
-              88%
-            </span>
-          </div>
+          <button
+            onClick={lockRemoteWorkstation}
+            className="h-8 px-2.5 sm:px-3 rounded-lg bg-[var(--surface-container)] hover:bg-[var(--surface-elevated)] text-[var(--text-body)] hover:text-[var(--text-heading)] text-xs font-mono flex items-center gap-1.5 transition border border-[var(--border-subtle)] active:scale-95"
+            title="Lock Connected Desktop Workstation"
+          >
+            <Lock size={14} style={{ color: 'var(--btn-danger-text)' }} />
+            <span className="hidden sm:inline">Lock PC</span>
+          </button>
 
-          <div className="flex items-center gap-2 sm:gap-3 text-xs text-slate-400">
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#1D2024] border border-white/5">
-              <div className="w-1.5 h-1.5 rounded-full bg-[#6DD58C] animate-pulse" />
-              <span className="font-mono text-slate-200">{devices.filter(d => !d.isLocal).length} Peers</span>
-            </div>
-
-            <button
-              onClick={() => {
-                triggerHaptic(12);
-                setShowPairingModal(true);
-              }}
-              title={`Pair New Mesh Node (${lanDeviceCount || 0} active LAN devices detected)`}
-              className="h-8 px-2.5 sm:px-3 rounded-lg bg-[#A8C7FA] hover:bg-[#C2E7FF] text-[#062E6F] text-xs font-semibold font-mono flex items-center gap-1.5 transition active:scale-95 shadow-sm shrink-0 touch-manipulation relative"
-            >
-              <Plus size={15} className="stroke-[2.5]" />
-              <span className="hidden sm:inline">Pair</span>
-              {lanDeviceCount > 0 && (
-                <span
-                  className="px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold shadow-md border border-[#111318] flex items-center justify-center min-w-[17px] h-[17px] bg-[#0842A0] text-[#D3E3FD] animate-in zoom-in-75"
-                  title={`${lanDeviceCount} active device${lanDeviceCount === 1 ? '' : 's'} on WiFi`}
-                >
-                  {lanDeviceCount}
-                </span>
-              )}
-            </button>
-          </div>
+          <ThemePicker current={theme} onChange={setTheme} />
 
           <div className="text-right shrink-0 pl-1">
-            <div className="text-xs sm:text-sm font-mono text-white tracking-wide">{currentTime}</div>
-            <div className="text-[10px] text-slate-400 uppercase tracking-tight">{currentDate}</div>
+            <div className="text-xs sm:text-sm font-mono text-[var(--text-heading)] tracking-wide">{currentTime}</div>
+            <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-tight">{currentDate}</div>
           </div>
         </div>
       </header>
 
-      {/* ── Main Application Area: Google M3 Navigation Rail + Workspace ── */}
+      {/* ── Main Application Area: Navigation Rail + Workspace ── */}
       <main className="flex-1 flex overflow-hidden relative">
-        {/* Material 3 Navigation Rail (md and above) */}
-        <nav className="hidden md:flex w-20 border-r border-white/5 bg-[#111318] flex-col items-center py-5 gap-5 z-10 shrink-0 select-none">
+        {/* Navigation Rail (md and above) */}
+        <nav className="hidden md:flex w-20 border-r border-[var(--border-subtle)] bg-[var(--surface-base)] flex-col items-center py-5 gap-4 z-10 shrink-0 select-none">
           {/* Pairing Button */}
           <button
             onClick={() => {
@@ -768,12 +877,12 @@ export const FleetDashboard: React.FC = () => {
               setShowPairingModal(true);
             }}
             title={`Pair New Mesh Node (${lanDeviceCount || 0} active LAN devices detected)`}
-            className="w-11 h-11 rounded-lg bg-[#A8C7FA] hover:bg-[#C2E7FF] text-[#062E6F] shadow-md shadow-blue-950/40 transition-all flex items-center justify-center active:scale-95 group mb-2 relative"
+            className="w-11 h-11 rounded-lg bg-[var(--accent-primary)] hover:opacity-90 text-[var(--m3-on-primary)] shadow-md shadow-blue-950/20 transition-all flex items-center justify-center active:scale-95 group mb-1 relative"
           >
             <Plus size={22} className="stroke-[2.5]" />
             {lanDeviceCount > 0 && (
               <span
-                className="absolute -top-1.5 -right-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold shadow-md border border-[#111318] flex items-center justify-center min-w-[18px] h-[18px] bg-[#0842A0] text-[#D3E3FD] transition-transform animate-in zoom-in-75"
+                className="absolute -top-1.5 -right-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold shadow-md border border-[var(--surface-base)] flex items-center justify-center min-w-[18px] h-[18px] bg-[var(--accent-container)] text-[var(--accent-on-container)] transition-transform animate-in zoom-in-75"
                 title={`${lanDeviceCount} active device${lanDeviceCount === 1 ? '' : 's'} on WiFi`}
               >
                 {lanDeviceCount}
@@ -781,13 +890,14 @@ export const FleetDashboard: React.FC = () => {
             )}
           </button>
 
-          {/* Navigation Items with clean rounded-lg indicators */}
+          {/* Navigation Items */}
           {[
             { id: 'topology', label: 'Topology', icon: Grid },
             { id: 'control', label: 'Control', icon: Sliders },
             { id: 'processes', label: 'Processes', icon: Cpu },
             { id: 'terminal', label: 'Terminal', icon: Terminal },
             { id: 'shortcuts', label: 'Shortcuts', icon: Radio },
+            { id: 'settings', label: 'Settings', icon: Settings },
           ].map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -803,15 +913,15 @@ export const FleetDashboard: React.FC = () => {
                 <div
                   className={`w-12 h-8 rounded-lg flex items-center justify-center transition-all duration-200 ${
                     isActive
-                      ? 'bg-[#0842A0] text-[#D3E3FD] shadow-sm'
-                      : 'text-slate-400 group-hover:text-slate-200 group-hover:bg-white/5'
+                      ? 'bg-[var(--accent-container)] text-[var(--accent-on-container)] shadow-sm'
+                      : 'text-[var(--text-muted)] group-hover:text-[var(--text-heading)] group-hover:bg-[var(--surface-container)]'
                   }`}
                 >
                   <Icon size={20} />
                 </div>
                 <span
                   className={`text-[11px] font-medium tracking-tight mt-1 transition-colors ${
-                    isActive ? 'text-[#D3E3FD] font-semibold' : 'text-slate-400 group-hover:text-slate-200'
+                    isActive ? 'text-[var(--accent-primary)] font-semibold' : 'text-[var(--text-muted)] group-hover:text-[var(--text-heading)]'
                   }`}
                 >
                   {tab.label}
@@ -821,36 +931,36 @@ export const FleetDashboard: React.FC = () => {
           })}
 
           {/* Bottom Rail Utility: Universal Clipboard */}
-          <div className="mt-auto flex flex-col items-center">
+          <div className="mt-auto flex flex-col items-center w-full">
             <button
               onClick={() => {
                 triggerHaptic(12);
                 setShowClipboardDrawer(!showClipboardDrawer);
               }}
               title="Universal Mesh Clipboard"
-              className="flex flex-col items-center group focus:outline-none"
+              className="flex flex-col items-center group focus:outline-none w-full py-1"
             >
               <div
                 className={`w-12 h-8 rounded-lg flex items-center justify-center transition-all duration-200 relative ${
                   showClipboardDrawer
-                    ? 'bg-[#0F5223] text-[#C4EED0]'
-                    : 'text-slate-400 group-hover:text-slate-200 group-hover:bg-white/5'
+                    ? 'bg-[var(--accent-container)] text-[var(--accent-on-container)]'
+                    : 'text-[var(--text-muted)] group-hover:text-[var(--text-heading)] group-hover:bg-[var(--surface-container)]'
                 }`}
               >
                 <Clipboard size={18} />
                 {clipboardItems.length > 0 && (
-                  <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-[#6DD58C] ring-2 ring-[#111318]" />
+                  <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-[var(--surface-base)]" />
                 )}
               </div>
-              <span className="text-[11px] font-medium tracking-tight mt-1 text-slate-400 group-hover:text-slate-200">
+              <span className="text-[11px] font-medium tracking-tight mt-1 text-[var(--text-muted)] group-hover:text-[var(--text-heading)]">
                 Clipboard
               </span>
             </button>
           </div>
         </nav>
 
-        {/* ── Active Tab Workspace (responsive containers tailored for orientation & screen size) ── */}
-        <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative bg-[#111318]">
+        {/* ── Active Tab Workspace ── */}
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative bg-[var(--app-bg)]">
           {/* TAB 1: MESH TOPOLOGY VISUALIZER */}
           {activeTab === 'topology' && (
             <div className="flex-1 overflow-y-auto p-3 sm:p-5 md:p-6 pb-6 space-y-6">
@@ -886,8 +996,8 @@ export const FleetDashboard: React.FC = () => {
                         }}
                         className={`h-8 px-3 rounded-lg text-xs font-medium transition-all whitespace-nowrap inline-flex items-center justify-center shrink-0 touch-manipulation ${
                           deviceFilter === chip.id
-                            ? 'bg-[#A8C7FA] text-[#062E6F] shadow-sm font-semibold'
-                            : 'bg-[#1D2024] hover:bg-[#282A2F] text-slate-300 border border-white/5'
+                            ? 'bg-[var(--accent-primary)] text-[var(--accent-container-text,#062E6F)] shadow-sm font-semibold'
+                            : 'bg-[var(--chip-bg)] hover:bg-[var(--surface-elevated)] text-[var(--chip-text)] border border-[var(--border-subtle)]'
                         }`}
                       >
                         {chip.label}
@@ -895,7 +1005,7 @@ export const FleetDashboard: React.FC = () => {
                     ))}
                   </div>
 
-                  <span className="text-xs font-mono text-slate-400">
+                  <span className="text-xs font-mono text-[var(--text-muted)]">
                     Showing {filteredDevices.length} of {devices.length} nodes
                   </span>
                 </div>
@@ -910,15 +1020,15 @@ export const FleetDashboard: React.FC = () => {
                       <div
                         key={device.id}
                         onClick={() => setSelectedDeviceId(device.id)}
-                        className={`bg-[#1D2024] hover:bg-[#282A2F] border rounded-xl p-5 transition-all duration-200 cursor-pointer flex flex-col justify-between gap-4 shadow-sm hover:shadow-md ${
+                        className={`bg-[var(--card-bg)] hover:bg-[var(--card-hover)] border rounded-xl p-5 transition-all duration-200 cursor-pointer flex flex-col justify-between gap-4 shadow-sm hover:shadow-md ${
                           isSelected
-                            ? 'border-[#A8C7FA] ring-1 ring-[#A8C7FA]/50 bg-[#282A2F]'
-                            : 'border-white/5 hover:border-white/10'
+                            ? 'border-[var(--accent-primary)] ring-1 ring-[var(--border-active)] bg-[var(--surface-elevated)]'
+                            : 'border-[var(--border-subtle)] hover:border-[var(--border-active)]'
                         }`}
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-lg bg-[#282A2F] border border-white/5 flex items-center justify-center text-[#A8C7FA] shrink-0">
+                            <div className="w-10 h-10 rounded-lg bg-[var(--surface-container)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--accent-primary)] shrink-0">
                               {device.type === 'tablet' ? (
                                 <Tablet size={20} />
                               ) : device.type === 'laptop' ? (
@@ -930,10 +1040,10 @@ export const FleetDashboard: React.FC = () => {
                               )}
                             </div>
                             <div>
-                              <div className="text-sm font-semibold text-white">
+                              <div className="text-sm font-semibold text-[var(--text-heading)]">
                                 {device.name}
                               </div>
-                              <div className="text-xs text-slate-400 font-mono mt-0.5">
+                              <div className="text-xs text-[var(--text-muted)] font-mono mt-0.5">
                                 ID: {device.id} · {device.ipAddress} · {device.os.toUpperCase()}
                               </div>
                             </div>
@@ -941,15 +1051,11 @@ export const FleetDashboard: React.FC = () => {
 
                           {device.isLocal ? (
                             <span
-                              className="text-[11px] px-2.5 py-0.5 rounded-md font-medium tracking-wide flex items-center gap-1.5"
+                              className="text-[11px] px-2.5 py-0.5 rounded-md font-medium tracking-wide flex items-center gap-1.5 border"
                               style={{
-                                backgroundColor: isServerRunning
-                                  ? 'rgba(11, 87, 208, 0.18)'
-                                  : 'rgba(255, 180, 171, 0.12)',
-                                color: isServerRunning ? '#A8C7FA' : '#FFB4AB',
-                                border: isServerRunning
-                                  ? '1px solid rgba(168, 199, 250, 0.35)'
-                                  : '1px solid rgba(255, 180, 171, 0.25)'
+                                backgroundColor: isServerRunning ? 'var(--status-online-bg)' : 'var(--status-offline-bg)',
+                                color: isServerRunning ? 'var(--status-online-text)' : 'var(--status-offline-text)',
+                                borderColor: isServerRunning ? 'var(--status-online-border)' : 'var(--status-offline-border)',
                               }}
                             >
                               <span
@@ -961,27 +1067,11 @@ export const FleetDashboard: React.FC = () => {
                             </span>
                           ) : (
                             <span
-                              className="text-[11px] px-2.5 py-0.5 rounded-md font-medium"
-                              style={{
-                                backgroundColor:
-                                  device.status === 'online'
-                                    ? 'rgba(109, 213, 140, 0.15)'
-                                    : device.status === 'connected'
-                                    ? 'rgba(168, 199, 250, 0.15)'
-                                    : 'rgba(255, 221, 175, 0.15)',
-                                color:
-                                  device.status === 'online'
-                                    ? '#6DD58C'
-                                    : device.status === 'connected'
-                                    ? '#A8C7FA'
-                                    : '#FFDDAF',
-                                border:
-                                  device.status === 'online'
-                                    ? '1px solid rgba(109, 213, 140, 0.3)'
-                                    : device.status === 'connected'
-                                    ? '1px solid rgba(168, 199, 250, 0.3)'
-                                    : '1px solid rgba(255, 221, 175, 0.3)'
-                              }}
+                              className={`text-[11px] px-2.5 py-0.5 rounded-md font-medium border ${
+                                device.status === 'online'
+                                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25'
+                                  : 'bg-blue-500/10 text-[var(--accent-primary)] border-[var(--border-active)]'
+                              }`}
                             >
                               {device.status === 'online' ? 'Stable' : device.status}
                             </span>
@@ -990,38 +1080,38 @@ export const FleetDashboard: React.FC = () => {
 
                         {/* CPU Usage Linear Progress Indicator */}
                         <div className="space-y-1.5">
-                          <div className="h-1.5 w-full bg-[#111318] rounded-md overflow-hidden">
+                          <div className="h-1.5 w-full bg-[var(--surface-container)] rounded-md overflow-hidden">
                             <div
-                              className="h-full bg-[#A8C7FA] transition-all duration-500 rounded-md"
+                              className="h-full bg-[var(--accent-primary)] transition-all duration-500 rounded-md"
                               style={{ width: `${device.cpuUsagePercent || 25}%` }}
                             />
                           </div>
-                          <div className="flex justify-between text-[11px] font-mono text-slate-400">
+                          <div className="flex justify-between text-[11px] font-mono text-[var(--text-muted)]">
                             <span>CPU Workload</span>
-                            <span className="text-slate-200 font-semibold">{device.cpuUsagePercent || 25}%</span>
+                            <span className="text-[var(--text-body)] font-semibold">{device.cpuUsagePercent || 25}%</span>
                           </div>
                         </div>
 
                         {/* Telemetry Metrics Row */}
-                        <div className="grid grid-cols-3 gap-2 pt-3 border-t border-white/5 text-[11px] font-mono">
+                        <div className="grid grid-cols-3 gap-2 pt-3 border-t border-[var(--border-subtle)] text-[11px] font-mono">
                           <div>
-                            <span className="text-slate-500 block text-[10px]">LATENCY</span>
-                            <span className="text-[#6DD58C] font-semibold">{device.latencyMs} ms</span>
+                            <span className="text-[var(--text-muted)] block text-[10px]">LATENCY</span>
+                            <span className="text-emerald-500 font-semibold">{device.latencyMs} ms</span>
                           </div>
                           <div>
-                            <span className="text-slate-500 block text-[10px]">BATTERY</span>
-                            <span className="text-slate-200 font-semibold">{device.batteryPercent}%</span>
+                            <span className="text-[var(--text-muted)] block text-[10px]">BATTERY</span>
+                            <span className="text-[var(--text-body)] font-semibold">{device.batteryPercent}%</span>
                           </div>
                           <div>
-                            <span className="text-slate-500 block text-[10px]">ROLE</span>
-                            <span className="text-[#A8C7FA] font-semibold">
+                            <span className="text-[var(--text-muted)] block text-[10px]">ROLE</span>
+                            <span className="text-[var(--accent-primary)] font-semibold">
                               {device.isLocal ? 'HOST' : 'REMOTE'}
                             </span>
                           </div>
                         </div>
 
                         {/* Quick Action Buttons */}
-                        <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/5">
+                        <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--border-subtle)]">
                           {device.isLocal ? (
                             <button
                               onClick={e => {
@@ -1030,11 +1120,12 @@ export const FleetDashboard: React.FC = () => {
                                 toggleServer();
                               }}
                               title={isServerRunning ? 'Stop Server & Unregister from Mesh' : 'Start Server & Broadcast to Mesh'}
-                              className={`h-8 px-2.5 rounded-lg text-xs font-medium transition-colors border active:scale-95 inline-flex items-center justify-center gap-1.5 ${
-                                isServerRunning
-                                  ? 'bg-[#3A1D1D] hover:bg-[#5C2424] text-[#FFB4AB] border-red-500/20'
-                                  : 'bg-[#0F5223] hover:bg-[#1B6D36] text-[#C4EED0] border-[#6DD58C]/20'
-                              }`}
+                              className="h-8 px-2.5 rounded-lg text-xs font-medium transition-colors border active:scale-95 inline-flex items-center justify-center gap-1.5"
+                              style={{
+                                backgroundColor: isServerRunning ? 'var(--btn-danger-bg)' : 'var(--btn-success-bg)',
+                                color: isServerRunning ? 'var(--btn-danger-text)' : 'var(--btn-success-text)',
+                                borderColor: isServerRunning ? 'var(--btn-danger-border)' : 'var(--btn-success-border)',
+                              }}
                             >
                               {isServerRunning ? <Pause size={13} /> : <Play size={13} />}
                               <span>{isServerRunning ? 'Stop Server' : 'Start Server'}</span>
@@ -1048,7 +1139,12 @@ export const FleetDashboard: React.FC = () => {
                                 }
                               }}
                               title="Remove Node from Fleet"
-                              className="h-8 px-2.5 rounded-lg bg-[#3A1D1D] hover:bg-[#5C2424] text-xs font-medium text-[#FFB4AB] transition-colors border border-red-500/20 active:scale-95 inline-flex items-center justify-center touch-manipulation gap-1"
+                              className="h-8 px-2.5 rounded-lg text-xs font-medium transition-colors border active:scale-95 inline-flex items-center justify-center gap-1"
+                              style={{
+                                backgroundColor: 'var(--btn-danger-bg)',
+                                color: 'var(--btn-danger-text)',
+                                borderColor: 'var(--btn-danger-border)',
+                              }}
                             >
                               <Trash2 size={13} />
                               <span>Remove</span>
@@ -1062,7 +1158,7 @@ export const FleetDashboard: React.FC = () => {
                               setActiveTab('control');
                             }}
                             disabled={device.isLocal}
-                            className="h-8 px-3.5 rounded-lg bg-[#282A2F] hover:bg-[#33353A] text-xs font-medium text-slate-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed border border-white/5 active:scale-95 inline-flex items-center justify-center touch-manipulation"
+                            className="h-8 px-3.5 rounded-lg bg-[var(--control-btn-bg)] hover:bg-[var(--control-btn-hover)] text-xs font-medium text-[var(--control-btn-text)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed border border-[var(--border-subtle)] active:scale-95 inline-flex items-center justify-center touch-manipulation"
                           >
                             Control Deck
                           </button>
@@ -1073,7 +1169,7 @@ export const FleetDashboard: React.FC = () => {
                               setSelectedDeviceId(device.id);
                               setActiveTab('processes');
                             }}
-                            className="h-8 px-3.5 rounded-lg bg-[#282A2F] hover:bg-[#33353A] text-xs font-medium text-slate-200 transition-colors border border-white/5 active:scale-95 inline-flex items-center justify-center touch-manipulation"
+                            className="h-8 px-3.5 rounded-lg bg-[var(--control-btn-bg)] hover:bg-[var(--control-btn-hover)] text-xs font-medium text-[var(--control-btn-text)] transition-colors border border-[var(--border-subtle)] active:scale-95 inline-flex items-center justify-center touch-manipulation"
                           >
                             Processes
                           </button>
@@ -1106,6 +1202,20 @@ export const FleetDashboard: React.FC = () => {
                 onSelectDevice={id => setSelectedDeviceId(id)}
                 processes={activeProcesses}
                 isLoading={isProcLoading}
+                isMonitoringEnabled={isMonitoringEnabled}
+                onToggleMonitoring={() => {
+                  setIsMonitoringEnabled(prev => {
+                    const next = !prev;
+                    localStorage.setItem('nodus_fleet_monitoring_enabled', String(next));
+                    return next;
+                  });
+                }}
+                refreshIntervalMs={procRefreshIntervalMs}
+                onChangeInterval={interval => {
+                  setProcRefreshIntervalMs(interval);
+                  localStorage.setItem('nodus_fleet_proc_interval', String(interval));
+                }}
+                systemMetrics={procSystemMetrics}
                 onRefresh={handleRefreshProcesses}
                 onKillProcess={handleKillProcess}
               />
@@ -1117,6 +1227,7 @@ export const FleetDashboard: React.FC = () => {
             <div className="flex-1 flex flex-col min-h-0 overflow-y-auto md:overflow-hidden p-2 sm:p-4 md:p-5 pb-6 md:pb-5">
               <RemoteTerminal
                 availableDevices={devices}
+                theme={theme}
               />
             </div>
           )}
@@ -1165,31 +1276,73 @@ export const FleetDashboard: React.FC = () => {
               />
             </div>
           )}
+
+          {/* TAB 6: FLEET SETTINGS & SYSTEM CONFIGURATION */}
+          {activeTab === 'settings' && (
+            <div className="flex-1 flex flex-col min-h-0 overflow-y-auto md:overflow-hidden p-2 sm:p-4 md:p-5 pb-6 md:pb-5">
+              <SettingsTab
+                currentTheme={theme}
+                onThemeChange={setTheme}
+                isMonitoringEnabled={isMonitoringEnabled}
+                onToggleMonitoring={enabled => {
+                  setIsMonitoringEnabled(enabled);
+                  localStorage.setItem('nodus_fleet_monitoring_enabled', String(enabled));
+                }}
+                refreshIntervalMs={procRefreshIntervalMs}
+                onChangeInterval={(interval: number) => {
+                  setProcRefreshIntervalMs(interval);
+                  localStorage.setItem('nodus_fleet_proc_interval', String(interval));
+                }}
+                limitTopN={procLimitTopN}
+                onChangeLimitTopN={(limit: number) => {
+                  setProcLimitTopN(limit);
+                  localStorage.setItem('nodus_fleet_proc_limit', String(limit));
+                }}
+                hapticsEnabled={hapticsEnabled}
+                onToggleHaptics={enabled => {
+                  setHapticsEnabled(enabled);
+                  localStorage.setItem('nodus_fleet_haptics_enabled', String(enabled));
+                }}
+                subnetInput={subnetInput}
+                onChangeSubnet={setSubnetInput}
+                onResetAllData={() => {
+                  localStorage.removeItem('nodus_fleet_monitoring_enabled');
+                  localStorage.removeItem('nodus_fleet_proc_interval');
+                  localStorage.removeItem('nodus_fleet_proc_limit');
+                  localStorage.removeItem('nodus_fleet_haptics_enabled');
+                  localStorage.removeItem('nodus_trusted_devices');
+                  localStorage.removeItem('nodus_last_subnet');
+                  localStorage.removeItem('nodus_my_shortcuts');
+                  window.location.reload();
+                }}
+              />
+            </div>
+          )}
         </div>
       </main>
 
-      {/* ── Google Material 3 Status Footer (Desktop & Tablet) ── */}
-      <footer className="hidden md:flex h-8 bg-[#191C20] border-t border-white/5 items-center px-6 justify-between text-[11px] font-mono text-slate-400 z-20 shrink-0 select-none">
+      {/* ── Status Footer (Desktop & Tablet) ── */}
+      <footer className="hidden md:flex h-8 bg-[var(--surface-base)] border-t border-[var(--border-subtle)] items-center px-6 justify-between text-[11px] font-mono text-[var(--text-muted)] z-20 shrink-0 select-none">
         <div className="flex gap-4 items-center">
-          <span className="text-[#6DD58C] flex items-center gap-1.5 font-medium">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#6DD58C]" />
+          <span className="text-emerald-500 flex items-center gap-1.5 font-medium">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
             Latency: {targetDevice?.latencyMs !== undefined ? `${targetDevice.latencyMs}ms` : '12ms'}
           </span>
-          <span className="flex items-center gap-1">● Signal: Excellent</span>
-          <span className="hidden sm:flex items-center gap-1">● Encryption: AES-256</span>
-          <span className="hidden md:flex items-center gap-1 text-slate-300">● Node: {targetDevice?.name}</span>
+          <span className="flex items-center gap-1">● Mesh: Secure</span>
+          <span className="hidden sm:flex items-center gap-1">● Peer: {targetDevice?.name || 'Mesh Node'}</span>
         </div>
-        <div className="text-slate-500 font-mono text-[10px]">Build v4.0.2 · Material You</div>
+        <div className="text-[var(--text-muted)] font-mono text-[10px]">Nodus Fleet v1.1.2 (Companion)</div>
       </footer>
 
-      {/* ── Google Material 3 Mobile Navigation Bar (In-Flow Flex item, never blocks workspace content) ── */}
-      <nav className="md:hidden shrink-0 z-30 pb-safe bg-[#111318]/95 backdrop-blur-2xl border-t border-white/5 px-2 py-1.5 flex items-center justify-around select-none shadow-[0_-4px_24px_rgba(0,0,0,0.6)]">
+      {/* ── Mobile Navigation Bar (In-Flow Flex item, never blocks workspace content) ── */}
+      <nav className="md:hidden shrink-0 z-30 pb-safe bg-[var(--surface-base)]/95 backdrop-blur-2xl border-t border-[var(--border-subtle)] px-2 py-1.5 flex items-center justify-around select-none shadow-[0_-4px_24px_rgba(0,0,0,0.6)]">
         {[
           { id: 'topology', label: 'Topology', icon: Grid },
           { id: 'control', label: 'Control', icon: Sliders },
           { id: 'processes', label: 'Processes', icon: Cpu },
           { id: 'terminal', label: 'Terminal', icon: Terminal },
           { id: 'shortcuts', label: 'Shortcuts', icon: Radio },
+          { id: 'settings', label: 'Settings', icon: Settings },
         ].map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -1205,15 +1358,15 @@ export const FleetDashboard: React.FC = () => {
               <div
                 className={`w-12 h-8 rounded-lg transition-all duration-200 flex items-center justify-center ${
                   isActive
-                    ? 'bg-[#0842A0] text-[#D3E3FD] shadow-sm'
-                    : 'bg-transparent text-slate-400'
+                    ? 'bg-[var(--accent-container)] text-[var(--accent-on-container)] shadow-sm'
+                    : 'bg-transparent text-[var(--text-muted)]'
                 }`}
               >
                 <Icon size={19} />
               </div>
               <span
                 className={`text-[10px] font-medium tracking-tight mt-1 whitespace-nowrap ${
-                  isActive ? 'text-[#D3E3FD] font-semibold' : 'text-slate-400'
+                  isActive ? 'text-[var(--accent-primary)] font-semibold' : 'text-[var(--text-muted)]'
                 }`}
               >
                 {tab.label}
@@ -1234,18 +1387,18 @@ export const FleetDashboard: React.FC = () => {
           <div
             className={`w-12 h-8 rounded-lg transition-all duration-200 flex items-center justify-center relative ${
               showClipboardDrawer
-                ? 'bg-[#0F5223] text-[#C4EED0]'
-                : 'bg-transparent text-slate-400'
+                ? 'bg-[var(--accent-container)] text-[var(--accent-on-container)]'
+                : 'bg-transparent text-[var(--text-muted)]'
             }`}
           >
             <Clipboard size={18} />
             {clipboardItems.length > 0 && (
-              <span className="absolute top-1.5 right-3 w-2 h-2 rounded-full bg-[#6DD58C] ring-2 ring-[#111318]" />
+              <span className="absolute top-1.5 right-3 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-[var(--surface-base)]" />
             )}
           </div>
           <span
             className={`text-[10px] font-medium tracking-tight mt-1 ${
-              showClipboardDrawer ? 'text-[#C4EED0] font-semibold' : 'text-slate-400'
+              showClipboardDrawer ? 'text-[var(--accent-primary)] font-semibold' : 'text-[var(--text-muted)]'
             }`}
           >
             Sync
@@ -1261,18 +1414,18 @@ export const FleetDashboard: React.FC = () => {
           title={`Pair New Node (${lanDeviceCount || 0} active LAN devices detected)`}
           className="flex-1 flex flex-col items-center justify-center py-1 px-1 min-h-[50px] transition duration-150 focus:outline-none relative"
         >
-          <div className="w-12 h-8 rounded-lg transition-all flex items-center justify-center bg-[#A8C7FA]/15 text-[#A8C7FA] relative">
+          <div className="w-12 h-8 rounded-lg transition-all flex items-center justify-center bg-[var(--accent-container)]/20 text-[var(--accent-primary)] relative">
             <Plus size={19} className="stroke-[2.2]" />
             {lanDeviceCount > 0 && (
               <span
-                className="absolute -top-1.5 -right-1 px-1.5 py-0.2 rounded-full text-[9px] font-mono font-bold shadow-sm flex items-center justify-center min-w-[16px] h-[16px] bg-[#A8C7FA] text-[#062E6F] border border-[#111318] animate-in zoom-in-75"
+                className="absolute -top-1.5 -right-1 px-1.5 py-0.2 rounded-full text-[9px] font-mono font-bold shadow-sm flex items-center justify-center min-w-[16px] h-[16px] bg-[var(--accent-container)] text-[var(--accent-on-container)] border border-[var(--surface-base)] animate-in zoom-in-75"
                 title={`${lanDeviceCount} active device${lanDeviceCount === 1 ? '' : 's'} on WiFi`}
               >
                 {lanDeviceCount}
               </span>
             )}
           </div>
-          <span className="text-[10px] font-medium tracking-tight mt-1 text-[#A8C7FA]">
+          <span className="text-[10px] font-medium tracking-tight mt-1 text-[var(--accent-primary)]">
             Pair
           </span>
         </button>
@@ -1283,6 +1436,8 @@ export const FleetDashboard: React.FC = () => {
         isOpen={showClipboardDrawer}
         onClose={() => setShowClipboardDrawer(false)}
         items={clipboardItems}
+        isSyncEnabled={fleetContext?.isClipboardSyncEnabled ?? true}
+        onToggleSync={fleetContext?.toggleClipboardSync}
         onBroadcast={text => {
           if (fleetContext && typeof fleetContext.setClipboardText === 'function') {
             fleetContext.setClipboardText(text);
@@ -1290,6 +1445,8 @@ export const FleetDashboard: React.FC = () => {
         }}
         onCopyItem={item => handleCopyClipboardItem(item)}
         onDeleteItem={id => handleDeleteClipboardItem(id)}
+        onTogglePin={id => handleTogglePinClipboardItem(id)}
+        onClearUnpinned={() => handleClearUnpinnedClipboard()}
         onClearAll={() => handleClearClipboard()}
         onExport={format => handleExportClipboard(format)}
       />

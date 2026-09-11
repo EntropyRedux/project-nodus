@@ -24,6 +24,89 @@ pub struct TerminalExecResult {
     pub cwd: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdbDeviceStatus {
+    pub is_installed: bool,
+    pub is_connected: bool,
+    pub output: String,
+}
+
+pub fn resolve_adb_bin() -> String {
+    if let Ok(local_appdata) = std::env::var("LOCALAPPDATA") {
+        let sdk_adb = format!("{}\\Android\\Sdk\\platform-tools\\adb.exe", local_appdata);
+        if Path::new(&sdk_adb).exists() {
+            return sdk_adb;
+        }
+    }
+    "adb".to_string()
+}
+
+#[tauri::command]
+pub async fn check_adb_status(device_ip: Option<String>) -> Result<AdbDeviceStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let adb_bin = resolve_adb_bin();
+        let mut cmd = Command::new(&adb_bin);
+        #[cfg(windows)]
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        cmd.arg("devices");
+
+        match cmd.output() {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+                let is_connected = if let Some(ref ip) = device_ip {
+                    stdout.lines().any(|line| line.contains(ip) && line.contains("device") && !line.contains("offline"))
+                } else {
+                    stdout.lines().any(|line| line.contains("device") && !line.contains("List of"))
+                };
+                Ok(AdbDeviceStatus {
+                    is_installed: true,
+                    is_connected,
+                    output: stdout,
+                })
+            }
+            Err(e) => Ok(AdbDeviceStatus {
+                is_installed: false,
+                is_connected: false,
+                output: format!("ADB not found: {}", e),
+            }),
+        }
+    })
+    .await
+    .map_err(|e| format!("Task error: {}", e))?
+}
+
+#[tauri::command]
+pub async fn connect_adb_device(device_ip: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let adb_bin = resolve_adb_bin();
+        let target = if device_ip.contains(':') {
+            device_ip
+        } else {
+            format!("{}:5555", device_ip)
+        };
+
+        let mut cmd = Command::new(&adb_bin);
+        #[cfg(windows)]
+        cmd.creation_flags(0x08000000);
+        cmd.arg("connect").arg(&target);
+
+        match cmd.output() {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+                let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+                if output.status.success() {
+                    Ok(stdout.trim().to_string())
+                } else {
+                    Err(format!("{}: {}", stdout.trim(), stderr.trim()))
+                }
+            }
+            Err(e) => Err(format!("Failed to execute adb connect: {}", e)),
+        }
+    })
+    .await
+    .map_err(|e| format!("Task error: {}", e))?
+}
+
 #[tauri::command]
 pub async fn execute_local_command(req: ExecRequest) -> Result<bool, String> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -83,6 +166,17 @@ pub fn run_terminal_command_internal(command: String, cwd: Option<String>) -> Re
             Some(d) if Path::new(d).is_dir() => d.clone(),
             _ => default_dir,
         };
+
+        let lower = trimmed.to_ascii_lowercase();
+        if lower == "powershell" || lower == "powershell.exe" || lower == "pwsh" || lower == "cmd" || lower == "cmd.exe" {
+            return Ok(TerminalExecResult {
+                stdout: String::new(),
+                stderr: format!("'{}' is an interactive shell. Enter commands directly (e.g. 'Get-Process', 'dir', 'ipconfig') or run with args: '{} -Command \"...\"'.", trimmed, trimmed),
+                exit_code: 1,
+                success: false,
+                cwd: Some(valid_cwd),
+            });
+        }
 
         // Form PowerShell execution script that executes command and outputs resulting working directory
         let mut script = format!("Set-Location -LiteralPath '{}'; ", valid_cwd.replace('\'', "''"));

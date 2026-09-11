@@ -35,15 +35,17 @@ import { RemoteTerminal } from '../views/RemoteTerminal';
 import { RemoteAppShortcuts } from '../views/RemoteAppShortcuts';
 import { ConfigPanel } from '../panels/ConfigPanel';
 import { HotCornerConfigPanel } from '../panels/HotCornerConfigPanel';
+import { AppSettingsPanel } from '../views/AppSettingsPanel';
 import { ClipboardDrawer } from '../views/ClipboardDrawer';
 import { DevicePairingModal } from '../views/DevicePairingModal';
 import { IncomingPairModal, IncomingPairRequest } from '../views/IncomingPairModal';
 import { TauriService } from '../../services/TauriCommands';
+import { ClipboardBroadcastService } from '../../services/ClipboardBroadcastService';
 import { SharedApp } from '../../types/ui-contracts';
 
 export const DesktopAppShell: React.FC = () => {
   const [activeTab, setActiveTab] = useState<
-    'topology' | 'control' | 'processes' | 'terminal' | 'shortcuts' | 'config' | 'hotcorners'
+    'topology' | 'control' | 'processes' | 'terminal' | 'shortcuts' | 'settings' | 'hotcorners'
   >('topology');
 
   const {
@@ -66,6 +68,7 @@ export const DesktopAppShell: React.FC = () => {
     refreshLanCount,
     setDeviceNickname,
     lockWorkstation,
+    serverConfig,
   } = useFleetStore();
 
   const {
@@ -80,6 +83,8 @@ export const DesktopAppShell: React.FC = () => {
 
   const {
     items: clipboardItems,
+    isSyncEnabled: isClipboardSyncEnabled,
+    toggleSync: toggleClipboardSync,
     pushClip,
     deleteClip,
     togglePin,
@@ -109,11 +114,19 @@ export const DesktopAppShell: React.FC = () => {
   } = useTerminalStore();
 
   const [theme, setTheme] = useState<Theme>(() => {
-    return (localStorage.getItem('nodus_desktop_theme') as Theme) || 'midnight';
+    const saved = localStorage.getItem('nodus_desktop_theme') as Theme;
+    if (saved === 'midnight' || saved === 'light' || saved === 'obsidian') return saved;
+    return 'midnight';
   });
 
   useEffect(() => {
-    localStorage.setItem('nodus_desktop_theme', theme);
+    try {
+      localStorage.setItem('nodus_desktop_theme', theme);
+      if (typeof document !== 'undefined') {
+        document.documentElement.className = `theme-${theme}`;
+        document.body.className = `theme-${theme} bg-[var(--app-bg)] text-[var(--text-body)] antialiased select-none`;
+      }
+    } catch (_) {}
   }, [theme]);
 
   useEffect(() => {
@@ -346,19 +359,27 @@ export const DesktopAppShell: React.FC = () => {
   });
 
   const handleBroadcastClipboard = (content: string) => {
-    pushClip(content, 'text', 'Host PC');
+    pushClip(content, 'this-pc', undefined, 'This PC');
+    const token = serverConfig?.auth_token || serverConfig?.pairingSecret || 'NODUS-FLEET-SECURE';
+    ClipboardBroadcastService.queueBroadcast(content, undefined, fleetDevices, token);
+    TauriService.setClipboardText(content).catch(() => {});
   };
 
   const handleCopyClipboardItem = async (item: any) => {
     try {
+      const token = serverConfig?.auth_token || serverConfig?.pairingSecret || 'NODUS-FLEET-SECURE';
       if (item.type === 'image' && item.imageData) {
         await TauriService.setClipboardImage(item.imageData);
+        pushClip(item.text || 'Image', 'this-pc', item.imageData, 'This PC');
+        ClipboardBroadcastService.queueBroadcast(item.text || 'Image', item.imageData, fleetDevices, token);
       } else if (item.text || item.content) {
         const txt = item.text || item.content;
         await TauriService.setClipboardText(txt);
         if (navigator.clipboard && navigator.clipboard.writeText) {
           await navigator.clipboard.writeText(txt);
         }
+        pushClip(txt, 'this-pc', undefined, 'This PC');
+        ClipboardBroadcastService.queueBroadcast(txt, undefined, fleetDevices, token);
       }
     } catch (_) {}
   };
@@ -377,9 +398,18 @@ export const DesktopAppShell: React.FC = () => {
               <h1 className="text-lg font-semibold tracking-tight text-[var(--text-heading)]">
                 Nodus <span className="text-[var(--accent-primary)] font-light">Desktop</span>
               </h1>
-              <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-[#0F5223] text-[#C4EED0] border border-[#6DD58C]/20 text-[10px] font-medium tracking-wide">
-                Host Daemon Active
-              </span>
+              <button
+                onClick={() => toggleServer()}
+                title={isServerRunning ? 'Host Daemon & Mesh Active (Click to Pause)' : 'Host Daemon & Mesh Paused (Click to Activate)'}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[10px] font-medium tracking-wide transition border active:scale-95 ${
+                  isServerRunning
+                    ? 'bg-[#0F5223] hover:bg-[#1B6D36] text-[#C4EED0] border-[#6DD58C]/30'
+                    : 'bg-[#3A1D1D] hover:bg-[#5C2424] text-[#FFB4AB] border-red-500/30'
+                }`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${isServerRunning ? 'bg-[#6DD58C] animate-pulse' : 'bg-[#FFB4AB]'}`} />
+                <span>{isServerRunning ? 'Mesh Active' : 'Mesh Paused'}</span>
+              </button>
             </div>
             <span className="text-[11px] text-[var(--text-muted)]">
               Cross-Device Companion & Control Hub
@@ -459,7 +489,7 @@ export const DesktopAppShell: React.FC = () => {
             { id: 'processes', label: 'Processes', icon: Cpu },
             { id: 'terminal', label: 'Terminal', icon: Terminal },
             { id: 'shortcuts', label: 'Shortcuts', icon: Radio },
-            { id: 'config', label: 'Bridge', icon: Settings },
+            { id: 'settings', label: 'Settings', icon: Settings },
             { id: 'hotcorners', label: 'HotCorners', icon: CornerUpLeft },
           ].map(tab => {
             const Icon = tab.icon;
@@ -817,10 +847,10 @@ export const DesktopAppShell: React.FC = () => {
             </div>
           )}
 
-          {/* TAB 6: CONFIG PANEL / BRIDGE */}
-          {activeTab === 'config' && (
-            <div className="flex-1 overflow-y-auto p-6">
-              <ConfigPanel />
+          {/* TAB 6: SETTINGS PANEL */}
+          {activeTab === 'settings' && (
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              <AppSettingsPanel currentTheme={theme} onThemeChange={setTheme} />
             </div>
           )}
 
@@ -838,6 +868,8 @@ export const DesktopAppShell: React.FC = () => {
         isOpen={showClipboardDrawer}
         onClose={() => setShowClipboardDrawer(false)}
         items={clipboardItems}
+        isSyncEnabled={isClipboardSyncEnabled}
+        onToggleSync={toggleClipboardSync}
         onBroadcast={handleBroadcastClipboard}
         onCopyItem={handleCopyClipboardItem}
         onDeleteItem={deleteClip}

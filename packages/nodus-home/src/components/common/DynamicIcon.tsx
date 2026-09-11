@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { getRegisteredIcon } from '@nodus/common';
+import { getRegisteredIcon } from '../../utils/iconRegistry';
 
 interface DynamicIconProps {
   name: string;

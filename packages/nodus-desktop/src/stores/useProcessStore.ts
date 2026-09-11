@@ -7,6 +7,9 @@ interface ProcessState {
   systemStats: SystemStats | null;
   isLoading: boolean;
   isPolling: boolean;
+  isMonitoringEnabled: boolean;
+  refreshIntervalMs: number;
+  limitTopN: number;
   searchQuery: string;
   categoryFilter: string;
   sortBy: 'memory' | 'cpu' | 'name' | 'pid';
@@ -14,10 +17,13 @@ interface ProcessState {
   selectedPid: number | null;
   lastUpdated: number | null;
 
-  loadProcesses: (targetDevice?: DeviceInfo | null) => Promise<void>;
+  loadProcesses: (targetDevice?: DeviceInfo | null, force?: boolean) => Promise<void>;
   terminateProcess: (pid: number, targetDevice?: DeviceInfo | null) => Promise<boolean>;
   startAutoPolling: (targetDevice?: DeviceInfo | null, intervalMs?: number) => void;
   stopAutoPolling: () => void;
+  setMonitoringEnabled: (enabled: boolean) => void;
+  setRefreshIntervalMs: (ms: number) => void;
+  setLimitTopN: (limit: number) => void;
   setSearchQuery: (q: string) => void;
   setCategoryFilter: (cat: string) => void;
   setSortBy: (sort: 'memory' | 'cpu' | 'name' | 'pid') => void;
@@ -32,6 +38,30 @@ export const useProcessStore = create<ProcessState>((set, get) => ({
   systemStats: null,
   isLoading: false,
   isPolling: false,
+  isMonitoringEnabled: (() => {
+    try {
+      const saved = localStorage.getItem('nodus_process_monitoring_enabled');
+      return saved !== null ? saved === 'true' : true;
+    } catch (_) {
+      return true;
+    }
+  })(),
+  refreshIntervalMs: (() => {
+    try {
+      const saved = localStorage.getItem('nodus_process_refresh_interval');
+      return saved ? parseInt(saved, 10) || 4000 : 4000;
+    } catch (_) {
+      return 4000;
+    }
+  })(),
+  limitTopN: (() => {
+    try {
+      const saved = localStorage.getItem('nodus_process_limit_top_n');
+      return saved ? parseInt(saved, 10) || 40 : 40;
+    } catch (_) {
+      return 40;
+    }
+  })(),
   searchQuery: '',
   categoryFilter: 'all',
   sortBy: 'memory',
@@ -39,7 +69,11 @@ export const useProcessStore = create<ProcessState>((set, get) => ({
   selectedPid: null,
   lastUpdated: null,
 
-  loadProcesses: async (targetDevice?: DeviceInfo | null) => {
+  loadProcesses: async (targetDevice?: DeviceInfo | null, force = false) => {
+    if (!get().isMonitoringEnabled && !force) {
+      return;
+    }
+
     // Only show full loading spinner if processes list is empty
     if (get().processes.length === 0) {
       set({ isLoading: true });
@@ -68,8 +102,13 @@ export const useProcessStore = create<ProcessState>((set, get) => ({
         list = await TauriService.getRemoteProcesses(targetDevice.ipAddress, 9120);
       }
 
+      // Slice top-N if configured and not searching
+      const limit = get().limitTopN;
+      const query = get().searchQuery.trim();
+      const finalProcs = limit > 0 && !query && list.length > limit ? list.slice(0, limit) : list;
+
       set({
-        processes: list,
+        processes: finalProcs,
         systemStats: stats,
         isLoading: false,
         lastUpdated: Date.now(),
@@ -105,15 +144,28 @@ export const useProcessStore = create<ProcessState>((set, get) => ({
     return success;
   },
 
-  startAutoPolling: (targetDevice?: DeviceInfo | null, intervalMs = 3000) => {
+  startAutoPolling: (targetDevice?: DeviceInfo | null, intervalMs?: number) => {
     if (pollingTimer) {
       clearInterval(pollingTimer);
     }
+
+    if (!get().isMonitoringEnabled) {
+      set({ isPolling: false });
+      return;
+    }
+
+    const interval = intervalMs || get().refreshIntervalMs;
+    if (interval <= 0) {
+      set({ isPolling: false });
+      get().loadProcesses(targetDevice, true);
+      return;
+    }
+
     set({ isPolling: true });
     get().loadProcesses(targetDevice);
     pollingTimer = setInterval(() => {
       get().loadProcesses(targetDevice);
-    }, intervalMs);
+    }, interval);
   },
 
   stopAutoPolling: () => {
@@ -122,6 +174,35 @@ export const useProcessStore = create<ProcessState>((set, get) => ({
       pollingTimer = null;
     }
     set({ isPolling: false });
+  },
+
+  setMonitoringEnabled: (enabled: boolean) => {
+    try {
+      localStorage.setItem('nodus_process_monitoring_enabled', String(enabled));
+    } catch (_) {}
+    set({ isMonitoringEnabled: enabled });
+    if (!enabled) {
+      get().stopAutoPolling();
+    }
+  },
+
+  setRefreshIntervalMs: (ms: number) => {
+    try {
+      localStorage.setItem('nodus_process_refresh_interval', String(ms));
+    } catch (_) {}
+    set({ refreshIntervalMs: ms });
+    if (get().isPolling && ms > 0) {
+      get().startAutoPolling(null, ms);
+    } else if (ms <= 0) {
+      get().stopAutoPolling();
+    }
+  },
+
+  setLimitTopN: (limit: number) => {
+    try {
+      localStorage.setItem('nodus_process_limit_top_n', String(limit));
+    } catch (_) {}
+    set({ limitTopN: limit });
   },
 
   setSearchQuery: (searchQuery: string) => set({ searchQuery }),

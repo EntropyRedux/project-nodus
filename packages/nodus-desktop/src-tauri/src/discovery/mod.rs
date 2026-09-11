@@ -86,6 +86,7 @@ pub fn unregister_node(id: String) -> bool {
 #[tauri::command]
 pub fn get_discovered_devices() -> Vec<DiscoveredDeviceNode> {
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+    let local_ips = get_local_host_ips();
     let mut lock = DISCOVERED_DEVICES.lock().unwrap();
     if let Some(ref mut map) = *lock {
         for dev in map.values_mut() {
@@ -95,7 +96,16 @@ pub fn get_discovered_devices() -> Vec<DiscoveredDeviceNode> {
                 dev.status = "online".to_string();
             }
         }
-        map.values().cloned().collect()
+        map.values()
+            .filter(|d| {
+                if d.is_local {
+                    return false;
+                }
+                let host_ip = d.ip_address.split(':').next().unwrap_or("");
+                !local_ips.iter().any(|lip| lip == host_ip)
+            })
+            .cloned()
+            .collect()
     } else {
         vec![]
     }
@@ -544,14 +554,31 @@ pub fn start_discovery(server_port: u16) {
 fn handle_probe(socket: &UdpSocket, src: SocketAddr, msg: &str, http_port: u16) {
     let stats = get_system_stats().ok();
     let hostname = stats.as_ref().map(|s| s.hostname.clone()).unwrap_or_else(|| "Workstation (PC)".to_string());
+    let local_ips = get_local_host_ips();
 
-    // Record incoming peer beacon in PEER_BEACONS_CACHE for subnet pairing modal
     let sender_ip = src.ip().to_string();
+
+    // 1. Ignore loopback UDP broadcasts from self / local adapters
+    if local_ips.iter().any(|lip| lip == &sender_ip) {
+        return;
+    }
+
     if let Ok(val) = serde_json::from_str::<serde_json::Value>(msg) {
+        // Exclude beacons sent by Nodus Desktop itself
+        if let Some(client) = val.get("client").and_then(|c| c.as_str()) {
+            if client == "com.nodus.desktop" {
+                return;
+            }
+        }
+
         let name = val.get("name").or(val.get("hostname")).and_then(|v| v.as_str()).map(|s| s.to_string());
         let dev_type = val.get("deviceType").or(val.get("type")).and_then(|v| v.as_str()).map(|s| s.to_string());
         let os = val.get("os").and_then(|v| v.as_str()).map(|s| s.to_string());
         let port = val.get("port").or(val.get("httpPort")).and_then(|v| v.as_u64()).map(|p| p as u16).unwrap_or(9120);
+
+        let final_name = name.unwrap_or_else(|| format!("Nodus Node ({})", sender_ip));
+        let final_type = dev_type.unwrap_or_else(|| "tablet".to_string());
+        let final_os = os.unwrap_or_else(|| "Android 14 (HyperOS)".to_string());
 
         let mut lock = PEER_BEACONS_CACHE.lock().unwrap();
         if lock.is_none() {
@@ -561,14 +588,29 @@ fn handle_probe(socket: &UdpSocket, src: SocketAddr, msg: &str, http_port: u16) 
             map.insert(sender_ip.clone(), ScannedPeerResult {
                 ip: sender_ip.clone(),
                 port,
-                hostname: name.or_else(|| Some(format!("Nodus Node ({})", sender_ip))),
+                hostname: Some(final_name.clone()),
                 has_agent: true,
                 is_in_fleet: false,
-                device_type: dev_type.or(Some("tablet".to_string())),
-                os: os.or(Some("Android 14 (HyperOS)".to_string())),
+                device_type: Some(final_type.clone()),
+                os: Some(final_os.clone()),
                 latency_ms: Some(5),
             });
         }
+
+        register_node(DiscoveredDeviceNode {
+            id: format!("node-{}", sender_ip.replace('.', "-")),
+            name: final_name,
+            device_type: final_type,
+            os: final_os,
+            ip_address: format!("{}:{}", sender_ip, port),
+            http_port: port,
+            status: "online".to_string(),
+            battery: Some(85),
+            cpu_load: Some(12),
+            ram_usage: Some("3.4 / 8.0 GB".to_string()),
+            last_seen: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs(),
+            is_local: false,
+        });
     }
 
     let ram_used = stats.as_ref().map(|s| s.ram_used_mb).unwrap_or(0);

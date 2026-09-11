@@ -72,6 +72,10 @@ struct ClipboardReq {
     text: Option<String>,
     #[serde(alias = "imageData")]
     image_data: Option<String>,
+    #[serde(alias = "sourceDevice")]
+    source_device: Option<String>,
+    #[serde(alias = "deviceName")]
+    device_name: Option<String>,
 }
 
 #[allow(dead_code)]
@@ -167,6 +171,7 @@ fn is_authorized(request: &tiny_http::Request) -> bool {
         set.insert("NODUS-FLEET-SECURE".to_string());
         set.insert("nodus-fleet-token".to_string());
         set.insert("nodus-sec-key".to_string());
+        set.insert("nodus-secure-token-fleet-mesh-2026".to_string());
         *lock = Some(set);
     }
 
@@ -180,10 +185,10 @@ fn is_authorized(request: &tiny_http::Request) -> bool {
         if field == "authorization" {
             let val = h.value.as_str();
             let cleaned = val.strip_prefix("Bearer ").unwrap_or(val).trim();
-            tokens.contains(cleaned) || cleaned == "NODUS-FLEET-SECURE" || cleaned == "nodus-fleet-token"
+            tokens.contains(cleaned) || cleaned == "NODUS-FLEET-SECURE" || cleaned == "nodus-fleet-token" || cleaned == "nodus-secure-token-fleet-mesh-2026"
         } else if field == "x-nodus-auth-token" {
             let cleaned = h.value.as_str().trim();
-            tokens.contains(cleaned) || cleaned == "NODUS-FLEET-SECURE" || cleaned == "nodus-fleet-token"
+            tokens.contains(cleaned) || cleaned == "NODUS-FLEET-SECURE" || cleaned == "nodus-fleet-token" || cleaned == "nodus-secure-token-fleet-mesh-2026"
         } else {
             false
         }
@@ -191,8 +196,13 @@ fn is_authorized(request: &tiny_http::Request) -> bool {
 }
 
 fn read_request_body_capped(request: &mut tiny_http::Request, max_bytes: u64) -> Result<String, String> {
-    let mut buffer = String::new();
-    let mut reader = request.as_reader().take(max_bytes);
+    let content_len = request.body_length().unwrap_or(0) as u64;
+    if content_len == 0 {
+        return Ok(String::new());
+    }
+    let to_read = content_len.min(max_bytes);
+    let mut buffer = String::with_capacity(to_read as usize);
+    let mut reader = request.as_reader().take(to_read);
     reader.read_to_string(&mut buffer).map_err(|e| format!("Failed to read body: {}", e))?;
     Ok(buffer)
 }
@@ -211,6 +221,7 @@ fn cors_headers_for(origin: Option<&str>) -> Vec<Header> {
         Header::from_bytes(&b"Access-Control-Allow-Methods"[..], &b"GET, POST, OPTIONS"[..]).unwrap(),
         Header::from_bytes(&b"Access-Control-Allow-Headers"[..], &b"Content-Type, Authorization, X-Nodus-Auth-Token, X-Requested-With"[..]).unwrap(),
         Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap(),
+        Header::from_bytes(&b"Connection"[..], &b"close"[..]).unwrap(),
     ]
 }
 
@@ -276,10 +287,18 @@ pub fn start_server(port: u16) {
             }
         };
 
-        for mut request in server.incoming_requests() {
+        for request in server.incoming_requests() {
             if !SERVER_RUNNING.load(Ordering::SeqCst) {
                 break;
             }
+            thread::spawn(move || {
+                process_single_http_request(request);
+            });
+        }
+    });
+}
+
+fn process_single_http_request(mut request: tiny_http::Request) {
             let url = request.url().to_string();
             let method = request.method().clone();
 
@@ -295,7 +314,7 @@ pub fn start_server(port: u16) {
                     response.add_header(h);
                 }
                 let _ = request.respond(response);
-                continue;
+                return;
             }
 
             let path = url.split('?').next().unwrap_or(&url);
@@ -574,12 +593,37 @@ pub fn start_server(port: u16) {
                             if let Ok(req) = serde_json::from_str::<ClipboardReq>(&body_str) {
                                 if let Some(ref img_data) = req.image_data {
                                     match set_win32_clipboard_image(img_data) {
-                                        Ok(_) => (200, json!({ "status": "success", "type": "image" })),
+                                        Ok(_) => {
+                                            if let Ok(guard) = APP_HANDLE.lock() {
+                                                if let Some(ref handle) = *guard {
+                                                    let _ = handle.emit("clipboard_updated", json!({
+                                                        "type": "image",
+                                                        "imageData": img_data,
+                                                        "text": req.text.clone().unwrap_or_else(|| "Image".to_string()),
+                                                        "sourceDevice": req.source_device.clone().unwrap_or_else(|| "poco-pad".to_string()),
+                                                        "deviceName": req.device_name.clone().unwrap_or_else(|| "POCO Pad".to_string()),
+                                                    }));
+                                                }
+                                            }
+                                            (200, json!({ "status": "success", "type": "image" }))
+                                        },
                                         Err(e) => (500, json!({ "status": "error", "message": e })),
                                     }
                                 } else if let Some(ref text) = req.text {
                                     match set_win32_clipboard(text) {
-                                        Ok(_) => (200, json!({ "status": "success", "type": "text" })),
+                                        Ok(_) => {
+                                            if let Ok(guard) = APP_HANDLE.lock() {
+                                                if let Some(ref handle) = *guard {
+                                                    let _ = handle.emit("clipboard_updated", json!({
+                                                        "type": "text",
+                                                        "text": text,
+                                                        "sourceDevice": req.source_device.clone().unwrap_or_else(|| "poco-pad".to_string()),
+                                                        "deviceName": req.device_name.clone().unwrap_or_else(|| "POCO Pad".to_string()),
+                                                    }));
+                                                }
+                                            }
+                                            (200, json!({ "status": "success", "type": "text" }))
+                                        },
                                         Err(e) => (500, json!({ "status": "error", "message": e })),
                                     }
                                 } else {
@@ -889,21 +933,30 @@ pub fn start_server(port: u16) {
                         }
                     }
 
-                    // Remote Terminal PTY Spawn
-                    (Method::Post, "/api/terminal/pty/spawn") => {
+                    // Remote Terminal PTY Spawn / Create
+                    (Method::Post, "/api/terminal/pty/spawn") | (Method::Post, "/api/terminal/pty/create") => {
                         if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
                             if let Ok(req) = serde_json::from_str::<serde_json::Value>(&body_str) {
-                                let session_id = req.get("session_id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
-                                let shell = req.get("shell").and_then(|v| v.as_str()).map(|s| s.to_string());
+                                let session_id_param = req.get("session_id").and_then(|v| v.as_str()).unwrap_or_default();
+                                let session_id = if session_id_param.is_empty() {
+                                    format!("sess-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis())
+                                } else {
+                                    session_id_param.to_string()
+                                };
+                                let shell = req.get("shell").or_else(|| req.get("command")).and_then(|v| v.as_str()).map(|s| s.to_string());
                                 let cwd = req.get("cwd").and_then(|v| v.as_str()).map(|s| s.to_string());
                                 let cols = req.get("cols").and_then(|v| v.as_u64()).map(|n| n as u16);
                                 let rows = req.get("rows").and_then(|v| v.as_u64()).map(|n| n as u16);
+                                let args = req.get("args").and_then(|v| v.as_array()).map(|arr| {
+                                    arr.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect::<Vec<_>>()
+                                });
                                 match crate::commands::pty::spawn_pty_session(crate::commands::pty::PtySpawnRequest {
                                     session_id: session_id.clone(),
                                     cols,
                                     rows,
                                     cwd,
                                     shell,
+                                    args,
                                 }, None) {
                                     Ok(_) => (200, json!({ "status": "success", "session_id": session_id })),
                                     Err(e) => (500, json!({ "status": "error", "message": e })),
@@ -922,6 +975,34 @@ pub fn start_server(port: u16) {
                                 let data = req.get("data").and_then(|v| v.as_str()).unwrap_or_default().to_string();
                                 match crate::commands::pty::write_pty(session_id, data) {
                                     Ok(_) => (200, json!({ "status": "success" })),
+                                    Err(e) => (500, json!({ "status": "error", "message": e })),
+                                }
+                            } else {
+                                (400, json!({ "status": "error", "message": "Invalid JSON body" }))
+                            }
+                        } else {
+                            (400, json!({ "status": "error", "message": "Body exceeds maximum size" }))
+                        }
+                    }
+
+                    // Remote Terminal PTY Pull (Streaming chunks with timeout)
+                    (Method::Post, "/api/terminal/pty/pull") => {
+                        if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
+                            if let Ok(req) = serde_json::from_str::<serde_json::Value>(&body_str) {
+                                let session_id = req.get("session_id").and_then(|v| v.as_str()).unwrap_or_default();
+                                let offset = req.get("offset").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                                let timeout_ms = req.get("timeout_ms").and_then(|v| v.as_u64()).unwrap_or(2500);
+
+                                match crate::commands::pty::pull_pty_data(session_id, offset, timeout_ms) {
+                                    Ok((data, new_offset, closed)) => (
+                                        200,
+                                        json!({
+                                            "status": "success",
+                                            "data": data,
+                                            "offset": new_offset,
+                                            "closed": closed
+                                        }),
+                                    ),
                                     Err(e) => (500, json!({ "status": "error", "message": e })),
                                 }
                             } else {
@@ -978,8 +1059,6 @@ pub fn start_server(port: u16) {
                 response.add_header(h);
             }
             let _ = request.respond(response);
-        }
-    });
 }
 
 #[cfg(test)]

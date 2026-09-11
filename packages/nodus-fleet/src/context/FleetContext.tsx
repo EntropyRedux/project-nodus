@@ -14,15 +14,18 @@ interface FleetContextType {
   isConnected: boolean;
   activeDeviceId: string;
   isServerRunning: boolean;
+  isClipboardSyncEnabled: boolean;
   toggleServer: () => void;
+  toggleClipboardSync: () => void;
   selectDevice: (id: string) => void;
   removeDevice: (id: string) => void;
   rebootDevice: (id: string) => void;
   addPairedDevice?: (device: Partial<DeviceInfo>) => void;
   clearClipboard: () => void;
   deleteClipboardItem: (id: string) => void;
-  setClipboardText: (text: string) => void;
-  copyToClipboard: (text: string) => void;
+  toggleClipboardPin?: (id: string) => void;
+  setClipboardText: (text: string, imageData?: string) => void;
+  copyToClipboard: (text: string, imageData?: string) => void;
   openInHome: () => void;
   refreshState: () => void;
 }
@@ -58,6 +61,13 @@ const FleetContext = createContext<FleetContextType | null>(null);
 export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [devices, setDevices] = useState<DeviceInfo[]>([DEFAULT_LOCAL_TABLET]);
   const [isServerRunning, setIsServerRunning] = useState<boolean>(true);
+  const [isClipboardSyncEnabled, setIsClipboardSyncEnabled] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('nodus_clipboard_sync_enabled');
+      if (saved !== null) return JSON.parse(saved);
+    } catch (_) {}
+    return true;
+  });
   const [clipboardItems, setClipboardItems] = useState<ClipboardItem[]>([]);
   const [serverConfig, setServerConfig] = useState<NetworkServerConfig>(DEFAULT_SERVER_CONFIG);
   const [isHomeInstalled, setIsHomeInstalled] = useState<boolean>(false);
@@ -74,6 +84,12 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return;
     }
 
+    if (typeof bridge.isClipboardSyncEnabled === 'function') {
+      try {
+        setIsClipboardSyncEnabled(bridge.isClipboardSyncEnabled());
+      } catch (_) {}
+    }
+
     if (typeof bridge.isDaemonRunning === 'function') {
       try {
         setIsServerRunning(bridge.isDaemonRunning());
@@ -84,30 +100,53 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setIsHomeInstalled(bridge.isHomeInstalled());
     }
 
+    let rawDevicesStr: string | null = null;
+    let rawPeersStr: string | null = null;
     if (typeof bridge.getDevices === 'function') {
+      try { rawDevicesStr = bridge.getDevices(); } catch (_) {}
+    }
+    if (typeof bridge.getDiscoveredPeers === 'function') {
+      try { rawPeersStr = bridge.getDiscoveredPeers(); } catch (_) {}
+    }
+
+    if (rawDevicesStr || rawPeersStr) {
       try {
-        const raw = bridge.getDevices();
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) {
-            // Deduplicate devices by normalized IP address
-            const deduplicated: DeviceInfo[] = [];
-            const seenIps = new Set<string>();
-            for (const d of parsed) {
-              const cleanIp = (d.ipAddress || '').split(':')[0].trim();
-              if (d.isLocal || d.id === 'poco-pad' || d.id === 'local') {
-                if (!seenIps.has('local')) {
-                  seenIps.add('local');
-                  deduplicated.push(d);
-                }
-              } else if (cleanIp && !seenIps.has(cleanIp)) {
-                seenIps.add(cleanIp);
-                deduplicated.push(d);
+        const devList: any[] = rawDevicesStr ? JSON.parse(rawDevicesStr) : [];
+        const peerList: any[] = rawPeersStr ? JSON.parse(rawPeersStr) : [];
+        const all = [...(Array.isArray(devList) ? devList : []), ...(Array.isArray(peerList) ? peerList : [])];
+
+        if (all.length > 0) {
+          const deduplicated: DeviceInfo[] = [];
+          const seenIps = new Set<string>();
+          for (const d of all) {
+            const cleanIp = (d.ipAddress || d.ip || '').split(':')[0].trim();
+            if (d.isLocal || d.id === 'poco-pad' || d.id === 'local' || cleanIp === '127.0.0.1') {
+              if (!seenIps.has('local')) {
+                seenIps.add('local');
+                deduplicated.push({
+                  ...DEFAULT_LOCAL_TABLET,
+                  ...d,
+                  isLocal: true,
+                });
               }
+            } else if (cleanIp && !seenIps.has(cleanIp)) {
+              seenIps.add(cleanIp);
+              deduplicated.push({
+                id: d.id || `node-${cleanIp.replace(/\./g, '-')}`,
+                name: d.name || d.hostname || `Remote Node (${cleanIp})`,
+                type: (d.type || d.deviceType || 'desktop') as any,
+                os: (d.os || 'windows') as any,
+                status: (d.status || 'online') as any,
+                ipAddress: cleanIp,
+                batteryPercent: d.batteryPercent ?? d.battery ?? 100,
+                cpuUsagePercent: d.cpuUsagePercent ?? d.cpuLoad ?? 10,
+                isLocal: false,
+                latencyMs: d.latencyMs ?? 5,
+              });
             }
-            const hasLocal = deduplicated.some(d => d.isLocal || d.id === 'poco-pad' || d.id === 'local');
-            setDevices(hasLocal ? deduplicated : [DEFAULT_LOCAL_TABLET, ...deduplicated]);
           }
+          const hasLocal = deduplicated.some(d => d.isLocal || d.id === 'poco-pad' || d.id === 'local');
+          setDevices(hasLocal ? deduplicated : [DEFAULT_LOCAL_TABLET, ...deduplicated]);
         }
       } catch (e) {
         console.warn('Failed to parse devices from bridge', e);
@@ -119,7 +158,14 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const raw = bridge.getClipboardHistory();
         if (raw) {
           const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) setClipboardItems(parsed);
+          if (Array.isArray(parsed)) {
+            const sanitized = parsed.map((item: any) => ({
+              ...item,
+              imageData: item.imageData === 'null' || item.imageData === 'undefined' ? undefined : item.imageData,
+              type: item.imageData && item.imageData !== 'null' ? 'image' : item.type === 'image' ? 'text' : item.type
+            }));
+            setClipboardItems(sanitized);
+          }
         }
       } catch (e) {
         console.warn('Failed to parse clipboard from bridge', e);
@@ -152,8 +198,32 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     refreshState();
 
     const onStateChanged = () => refreshState();
+    const onClipboardChanged = (e: any) => {
+      if (e.detail) {
+        const item = { ...e.detail };
+        if (item.imageData === 'null' || item.imageData === 'undefined') {
+          delete item.imageData;
+          if (item.type === 'image') item.type = 'text';
+        }
+        setClipboardItems(prev => {
+          const filtered = prev.filter(i => {
+            if (item.imageData && i.imageData) return i.imageData !== item.imageData;
+            return i.text !== item.text;
+          });
+          return [item, ...filtered].slice(0, 100);
+        });
+      }
+    };
+
     window.addEventListener('fleet-state-changed', onStateChanged);
-    return () => window.removeEventListener('fleet-state-changed', onStateChanged);
+    window.addEventListener('clipboard-changed', onClipboardChanged);
+    const pollTimer = setInterval(refreshState, 3000);
+
+    return () => {
+      window.removeEventListener('fleet-state-changed', onStateChanged);
+      window.removeEventListener('clipboard-changed', onClipboardChanged);
+      clearInterval(pollTimer);
+    };
   }, [refreshState]);
 
   const selectDevice = useCallback((id: string) => {
@@ -218,6 +288,20 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, []);
 
+  const toggleClipboardSync = useCallback(() => {
+    setIsClipboardSyncEnabled(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('nodus_clipboard_sync_enabled', JSON.stringify(next));
+      } catch (_) {}
+      const bridge = (window as any).NodusNativeBridge;
+      if (bridge && typeof bridge.setClipboardSyncEnabled === 'function') {
+        bridge.setClipboardSyncEnabled(next);
+      }
+      return next;
+    });
+  }, []);
+
   const deleteClipboardItem = useCallback((id: string) => {
     setClipboardItems(prev => prev.filter(i => i.id !== id));
     const bridge = (window as any).NodusNativeBridge;
@@ -226,20 +310,42 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, []);
 
-  const setClipboardText = useCallback((text: string) => {
+  const toggleClipboardPin = useCallback((id: string) => {
+    setClipboardItems(prev =>
+      prev.map(i => (i.id === id ? { ...i, pinned: !i.pinned } : i))
+    );
     const bridge = (window as any).NodusNativeBridge;
-    if (bridge && typeof bridge.setClipboardText === 'function') {
-      bridge.setClipboardText(text);
+    if (bridge && typeof bridge.toggleClipboardPin === 'function') {
+      bridge.toggleClipboardPin(id);
+    }
+  }, []);
+
+  const setClipboardText = useCallback((text: string, imageData?: string) => {
+    const bridge = (window as any).NodusNativeBridge;
+    if (bridge) {
+      if (imageData && typeof bridge.copyImageToClipboard === 'function') {
+        bridge.copyImageToClipboard(imageData, text || 'Image');
+      } else if (imageData && typeof bridge.setClipboardTextWithImage === 'function') {
+        bridge.setClipboardTextWithImage(text || 'Image', imageData);
+      } else if (typeof bridge.setClipboardText === 'function') {
+        bridge.setClipboardText(text);
+      }
     }
     refreshState();
   }, [refreshState]);
 
-  const copyToClipboard = useCallback((text: string) => {
+  const copyToClipboard = useCallback((text: string, imageData?: string) => {
     const bridge = (window as any).NodusNativeBridge;
-    if (bridge && typeof bridge.copyToClipboard === 'function') {
-      bridge.copyToClipboard(text);
+    if (bridge) {
+      if (imageData && typeof bridge.copyImageToClipboard === 'function') {
+        bridge.copyImageToClipboard(imageData, text || 'Image');
+      } else if (imageData && typeof bridge.copyToClipboardWithImage === 'function') {
+        bridge.copyToClipboardWithImage(text || 'Image', imageData);
+      } else if (typeof bridge.copyToClipboard === 'function') {
+        bridge.copyToClipboard(text);
+      }
     } else if (navigator.clipboard) {
-      navigator.clipboard.writeText(text).catch(() => {});
+      if (text) navigator.clipboard.writeText(text).catch(() => {});
     }
     refreshState();
   }, [refreshState]);
@@ -261,13 +367,16 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         isConnected,
         activeDeviceId,
         isServerRunning,
+        isClipboardSyncEnabled,
         toggleServer,
+        toggleClipboardSync,
         selectDevice,
         removeDevice,
         rebootDevice,
         addPairedDevice,
         clearClipboard,
         deleteClipboardItem,
+        toggleClipboardPin,
         setClipboardText,
         copyToClipboard,
         openInHome,

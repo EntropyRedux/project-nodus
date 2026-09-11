@@ -1,6 +1,8 @@
 package com.nodus.fleet
 
 import android.annotation.SuppressLint
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -65,11 +67,12 @@ class FleetActivity : AppCompatActivity() {
                 allowFileAccess = true
                 allowContentAccess = true
                 databaseEnabled = true
-                cacheMode = WebSettings.LOAD_DEFAULT
+                cacheMode = WebSettings.LOAD_NO_CACHE
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                     mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                 }
             }
+            clearCache(true)
             setBackgroundColor(0xFF030712.toInt())
 
             webChromeClient = object : WebChromeClient() {
@@ -111,6 +114,8 @@ class FleetActivity : AppCompatActivity() {
         webView?.loadUrl("https://appassets.androidplatform.net/assets/frontend/index.html")
     }
 
+    private var activityClipListener: ClipboardManager.OnPrimaryClipChangedListener? = null
+
     private fun startFleetServices() {
         val daemonIntent = Intent(this, FleetDaemonService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -121,6 +126,124 @@ class FleetActivity : AppCompatActivity() {
 
         val clipIntent = Intent(this, ClipboardSyncService::class.java)
         startService(clipIntent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        registerClipboardListener()
+        checkAndSyncPrimaryClip()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        unregisterClipboardListener()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            registerClipboardListener()
+            checkAndSyncPrimaryClip()
+        }
+    }
+
+    private fun registerClipboardListener() {
+        try {
+            if (activityClipListener == null) {
+                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                activityClipListener = ClipboardManager.OnPrimaryClipChangedListener {
+                    checkAndSyncPrimaryClip()
+                }
+                cm?.addPrimaryClipChangedListener(activityClipListener)
+                Log.d(TAG, "Registered activity clipboard listener")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error registering activity clipboard listener: ${e.message}")
+        }
+    }
+
+    private fun unregisterClipboardListener() {
+        try {
+            activityClipListener?.let {
+                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                cm?.removePrimaryClipChangedListener(it)
+                activityClipListener = null
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error unregistering activity clipboard listener: ${e.message}")
+        }
+    }
+
+    private fun checkAndSyncPrimaryClip() {
+        try {
+            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
+            val clip = cm.primaryClip
+            if (clip != null && clip.itemCount > 0) {
+                val item = clip.getItemAt(0)
+                val uri = item?.uri
+                val text = item?.text?.toString() ?: item?.coerceToText(this)?.toString()
+
+                if (uri != null) {
+                    val processedImage = processImageUri(uri)
+                    if (processedImage != null) {
+                        ClipboardSyncService.instance?.addAndSync(
+                            text = if (!text.isNullOrBlank()) text else "Image",
+                            deviceId = "local",
+                            imageData = processedImage,
+                            isFromLocalDevice = true
+                        )
+                        return
+                    }
+                }
+
+                if (!text.isNullOrBlank()) {
+                    ClipboardSyncService.instance?.addAndSync(
+                        text = text,
+                        deviceId = "local",
+                        imageData = null,
+                        isFromLocalDevice = true
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error inspecting primary clip: ${e.message}")
+        }
+    }
+
+    private fun processImageUri(uri: android.net.Uri): String? {
+        return try {
+            contentResolver.openInputStream(uri)?.use { inputStream ->
+                val bytes = inputStream.readBytes()
+                val opts = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+                val w = opts.outWidth
+                val h = opts.outHeight
+                if (w <= 0 || h <= 0) return null
+
+                var sampleSize = 1
+                val maxDim = 800
+                while (w / sampleSize > maxDim * 2 || h / sampleSize > maxDim * 2) {
+                    sampleSize *= 2
+                }
+                val decodeOpts = android.graphics.BitmapFactory.Options().apply {
+                    inSampleSize = sampleSize
+                }
+                val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, decodeOpts) ?: return null
+                val scale = minOf(maxDim.toFloat() / bmp.width, maxDim.toFloat() / bmp.height, 1.0f)
+                val scaled = if (scale < 1.0f) {
+                    android.graphics.Bitmap.createScaledBitmap(bmp, (bmp.width * scale).toInt(), (bmp.height * scale).toInt(), true)
+                } else {
+                    bmp
+                }
+                val stream = java.io.ByteArrayOutputStream()
+                scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, stream)
+                val b64 = android.util.Base64.encodeToString(stream.toByteArray(), android.util.Base64.NO_WRAP)
+                "data:image/jpeg;base64,$b64"
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to decode image uri: ${e.message}")
+            null
+        }
     }
 
     override fun onDestroy() {
@@ -267,13 +390,94 @@ class FleetActivity : AppCompatActivity() {
         }
 
         @JavascriptInterface
+        fun deleteClipboardItem(id: String) {
+            ClipboardSyncService.instance?.deleteItem(id)
+        }
+
+        @JavascriptInterface
+        fun toggleClipboardPin(id: String) {
+            ClipboardSyncService.instance?.togglePin(id)
+        }
+
+        @JavascriptInterface
+        fun isClipboardSyncEnabled(): Boolean {
+            return ClipboardSyncService.instance?.isSyncEnabled()
+                ?: context.getSharedPreferences("nodus_fleet_prefs", Context.MODE_PRIVATE)
+                    .getBoolean("clipboard_sync_enabled", true)
+        }
+
+        @JavascriptInterface
+        fun setClipboardSyncEnabled(enabled: Boolean) {
+            context.getSharedPreferences("nodus_fleet_prefs", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("clipboard_sync_enabled", enabled)
+                .apply()
+            ClipboardSyncService.instance?.setSyncEnabled(enabled)
+            FleetDaemonService.instance?.notifyStateChanged()
+        }
+
+        @JavascriptInterface
         fun setClipboardText(text: String) {
-            ClipboardSyncService.instance?.addAndSync(text, "local", isFromLocalDevice = true)
+            setClipboardTextWithImage(text, null)
+        }
+
+        @JavascriptInterface
+        fun setClipboardTextWithImage(text: String, imageData: String?) {
+            copyToClipboardWithImage(text, imageData)
         }
 
         @JavascriptInterface
         fun copyToClipboard(text: String) {
-            ClipboardSyncService.instance?.addAndSync(text, "local", isFromLocalDevice = false)
+            copyToClipboardWithImage(text, null)
+        }
+
+        @JavascriptInterface
+        fun copyImageToClipboard(imageData: String, text: String?) {
+            copyToClipboardWithImage(text ?: "Image", imageData)
+        }
+
+        @JavascriptInterface
+        fun copyToClipboardWithImage(text: String, imageData: String?) {
+            val rawImage = imageData?.trim()
+            val cleanImage = if (rawImage.isNullOrBlank() || rawImage == "null" || rawImage == "undefined") null else rawImage
+            val cleanText = text.trim()
+
+            if (!cleanImage.isNullOrBlank()) {
+                runOnUiThread {
+                    try {
+                        val imagesDir = java.io.File(context.cacheDir, "clipboard_images")
+                        imagesDir.mkdirs()
+                        val imageFile = java.io.File(imagesDir, "clip_current.png")
+                        val rawBase64 = if (cleanImage.contains("base64,")) {
+                            cleanImage.substringAfter("base64,")
+                        } else {
+                            cleanImage
+                        }
+                        val bytes = android.util.Base64.decode(rawBase64, android.util.Base64.DEFAULT)
+                        imageFile.writeBytes(bytes)
+
+                        val uri = androidx.core.content.FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.fileprovider",
+                            imageFile
+                        )
+                        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                        val clipData = ClipData.newUri(contentResolver, "Nodus Fleet Image", uri)
+                        cm?.setPrimaryClip(clipData)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to copy image to clipboard: ${e.message}")
+                    }
+                }
+                ClipboardSyncService.instance?.addAndSync(if (cleanText.isNotBlank()) cleanText else "Image", "local", imageData = cleanImage, isFromLocalDevice = true)
+            } else {
+                runOnUiThread {
+                    try {
+                        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                        cm?.setPrimaryClip(ClipData.newPlainText("Nodus Fleet", cleanText))
+                    } catch (_: Exception) {}
+                }
+                ClipboardSyncService.instance?.addAndSync(cleanText, "local", imageData = null, isFromLocalDevice = true)
+            }
         }
 
         @JavascriptInterface
@@ -554,6 +758,23 @@ class FleetActivity : AppCompatActivity() {
                     put("ok", false)
                     put("error", e.message ?: "Unknown error")
                 }.toString()
+            }
+        }
+
+        @JavascriptInterface
+        fun isAccessibilityEnabled(): Boolean {
+            return com.nodus.fleet.service.NodusAccessibilityService.isEnabled(context)
+        }
+
+        @JavascriptInterface
+        fun openAccessibilitySettings() {
+            try {
+                val intent = Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to open accessibility settings: ${e.message}")
             }
         }
 

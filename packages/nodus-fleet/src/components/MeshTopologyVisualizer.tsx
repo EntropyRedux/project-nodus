@@ -171,7 +171,7 @@ export const MeshTopologyVisualizer: React.FC<MeshTopologyVisualizerProps> = ({
   return (
     <div
       ref={containerRef}
-      className="relative w-full h-[300px] sm:h-[360px] md:h-[430px] lg:h-[460px] rounded-xl bg-[#1D2024] border border-white/5 overflow-hidden shadow-xl flex flex-col justify-between select-none touch-manipulation"
+      className="relative w-full h-[300px] sm:h-[360px] md:h-[430px] lg:h-[460px] rounded-xl bg-[var(--surface-container)] border border-[var(--border-subtle)] overflow-hidden shadow-xl flex flex-col justify-between select-none touch-manipulation"
     >
       {/* High-tech SVG Canvas */}
       <svg
@@ -388,8 +388,8 @@ export const MeshTopologyVisualizer: React.FC<MeshTopologyVisualizerProps> = ({
                 cx={node.x}
                 cy={node.y}
                 r={nodeRadius}
-                fill={isLocal ? '#003258' : '#282A2F'}
-                stroke={isSelected ? '#A8C7FA' : statusTheme.nodeColor}
+                fill={isLocal ? 'var(--accent-container, #003258)' : 'var(--surface-elevated, #282A2F)'}
+                stroke={isSelected ? 'var(--accent-primary, #A8C7FA)' : statusTheme.nodeColor}
                 strokeWidth={isSelected ? 2.5 : 1.5}
                 filter="drop-shadow(0 4px 12px rgba(0,0,0,0.5))"
               />
@@ -399,7 +399,7 @@ export const MeshTopologyVisualizer: React.FC<MeshTopologyVisualizerProps> = ({
                 cx={node.x}
                 cy={node.y}
                 r={Math.max(4, nodeRadius - (isCompact ? 3 : 4))}
-                fill={isLocal ? '#00497D' : '#1D2024'}
+                fill={isLocal ? 'var(--accent-secondary, #00497D)' : 'var(--surface-container, #1D2024)'}
                 stroke={statusTheme.nodeColor}
                 strokeWidth="0.75"
                 strokeOpacity="0.4"
@@ -411,7 +411,7 @@ export const MeshTopologyVisualizer: React.FC<MeshTopologyVisualizerProps> = ({
                 cy={node.y - nodeRadius * 0.72}
                 r={isCompact ? 4.5 : 5.5}
                 fill={statusTheme.nodeColor}
-                stroke="#1D2024"
+                stroke="var(--surface-container, #1D2024)"
                 strokeWidth="2"
               />
 
@@ -422,7 +422,7 @@ export const MeshTopologyVisualizer: React.FC<MeshTopologyVisualizerProps> = ({
                 textAnchor="middle"
                 fontSize={isUltraCompact ? "9" : isCompact ? "10" : "11"}
                 fontWeight={600}
-                fill={isSelected ? '#A8C7FA' : '#E2E2E6'}
+                fill={isSelected ? 'var(--accent-primary, #A8C7FA)' : 'var(--text-heading, #E2E2E6)'}
                 className="pointer-events-none drop-shadow-md"
               >
                 {isCompact && node.device.name.length > 15
@@ -477,19 +477,19 @@ export const MeshTopologyVisualizer: React.FC<MeshTopologyVisualizerProps> = ({
       {/* Top Overlay Bar: Header & Mesh Status */}
       <div className="relative z-10 px-3 sm:px-5 pt-3 sm:pt-4 pb-2 flex items-center justify-between pointer-events-none gap-2">
         <div className="flex items-center gap-2 sm:gap-3">
-          <div className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 font-mono">
+          <div className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] font-mono">
             Topology
           </div>
-          <div className="bg-[#282A2F] text-[10px] sm:text-[11px] px-2 py-0.5 rounded-md text-slate-300 font-mono border border-white/5">
+          <div className="bg-[var(--surface-elevated)] text-[10px] sm:text-[11px] px-2 py-0.5 rounded-md text-[var(--text-body)] font-mono border border-[var(--border-subtle)]">
             {devices.filter(d => d.status === 'online' || d.status === 'connected').length}/{devices.length} Nodes
           </div>
         </div>
 
         {/* Selected device tag */}
         {selectedNode && (
-          <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2 h-6 sm:h-7 px-2 sm:px-3 rounded-lg bg-[#282A2F] text-[10px] sm:text-[11px] font-mono text-slate-300 border border-white/5 shadow-sm max-w-[170px] sm:max-w-xs truncate">
-            <span className="text-slate-400 uppercase font-semibold hidden xs:inline">Target:</span>
-            <span className="font-semibold text-[#A8C7FA] truncate">{selectedNode.device.name}</span>
+          <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2 h-6 sm:h-7 px-2 sm:px-3 rounded-lg bg-[var(--surface-elevated)] text-[10px] sm:text-[11px] font-mono text-[var(--text-body)] border border-[var(--border-subtle)] shadow-sm max-w-[170px] sm:max-w-xs truncate">
+            <span className="text-[var(--text-muted)] uppercase font-semibold hidden xs:inline">Target:</span>
+            <span className="font-semibold text-[var(--accent-primary)] truncate">{selectedNode.device.name}</span>
             <span
               className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full shrink-0"
               style={{ backgroundColor: STATUS_THEME[selectedNode.device.status]?.nodeColor || '#6DD58C' }}
@@ -501,18 +501,18 @@ export const MeshTopologyVisualizer: React.FC<MeshTopologyVisualizerProps> = ({
       {/* Hovered / Active Telemetry Detail Popover */}
       {hoveredNode && (
         <div
-          className="absolute z-20 pointer-events-none p-3 sm:p-4 rounded-xl bg-[#282A2F]/95 border border-white/10 backdrop-blur-xl shadow-2xl transition-all duration-200 min-w-[190px] sm:min-w-[210px] max-w-[90%]"
+          className="absolute z-20 pointer-events-none p-3 sm:p-4 rounded-xl bg-[var(--surface-elevated)]/95 border border-[var(--border-subtle)] backdrop-blur-xl shadow-2xl transition-all duration-200 min-w-[190px] sm:min-w-[210px] max-w-[90%]"
           style={{
             left: Math.max(10, Math.min(width - 220, hoveredNode.x - 100)),
             top: hoveredNode.y > height / 2 ? Math.max(10, hoveredNode.y - 135) : Math.min(height - 120, hoveredNode.y + 35)
           }}
         >
-          <div className="flex items-center justify-between pb-2 border-b border-white/5">
+          <div className="flex items-center justify-between pb-2 border-b border-[var(--border-subtle)]">
             <div className="flex items-center gap-2 min-w-0">
               <span style={{ color: STATUS_THEME[hoveredNode.device.status]?.nodeColor }}>
                 {getDeviceIcon(hoveredNode.device.type, 14)}
               </span>
-              <span className="text-xs font-semibold text-white truncate">{hoveredNode.device.name}</span>
+              <span className="text-xs font-semibold text-[var(--text-heading)] truncate">{hoveredNode.device.name}</span>
             </div>
             <span
               className="px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-semibold uppercase shrink-0"
@@ -526,24 +526,24 @@ export const MeshTopologyVisualizer: React.FC<MeshTopologyVisualizerProps> = ({
           </div>
 
           <div className="mt-2.5 space-y-1.5 text-[11px] font-mono">
-            <div className="flex justify-between text-slate-400">
+            <div className="flex justify-between text-[var(--text-muted)]">
               <span>Endpoint:</span>
-              <span className="text-slate-200">{hoveredNode.device.ipAddress}</span>
+              <span className="text-[var(--text-body)]">{hoveredNode.device.ipAddress}</span>
             </div>
-            <div className="flex justify-between text-slate-400">
+            <div className="flex justify-between text-[var(--text-muted)]">
               <span>Architecture:</span>
-              <span className="text-slate-200 capitalize">{hoveredNode.device.os}</span>
+              <span className="text-[var(--text-body)] capitalize">{hoveredNode.device.os}</span>
             </div>
             {hoveredNode.device.latencyMs !== undefined && (
-              <div className="flex justify-between text-slate-400">
+              <div className="flex justify-between text-[var(--text-muted)]">
                 <span>RTT Latency:</span>
                 <span className="text-[#6DD58C]">{hoveredNode.device.latencyMs} ms</span>
               </div>
             )}
             {hoveredNode.device.batteryPercent !== undefined && (
-              <div className="flex justify-between text-slate-400">
+              <div className="flex justify-between text-[var(--text-muted)]">
                 <span>Battery:</span>
-                <span className="text-slate-200">{hoveredNode.device.batteryPercent}%</span>
+                <span className="text-[var(--text-body)]">{hoveredNode.device.batteryPercent}%</span>
               </div>
             )}
           </div>
@@ -551,7 +551,7 @@ export const MeshTopologyVisualizer: React.FC<MeshTopologyVisualizerProps> = ({
       )}
 
       {/* Bottom Telemetry Legend & Controls */}
-      <div className="relative z-10 px-3 sm:px-5 py-2 sm:py-2.5 bg-[#282A2F]/90 border-t border-white/5 backdrop-blur-md flex flex-wrap items-center justify-between gap-2 text-xs">
+      <div className="relative z-10 px-3 sm:px-5 py-2 sm:py-2.5 bg-[var(--surface-container)]/90 border-t border-[var(--border-subtle)] backdrop-blur-md flex flex-wrap items-center justify-between gap-2 text-xs">
         {/* Status Legend Pills */}
         <div className="flex items-center gap-2.5 sm:gap-4 overflow-x-auto no-scrollbar">
           {(['online', 'connected', 'idle', 'offline'] as const).map(status => {
@@ -565,7 +565,7 @@ export const MeshTopologyVisualizer: React.FC<MeshTopologyVisualizerProps> = ({
                     boxShadow: `0 0 6px ${theme.nodeColor}`
                   }}
                 />
-                <span className="text-[10px] sm:text-[11px] font-medium text-slate-300 capitalize">
+                <span className="text-[10px] sm:text-[11px] font-medium text-[var(--text-body)] capitalize">
                   {status}
                 </span>
               </div>
@@ -574,8 +574,8 @@ export const MeshTopologyVisualizer: React.FC<MeshTopologyVisualizerProps> = ({
         </div>
 
         {/* Tip text */}
-        <div className="text-[10px] sm:text-[11px] text-slate-400 font-mono flex items-center gap-1.5 shrink-0">
-          <Sparkles className="w-3 h-3 text-[#A8C7FA]" />
+        <div className="text-[10px] sm:text-[11px] text-[var(--text-muted)] font-mono flex items-center gap-1.5 shrink-0">
+          <Sparkles className="w-3 h-3 text-[var(--accent-primary)]" />
           <span className="hidden xs:inline">Tap node to assign as remote target</span>
           <span className="xs:hidden">Tap node to target</span>
         </div>

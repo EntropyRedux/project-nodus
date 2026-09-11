@@ -1,14 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Palette, Check } from 'lucide-react';
 
-export type Theme = 'midnight' | 'light' | 'obsidian' | 'cyberpunk' | 'slate';
+export type Theme = 'midnight' | 'light' | 'obsidian';
 
 interface ThemePickerProps {
   current: Theme;
   onChange: (theme: Theme) => void;
 }
 
-const THEMES: { id: Theme; name: string; desc: string; color: string; bg: string }[] = [
+export const THEMES: { id: Theme; name: string; desc: string; color: string; bg: string }[] = [
   {
     id: 'midnight',
     name: 'Midnight Dark',
@@ -26,23 +26,9 @@ const THEMES: { id: Theme; name: string; desc: string; color: string; bg: string
   {
     id: 'obsidian',
     name: 'Obsidian Glass',
-    desc: 'Frosted purple/violet glassmorphism',
+    desc: 'Translucent frosted obsidian glassmorphism',
     color: '#A78BFA',
-    bg: '#030305',
-  },
-  {
-    id: 'cyberpunk',
-    name: 'Cyberpunk Neon',
-    desc: 'Vibrant neon cyan & yellow accents',
-    color: '#22D3EE',
-    bg: '#090D16',
-  },
-  {
-    id: 'slate',
-    name: 'Slate Minimal',
-    desc: 'Minimalist industrial monochrome',
-    color: '#94A3B8',
-    bg: '#0F172A',
+    bg: '#050508',
   },
 ];
 

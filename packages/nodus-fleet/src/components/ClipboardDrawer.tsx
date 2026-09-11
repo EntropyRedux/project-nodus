@@ -19,6 +19,8 @@ export interface ClipboardDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   items: ClipboardItem[];
+  isSyncEnabled?: boolean;
+  onToggleSync?: () => void;
   onBroadcast: (text: string) => void;
   onCopyItem: (item: ClipboardItem) => void;
   onDeleteItem?: (id: string) => void;
@@ -32,6 +34,8 @@ export const ClipboardDrawer: React.FC<ClipboardDrawerProps> = ({
   isOpen,
   onClose,
   items,
+  isSyncEnabled = true,
+  onToggleSync,
   onBroadcast,
   onCopyItem,
   onDeleteItem,
@@ -78,7 +82,23 @@ export const ClipboardDrawer: React.FC<ClipboardDrawerProps> = ({
           <Clipboard className="w-4 h-4" />
           <h3 className="text-sm font-semibold text-[var(--text-heading)]">Universal Mesh Clipboard</h3>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
+          {/* Sync Toggle Pill */}
+          {onToggleSync && (
+            <button
+              onClick={onToggleSync}
+              className={`px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 transition ${
+                isSyncEnabled
+                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25'
+                  : 'bg-amber-500/15 text-amber-400 border border-amber-500/30 hover:bg-amber-500/25'
+              }`}
+              title={isSyncEnabled ? 'Clipboard sync is active (click to pause)' : 'Clipboard sync is paused (click to resume)'}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${isSyncEnabled ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+              <span>{isSyncEnabled ? 'Sync ON' : 'Sync OFF'}</span>
+            </button>
+          )}
+
           {/* Quick Export Button */}
           {onExport && (
             <div className="relative">
@@ -126,6 +146,24 @@ export const ClipboardDrawer: React.FC<ClipboardDrawerProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Sync Paused Optimization Warning */}
+      {!isSyncEnabled && (
+        <div className="px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 flex items-center justify-between text-[11px] text-amber-300">
+          <div className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+            <span>Clipboard sync paused (optimization mode)</span>
+          </div>
+          {onToggleSync && (
+            <button
+              onClick={onToggleSync}
+              className="text-[10px] font-bold text-amber-300 hover:text-white underline"
+            >
+              Resume
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Broadcast Form */}
       <div className="p-4 border-b border-[var(--border-subtle)] bg-[var(--surface-container)]">
@@ -234,7 +272,7 @@ export const ClipboardDrawer: React.FC<ClipboardDrawerProps> = ({
                 <span>{item.timestamp}</span>
               </div>
 
-              {item.type === 'image' && item.imageData ? (
+              {item.type === 'image' && item.imageData && item.imageData !== 'null' && item.imageData.startsWith('data:image') ? (
                 <div className="my-1.5 rounded-lg overflow-hidden border border-[var(--border-subtle)] bg-black/40 flex items-center justify-center max-h-36">
                   <img
                     src={item.imageData}

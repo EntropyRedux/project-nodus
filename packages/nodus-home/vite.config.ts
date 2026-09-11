@@ -10,7 +10,6 @@ export default defineConfig(() => {
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
-        '@nodus/common': path.resolve(__dirname, '../nodus-common/src'),
       },
     },
     server: {

@@ -19,15 +19,20 @@ import {
   Terminal,
   Check,
   ArrowRightLeft,
-  Layers
+  Layers,
+  Pause,
+  Play,
+  Clock,
+  ShieldCheck,
+  Server
 } from 'lucide-react';
 
-type RawProcessItem = { pid: number; name: string; memory_kb: number };
+type RawProcessItem = { pid: number; name: string; memory_kb: number; cpu?: number };
 
 function normalizeProcessList(rawList: ProcessMonitorProps['processes']): DeviceProcess[] {
   if (!rawList) return [];
   return rawList.map(item => {
-    if ('memoryMb' in item) {
+    if ('memoryMb' in item && typeof (item as DeviceProcess).memoryMb === 'number') {
       return item as DeviceProcess;
     }
     const raw = item as RawProcessItem;
@@ -35,8 +40,8 @@ function normalizeProcessList(rawList: ProcessMonitorProps['processes']): Device
       pid: raw.pid,
       name: raw.name,
       user: 'SYSTEM',
-      cpu: Math.round((Math.random() * 4.5 + 0.1) * 10) / 10,
-      memoryMb: Math.round((raw.memory_kb / 1024) * 10) / 10,
+      cpu: typeof raw.cpu === 'number' ? Math.round(raw.cpu * 10) / 10 : 0,
+      memoryMb: Math.round(((raw.memory_kb || 0) / 1024) * 10) / 10,
       status: 'running' as const,
       category: categorizeProcess(raw.name)
     };
@@ -139,13 +144,19 @@ export const ProcessMonitorTable: React.FC<ProcessMonitorProps> = ({
   onSelectDevice,
   processes,
   isLoading = false,
+  isMonitoringEnabled = true,
+  onToggleMonitoring,
+  refreshIntervalMs = 3000,
+  onChangeInterval,
   onRefresh,
-  onKillProcess
+  onKillProcess,
+  systemMetrics
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [confirmPid, setConfirmPid] = useState<number | null>(null);
   const [confirmGroupKey, setConfirmGroupKey] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'memory' | 'cpu' | 'name'>('memory');
+  const [limitTopN, setLimitTopN] = useState<number>(35);
 
   // Device dropdown state
   const availableDevices = devices && devices.length > 0 ? devices : [device];
@@ -202,10 +213,15 @@ export const ProcessMonitorTable: React.FC<ProcessMonitorProps> = ({
     });
   }, [normalizedList, searchQuery]);
 
-  // Group processes by application automatically
+  // Group processes by application automatically with Top-N slicing for WebView performance
   const groupedProcesses = useMemo(() => {
+    // Slicing top items if not searching to eliminate DOM reflow lag
+    const sliced = (!searchQuery.trim() && limitTopN > 0 && filteredProcesses.length > limitTopN)
+      ? filteredProcesses.slice(0, limitTopN)
+      : filteredProcesses;
+
     const map = new Map<string, DeviceProcess[]>();
-    filteredProcesses.forEach(p => {
+    sliced.forEach(p => {
       const key = cleanAppName(p.name).toLowerCase();
       const existing = map.get(key) || [];
       existing.push(p);
@@ -233,18 +249,23 @@ export const ProcessMonitorTable: React.FC<ProcessMonitorProps> = ({
     });
 
     return groups;
-  }, [filteredProcesses, sortBy]);
+  }, [filteredProcesses, sortBy, limitTopN, searchQuery]);
 
-  // Auto-expand groups when user is searching so matching child processes become visible immediately
+  // Auto-expand groups when user is searching
   useEffect(() => {
     if (searchQuery.trim().length > 0) {
       setExpandedGroups(new Set(groupedProcesses.map(g => g.key)));
     }
   }, [searchQuery, groupedProcesses]);
 
-  // Overall RAM and CPU metrics calculation
-  const totalAllocatedRamMb = normalizedList.reduce((sum, p) => sum + p.memoryMb, 0);
-  const totalDeviceRamMb = device.ramTotalMb || 16384; // default 16GB
+  // Overall RAM calculation
+  const isAndroidTarget = device.os?.toLowerCase().includes('android') || device.type === 'tablet';
+  const totalAllocatedRamMb = isAndroidTarget && systemMetrics?.usedRamMb
+    ? systemMetrics.usedRamMb
+    : normalizedList.reduce((sum, p) => sum + p.memoryMb, 0);
+  const totalDeviceRamMb = isAndroidTarget && systemMetrics?.totalRamMb
+    ? systemMetrics.totalRamMb
+    : (device.ramTotalMb || 16384);
   const ramUsagePercent = Math.min(100, Math.round((totalAllocatedRamMb / totalDeviceRamMb) * 100));
 
   const toggleGroupExpand = (key: string) => {
@@ -280,21 +301,27 @@ export const ProcessMonitorTable: React.FC<ProcessMonitorProps> = ({
     }
   };
 
+  const intervalPresets = [
+    { label: 'Off', value: 0 },
+    { label: '3s', value: 3000 },
+    { label: '5s', value: 5000 },
+    { label: '10s', value: 10000 },
+  ];
+
   return (
-    <div className="flex flex-col min-h-full md:h-full bg-[#1D2024] border border-white/5 rounded-xl shadow-xl text-slate-100 p-2.5 sm:p-5 md:p-6">
-      {/* Top Header Bar: Device Dropdown + View Mode + Search & Refresh */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-3 sm:mb-4 pb-3 sm:pb-4 border-b border-white/5">
+    <div className="flex flex-col min-h-full md:h-full bg-[var(--surface-container)] border border-[var(--border-subtle)] rounded-xl shadow-xl text-[var(--text-body)] p-2.5 sm:p-5 md:p-6 select-none">
+      {/* Top Header Bar: Device Dropdown + Master Toggle + Interval + Search & Refresh */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-3 sm:mb-4 pb-3 sm:pb-4 border-b border-[var(--border-subtle)]">
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {/* Device Selection Dropdown */}
           <div className="relative" ref={deviceDropdownRef}>
             <button
               onClick={() => setIsDeviceDropdownOpen(!isDeviceDropdownOpen)}
-              className="h-10 px-3 rounded-lg bg-[#111318] hover:bg-[#282A2F] border border-white/10 hover:border-[#A8C7FA]/50 text-slate-200 transition-all flex items-center gap-2.5 shadow-sm text-left touch-manipulation focus:outline-none focus:ring-1 focus:ring-[#A8C7FA]"
+              className="h-10 px-3 rounded-lg bg-[var(--surface-base)] hover:bg-[var(--surface-elevated)] border border-[var(--border-subtle)] hover:border-[var(--border-active)] text-[var(--text-heading)] transition-all flex items-center gap-2.5 shadow-sm text-left touch-manipulation focus:outline-none"
               aria-expanded={isDeviceDropdownOpen}
               aria-haspopup="listbox"
               title="Change device to monitor processes"
             >
-              {/* Status Indicator Dot */}
               <span className="relative flex h-2.5 w-2.5 shrink-0">
                 {device.status === 'online' && (
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#6DD58C] opacity-60" />
@@ -304,32 +331,28 @@ export const ProcessMonitorTable: React.FC<ProcessMonitorProps> = ({
                     device.status === 'online'
                       ? 'bg-[#6DD58C]'
                       : device.status === 'connected'
-                      ? 'bg-[#A8C7FA]'
-                      : device.status === 'idle'
-                      ? 'bg-[#FFD87A]'
-                      : 'bg-slate-500'
+                      ? 'bg-[var(--accent-primary)]'
+                      : 'bg-[var(--text-muted)]'
                   }`}
                 />
               </span>
 
-              {/* Device Type Icon */}
-              <span className="text-[#A8C7FA] shrink-0">
+              <span className="text-[var(--accent-primary)] shrink-0">
                 {getDeviceIcon(device.type, 15)}
               </span>
 
-              {/* Device Name & IP */}
               <div className="flex flex-col min-w-0 pr-1">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-semibold text-slate-100 truncate max-w-[120px] sm:max-w-[180px]">
+                  <span className="text-xs font-semibold text-[var(--text-heading)] truncate max-w-[120px] sm:max-w-[180px]">
                     {device.name}
                   </span>
                   {device.isLocal && (
-                    <span className="text-[9px] px-1 py-0.2 rounded bg-white/10 text-slate-300 font-mono uppercase">
+                    <span className="text-[9px] px-1 py-0.2 rounded bg-[var(--surface-elevated)] text-[var(--text-muted)] font-mono uppercase">
                       Local
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
+                <div className="text-[10px] text-[var(--text-muted)] font-mono flex items-center gap-1.5">
                   <span>{device.ipAddress}</span>
                   <span>•</span>
                   <span className="capitalize">{device.type}</span>
@@ -338,26 +361,25 @@ export const ProcessMonitorTable: React.FC<ProcessMonitorProps> = ({
 
               <ChevronDown
                 size={14}
-                className={`text-slate-400 ml-auto transition-transform duration-200 shrink-0 ${
-                  isDeviceDropdownOpen ? 'rotate-180 text-[#A8C7FA]' : ''
+                className={`text-[var(--text-muted)] ml-auto transition-transform duration-200 shrink-0 ${
+                  isDeviceDropdownOpen ? 'rotate-180 text-[var(--accent-primary)]' : ''
                 }`}
               />
             </button>
 
             {/* Dropdown Menu Popup */}
             {isDeviceDropdownOpen && (
-              <div className="absolute left-0 top-full mt-1.5 w-72 sm:w-80 bg-[#1D2024] border border-white/15 rounded-xl shadow-2xl z-50 overflow-hidden backdrop-blur-xl animate-in fade-in duration-150">
-                <div className="px-3 py-2 bg-[#111318] border-b border-white/5 flex items-center justify-between text-[11px] font-mono text-slate-400">
+              <div className="absolute left-0 top-full mt-1.5 w-72 sm:w-80 bg-[var(--surface-modal)] border border-[var(--border-subtle)] rounded-xl shadow-2xl z-50 overflow-hidden backdrop-blur-xl animate-in fade-in duration-150">
+                <div className="px-3 py-2 bg-[var(--surface-elevated)] border-b border-[var(--border-subtle)] flex items-center justify-between text-[11px] font-mono text-[var(--text-muted)]">
                   <span>SELECT DEVICE ({availableDevices.length})</span>
-                  <span className="text-[10px] text-[#A8C7FA]">
-                    {device.type === 'desktop' ? 'Desktop: Task Manager' : 'Flat View'}
+                  <span className="text-[10px] text-[var(--accent-primary)]">
+                    {device.type === 'desktop' ? 'Desktop Workstation' : 'Tablet Node'}
                   </span>
                 </div>
 
-                <div className="max-h-64 overflow-y-auto divide-y divide-white/5 p-1">
+                <div className="max-h-64 overflow-y-auto divide-y divide-[var(--border-subtle)] p-1">
                   {availableDevices.map(d => {
                     const isSelected = d.id === device.id;
-                    const isTargetDesktop = d.type === 'desktop';
                     return (
                       <button
                         key={d.id}
@@ -367,51 +389,27 @@ export const ProcessMonitorTable: React.FC<ProcessMonitorProps> = ({
                         }}
                         className={`w-full px-3 py-2.5 text-left rounded-lg transition-all flex items-center gap-3 text-xs ${
                           isSelected
-                            ? 'bg-[#A8C7FA]/15 text-[#A8C7FA] border border-[#A8C7FA]/30'
-                            : 'text-slate-200 hover:bg-white/5 hover:text-white'
+                            ? 'bg-[var(--accent-container)] text-[var(--accent-on-container)] border border-[var(--border-active)]'
+                            : 'text-[var(--text-body)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-heading)]'
                         }`}
                       >
-                        {/* Dot */}
-                        <span
-                          className={`w-2 h-2 rounded-full shrink-0 ${
-                            d.status === 'online'
-                              ? 'bg-[#6DD58C]'
-                              : d.status === 'connected'
-                              ? 'bg-[#A8C7FA]'
-                              : d.status === 'idle'
-                              ? 'bg-[#FFD87A]'
-                              : 'bg-slate-500'
-                          }`}
-                        />
-
-                        {/* Icon */}
-                        <span className={isSelected ? 'text-[#A8C7FA]' : 'text-slate-400'}>
+                        <span className={isSelected ? 'text-[var(--accent-primary)]' : 'text-[var(--text-muted)]'}>
                           {getDeviceIcon(d.type, 16)}
                         </span>
-
-                        {/* Info */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
                             <span className="font-medium truncate">{d.name}</span>
                             {d.isLocal && (
-                              <span className="text-[9px] px-1 rounded bg-white/10 text-slate-400 font-mono">
+                              <span className="text-[9px] px-1 rounded bg-[var(--surface-elevated)] text-[var(--text-muted)] font-mono">
                                 LOCAL
                               </span>
                             )}
                           </div>
-                          <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5">
-                            <span>{d.ipAddress}</span>
-                            <span>•</span>
-                            <span>{d.os}</span>
-                            {isTargetDesktop && (
-                              <span className="text-[9px] text-[#6DD58C] font-semibold bg-[#6DD58C]/10 px-1 rounded">
-                                TASK MGR
-                              </span>
-                            )}
+                          <div className="text-[10px] text-[var(--text-muted)] font-mono">
+                            {d.ipAddress} • {d.os}
                           </div>
                         </div>
-
-                        {isSelected && <Check size={14} className="text-[#A8C7FA] shrink-0" />}
+                        {isSelected && <Check size={14} className="text-[var(--accent-primary)] shrink-0" />}
                       </button>
                     );
                   })}
@@ -420,303 +418,345 @@ export const ProcessMonitorTable: React.FC<ProcessMonitorProps> = ({
             )}
           </div>
 
+          {/* Master Monitoring State Toggle */}
+          {onToggleMonitoring && (
+            <button
+              onClick={() => onToggleMonitoring(!isMonitoringEnabled)}
+              title={isMonitoringEnabled ? 'Click to Pause Process Monitoring (Eco Mode)' : 'Click to Enable Process Monitoring'}
+              className={`h-9 px-3 rounded-lg text-xs font-mono font-medium flex items-center gap-1.5 transition active:scale-95 border ${
+                isMonitoringEnabled
+                  ? 'bg-[#0F5223] hover:bg-[#1B6D36] text-[#C4EED0] border-[#6DD58C]/30'
+                  : 'bg-[#3A1D1D] hover:bg-[#5C2424] text-[#FFB4AB] border-red-500/30'
+              }`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${isMonitoringEnabled ? 'bg-[#6DD58C] animate-pulse' : 'bg-[#FFB4AB]'}`} />
+              <span>{isMonitoringEnabled ? 'Monitoring ON' : 'Paused (Eco)'}</span>
+            </button>
+          )}
+
+          {/* Refresh Interval Selector */}
+          {onChangeInterval && isMonitoringEnabled && (
+            <div className="hidden sm:flex items-center gap-1 bg-[var(--surface-base)] p-1 rounded-lg border border-[var(--border-subtle)]">
+              <Clock size={12} className="text-[var(--accent-primary)] ml-1.5 mr-0.5" />
+              {intervalPresets.map(pre => (
+                <button
+                  key={pre.value}
+                  onClick={() => onChangeInterval(pre.value)}
+                  className={`h-7 px-2 rounded-md text-[11px] font-mono transition ${
+                    refreshIntervalMs === pre.value
+                      ? 'bg-[var(--accent-primary)] text-[var(--m3-on-primary)] font-bold shadow-sm'
+                      : 'text-[var(--text-muted)] hover:text-[var(--text-heading)]'
+                  }`}
+                >
+                  {pre.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Action Controls: Search & Refresh */}
+        {/* Action Controls: Search & Prominent Refresh Button */}
         <div className="flex items-center gap-2 w-full sm:w-auto">
           {/* Search Bar */}
           <div className="relative flex-1 sm:flex-initial">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+            <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[var(--text-muted)]" />
             <input
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="Search app or PID..."
-              className="bg-[#111318] border border-white/10 rounded-lg h-9 pl-9 pr-3 text-xs focus:outline-none focus:border-[#A8C7FA] text-slate-200 placeholder-slate-500 font-mono w-full sm:w-64"
+              className="bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg h-9 pl-9 pr-3 text-xs focus:outline-none focus:border-[var(--border-active)] text-[var(--text-heading)] placeholder:text-[var(--text-muted)] font-mono w-full sm:w-56"
             />
           </div>
 
-          {/* Refresh Button */}
+          {/* Prominent Refresh Button */}
           <button
             onClick={onRefresh}
             disabled={isLoading}
-            className="bg-[#282A2F] hover:bg-[#33353A] w-9 h-9 rounded-lg text-slate-300 transition-colors flex items-center justify-center border border-white/5 disabled:opacity-50 shrink-0"
+            className="h-9 px-3 rounded-lg bg-[var(--accent-primary)] hover:opacity-90 text-[var(--m3-on-primary)] text-xs font-semibold font-mono flex items-center gap-1.5 transition active:scale-95 border border-[var(--border-subtle)] disabled:opacity-50 shrink-0 shadow-sm"
             title="Refresh Process List"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-[#A8C7FA]' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-[var(--accent-primary)]' : ''}`} />
+            <span className="hidden sm:inline">{isLoading ? 'Refreshing...' : 'Refresh'}</span>
           </button>
         </div>
       </div>
 
-      {/* Memory & Resource Telemetry Overview Bar */}
-      <div className="px-3 sm:px-4 py-2.5 mb-3 bg-[#282A2F] rounded-lg border border-white/5 flex items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
-          <div className="flex items-center gap-2 font-mono shrink-0">
-            <HardDrive className="w-3.5 h-3.5 text-[#A8C7FA]" />
-            <span className="text-slate-400">RAM:</span>
-            <span className="text-[#6DD58C] font-semibold">
-              {formatMemory(totalAllocatedRamMb)}
-            </span>
-            <span className="text-slate-400 hidden xs:inline">
-              / {formatMemory(totalDeviceRamMb)} ({ramUsagePercent}%)
-            </span>
+      {/* ── PAUSED / ECO MODE BANNER ── */}
+      {!isMonitoringEnabled ? (
+        <div className="flex-1 flex flex-col items-center justify-center text-center p-8 space-y-4 my-auto">
+          <div className="w-14 h-14 rounded-2xl bg-[#3A1D1D] text-[#FFB4AB] border border-red-500/20 flex items-center justify-center shadow-lg">
+            <Pause size={28} />
           </div>
-
-          {/* Visual Progress Bar */}
-          <div className="flex-1 max-w-xs h-2 bg-[#111318] rounded-full overflow-hidden">
-            <div
-              className={`h-full transition-all duration-500 rounded-full ${
-                ramUsagePercent > 85 ? 'bg-[#FFB4AB]' : ramUsagePercent > 65 ? 'bg-[#FFD87A]' : 'bg-[#A8C7FA]'
-              }`}
-              style={{ width: `${ramUsagePercent}%` }}
-            />
+          <div className="max-w-md">
+            <h3 className="text-base font-bold text-[var(--text-heading)]">Process Monitoring is Paused</h3>
+            <p className="text-xs text-[var(--text-muted)] font-mono mt-1">
+              Background HTTP polling and WebView DOM re-renders are stopped in Eco Mode to conserve battery and eliminate workload.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 pt-2">
+            {onToggleMonitoring && (
+              <button
+                onClick={() => onToggleMonitoring(true)}
+                className="h-9 px-4 rounded-lg bg-[var(--accent-primary)] hover:opacity-90 text-[var(--m3-on-primary)] text-xs font-bold font-mono flex items-center gap-1.5 transition shadow-sm active:scale-95"
+              >
+                <Play size={14} />
+                <span>Resume Monitoring</span>
+              </button>
+            )}
+            <button
+              onClick={onRefresh}
+              className="h-9 px-3 rounded-lg bg-[var(--surface-elevated)] hover:bg-[var(--surface-container)] text-[var(--text-body)] text-xs font-mono flex items-center gap-1.5 transition border border-[var(--border-subtle)] active:scale-95"
+            >
+              <RefreshCw size={13} />
+              <span>Refresh Once</span>
+            </button>
           </div>
         </div>
+      ) : (
+        <>
+          {/* Memory & Resource Telemetry Overview Bar */}
+          <div className="px-3 sm:px-4 py-2.5 mb-3 bg-[var(--surface-elevated)] rounded-lg border border-[var(--border-subtle)] flex items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+              <div className="flex items-center gap-2 font-mono shrink-0">
+                <HardDrive className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                <span className="text-[var(--text-muted)]">RAM:</span>
+                <span className="text-[#6DD58C] font-semibold">
+                  {formatMemory(totalAllocatedRamMb)}
+                </span>
+                <span className="text-[var(--text-muted)] hidden xs:inline">
+                  / {formatMemory(totalDeviceRamMb)} ({ramUsagePercent}%)
+                </span>
+              </div>
 
-        {/* Sort Switcher */}
-        <button
-          onClick={() => {
-            setSortBy(s => (s === 'memory' ? 'cpu' : s === 'cpu' ? 'name' : 'memory'));
-          }}
-          className="flex items-center gap-1.5 h-8 px-2.5 sm:px-3 rounded-lg bg-[#111318] border border-white/5 text-[11px] font-mono font-medium text-slate-300 hover:text-white transition shrink-0"
-        >
-          <ArrowUpDown className="w-3 h-3 text-[#A8C7FA]" />
-          <span className="capitalize">Sort: {sortBy}</span>
-        </button>
-      </div>
+              {/* Visual Progress Bar */}
+              <div className="flex-1 max-w-xs h-2 bg-[var(--surface-base)] rounded-full overflow-hidden">
+                <div
+                  className={`h-full transition-all duration-500 rounded-full ${
+                    ramUsagePercent > 85 ? 'bg-[#FFB4AB]' : ramUsagePercent > 65 ? 'bg-[#FFD87A]' : 'bg-[var(--accent-primary)]'
+                  }`}
+                  style={{ width: `${ramUsagePercent}%` }}
+                />
+              </div>
+            </div>
 
-      {/* Mobile Swipe Hint Banner on narrow screens */}
-      <div className="flex sm:hidden items-center justify-between text-[11px] font-mono text-slate-400 pb-2 px-1 shrink-0">
-        <span className="flex items-center gap-1.5 text-slate-300">
-          <ArrowRightLeft size={12} className="text-[#A8C7FA]" />
-          <span>Swipe table for full metrics</span>
-        </span>
-        <span className="text-[10px] font-medium text-[#A8C7FA] bg-[#A8C7FA]/10 border border-[#A8C7FA]/20 px-1.5 py-0.5 rounded">
-          Action pinned
-        </span>
-      </div>
+            {/* Slicing Counter & Sort Switcher */}
+            <div className="flex items-center gap-2 shrink-0">
+              {!searchQuery.trim() && filteredProcesses.length > limitTopN && (
+                <span className="text-[10px] font-mono text-[var(--text-muted)] hidden sm:inline">
+                  Showing Top {limitTopN} of {filteredProcesses.length}
+                </span>
+              )}
+              <button
+                onClick={() => {
+                  setSortBy(s => (s === 'memory' ? 'cpu' : s === 'cpu' ? 'name' : 'memory'));
+                }}
+                className="flex items-center gap-1.5 h-8 px-2.5 sm:px-3 rounded-lg bg-[var(--surface-base)] border border-[var(--border-subtle)] text-[11px] font-mono font-medium text-[var(--text-body)] hover:text-[var(--text-heading)] transition shrink-0"
+              >
+                <ArrowUpDown className="w-3 h-3 text-[var(--accent-primary)]" />
+                <span className="capitalize">Sort: {sortBy}</span>
+              </button>
+            </div>
+          </div>
 
-      {/* Main Table Content Body */}
-      <div className="flex-1 overflow-x-auto overflow-y-auto pr-1 min-h-[300px] md:min-h-0 touch-pan-x">
-        <table className="w-full min-w-[500px] sm:min-w-full text-left border-collapse">
-          <thead>
-            <tr className="border-b border-white/5 text-[11px] uppercase font-mono text-slate-400">
-              <th className="pb-3 pl-3">Application / Process</th>
-              <th className="pb-3">PID / Tasks</th>
-              <th className="pb-3 hidden sm:table-cell">User</th>
-              <th className="pb-3">CPU %</th>
-              <th className="pb-3">Memory</th>
-              <th className="pb-3 text-right pr-3 sticky right-0 bg-[#1D2024] z-20 shadow-[-6px_0_10px_rgba(0,0,0,0.35)]">Action</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/5 text-xs font-mono">
-            {groupedProcesses.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="py-12 text-center text-slate-500 font-mono">
-                  No processes match "{searchQuery}".
-                </td>
-              </tr>
-            ) : (
-              groupedProcesses.map(group => {
-                const isMulti = group.items.length > 1;
-                const isExpanded = expandedGroups.has(group.key);
-                const isGroupKilling = confirmGroupKey === group.key;
+          {/* Android Tablet Dedicated System Telemetry Deck */}
+          {isAndroidTarget && systemMetrics && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3 text-xs font-mono">
+              <div className="p-2.5 rounded-lg bg-[var(--surface-base)] border border-[var(--border-subtle)]">
+                <span className="text-[10px] text-[var(--text-muted)] block">TOTAL SYSTEM RAM</span>
+                <span className="font-semibold text-[var(--accent-primary)]">{formatMemory(systemMetrics.totalRamMb || 0)}</span>
+              </div>
+              <div className="p-2.5 rounded-lg bg-[var(--surface-base)] border border-[var(--border-subtle)]">
+                <span className="text-[10px] text-[var(--text-muted)] block">AVAILABLE RAM</span>
+                <span className="font-semibold text-[#6DD58C]">{formatMemory(systemMetrics.availRamMb || 0)}</span>
+              </div>
+              <div className="p-2.5 rounded-lg bg-[var(--surface-base)] border border-[var(--border-subtle)]">
+                <span className="text-[10px] text-[var(--text-muted)] block">NODUS HEAP USED</span>
+                <span className="font-semibold text-[var(--text-heading)]">{(systemMetrics.appHeapUsedMb || 0).toFixed(1)} MB</span>
+              </div>
+              <div className="p-2.5 rounded-lg bg-[var(--surface-base)] border border-[var(--border-subtle)]">
+                <span className="text-[10px] text-[var(--text-muted)] block">MEMORY PRESSURE</span>
+                <span className={`font-semibold ${systemMetrics.lowMemory ? 'text-[#FFB4AB]' : 'text-[#6DD58C]'}`}>
+                  {systemMetrics.lowMemory ? 'LOW MEMORY' : 'NORMAL'}
+                </span>
+              </div>
+            </div>
+          )}
 
-                return (
-                  <React.Fragment key={group.key}>
-                    {/* Parent App Header Row */}
-                    <tr
-                      className={`transition-colors group ${
-                        isExpanded ? 'bg-[#282A2F]/40' : 'hover:bg-[#282A2F]/30'
-                      }`}
-                    >
-                      {/* App Name + Expand Chevron + App Icon */}
-                      <td className="py-2.5 pl-2 font-sans">
-                        <div className="flex items-center gap-2">
-                          {isMulti ? (
-                            <button
-                              onClick={() => toggleGroupExpand(group.key)}
-                              className="w-5 h-5 flex items-center justify-center rounded hover:bg-white/10 text-slate-400 hover:text-white transition shrink-0"
-                              title={isExpanded ? 'Collapse sub-processes' : 'Expand sub-processes'}
-                            >
-                              {isExpanded ? (
-                                <ChevronDown size={14} className="text-[#A8C7FA]" />
-                              ) : (
-                                <ChevronRight size={14} />
-                              )}
-                            </button>
-                          ) : (
-                            <span className="w-5 shrink-0" />
-                          )}
+          {/* Main Table Content Body */}
+          <div className="flex-1 overflow-x-auto overflow-y-auto pr-1 min-h-[300px] md:min-h-0 touch-pan-x">
+            <table className="w-full min-w-[500px] sm:min-w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-[var(--border-subtle)] text-[11px] uppercase font-mono text-[var(--text-muted)]">
+                  <th className="pb-3 pl-3">Application / Process</th>
+                  <th className="pb-3">PID / Tasks</th>
+                  <th className="pb-3 hidden sm:table-cell">User</th>
+                  <th className="pb-3">CPU %</th>
+                  <th className="pb-3">Memory</th>
+                  <th className="pb-3 text-right pr-3 sticky right-0 bg-[var(--surface-container)] z-20 shadow-[-6px_0_10px_rgba(0,0,0,0.35)]">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--border-subtle)] text-xs font-mono">
+                {groupedProcesses.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 text-center text-[var(--text-muted)] font-mono">
+                      {isLoading ? 'Fetching process telemetry...' : `No processes match "${searchQuery}".`}
+                    </td>
+                  </tr>
+                ) : (
+                  groupedProcesses.map(group => {
+                    const isMulti = group.items.length > 1;
+                    const isExpanded = expandedGroups.has(group.key);
+                    const isGroupKilling = confirmGroupKey === group.key;
 
-                          {getAppIcon(group.name, group.category)}
-
-                          <span className="font-semibold text-slate-100 text-xs sm:text-sm truncate max-w-[140px] sm:max-w-xs">
-                            {group.name}
-                          </span>
-
-                          {isMulti && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-[#A8C7FA]/15 text-[#A8C7FA] border border-[#A8C7FA]/25">
-                              {group.items.length}
-                            </span>
-                          )}
-
-                          {group.category && (
-                            <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-white/5 text-slate-400 hidden lg:inline">
-                              {group.category}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* PID / Tasks */}
-                      <td className="py-2.5 text-slate-400 font-mono text-xs">
-                        {isMulti ? (
-                          <span className="text-slate-400 italic text-[11px]">
-                            {group.items.length} tasks
-                          </span>
-                        ) : (
-                          <span>{group.items[0].pid}</span>
-                        )}
-                      </td>
-
-                      {/* User */}
-                      <td className="py-2.5 text-slate-400 hidden sm:table-cell">
-                        {group.items.every(i => i.user === group.items[0].user)
-                          ? group.items[0].user || 'SYSTEM'
-                          : 'Multiple'}
-                      </td>
-
-                      {/* CPU % */}
-                      <td
-                        className={`py-2.5 font-medium ${
-                          group.totalCpu > 5 ? 'text-[#FFB4AB]' : 'text-slate-200'
-                        }`}
-                      >
-                        {group.totalCpu.toFixed(1)}%
-                      </td>
-
-                      {/* Memory */}
-                      <td className="py-2.5 text-[#6DD58C] font-medium">
-                        {formatMemory(group.totalMemoryMb)}
-                      </td>
-
-                      {/* Action */}
-                      <td className="py-2.5 text-right pr-3 sticky right-0 bg-[#1D2024] group-hover:bg-[#282A2F] z-10 shadow-[-6px_0_10px_rgba(0,0,0,0.35)] transition-colors">
-                        {isMulti ? (
-                          <button
-                            onClick={() => handleKillGroup(group)}
-                            className={`h-8 px-2.5 rounded-lg transition-colors inline-flex items-center gap-1.5 touch-manipulation ${
-                              isGroupKilling
-                                ? 'bg-[#93000A] text-[#FFB4AB] font-bold px-3 border border-[#FFB4AB]/30'
-                                : 'text-[#FFB4AB] hover:bg-[#93000A]/20'
-                            }`}
-                            title={`Terminate entire ${group.name} (${group.items.length} processes)`}
-                          >
-                            <Skull className="w-3.5 h-3.5" />
-                            <span className="text-[11px]">
-                              {isGroupKilling ? `Kill All (${group.items.length})?` : 'End task'}
-                            </span>
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => handleKillClick(group.items[0].pid)}
-                            className={`h-8 px-2.5 rounded-lg transition-colors inline-flex items-center gap-1.5 touch-manipulation ${
-                              confirmPid === group.items[0].pid
-                                ? 'bg-[#93000A] text-[#FFB4AB] font-bold px-3 border border-[#FFB4AB]/30'
-                                : 'text-[#FFB4AB] hover:bg-[#93000A]/20'
-                            }`}
-                            title="Terminate Process"
-                          >
-                            <Skull className="w-3.5 h-3.5" />
-                            <span className="text-[11px]">
-                              {confirmPid === group.items[0].pid ? 'Kill?' : 'End task'}
-                            </span>
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-
-                    {/* Children Sub-Processes (Task Manager style hierarchy) */}
-                    {isMulti &&
-                      isExpanded &&
-                      group.items.map((subProc, idx) => {
-                        const isLastChild = idx === group.items.length - 1;
-                        const isSubKilling = confirmPid === subProc.pid;
-
-                        return (
-                          <tr
-                            key={subProc.pid}
-                            className="bg-[#111318]/50 hover:bg-[#282A2F]/40 transition-colors border-b border-white/[0.02] group/child"
-                          >
-                            {/* Indented Sub-Process Name with Tree Line */}
-                            <td className="py-2 pl-4 sm:pl-9 font-sans">
-                              <div className="flex items-center gap-2">
-                                <span className="text-slate-600 font-mono text-xs select-none">
-                                  {isLastChild ? '└──' : '├──'}
-                                </span>
-                                <div className="flex flex-col min-w-0">
-                                  <span className="text-slate-300 font-medium text-xs truncate max-w-[130px] xs:max-w-[160px] sm:max-w-xs">
-                                    {subProc.subTitle || subProc.name}
-                                  </span>
-                                  {subProc.subTitle && (
-                                    <span className="text-[10px] text-slate-500 font-mono truncate">
-                                      {subProc.name}
-                                    </span>
+                    return (
+                      <React.Fragment key={group.key}>
+                        {/* Parent App Header Row */}
+                        <tr
+                          className={`transition-colors group ${
+                            isExpanded ? 'bg-[var(--surface-elevated)]/40' : 'hover:bg-[var(--surface-elevated)]/30'
+                          }`}
+                        >
+                          <td className="py-2.5 pl-2 font-sans">
+                            <div className="flex items-center gap-2">
+                              {isMulti ? (
+                                <button
+                                  onClick={() => toggleGroupExpand(group.key)}
+                                  className="w-5 h-5 flex items-center justify-center rounded hover:bg-white/10 text-[var(--text-muted)] hover:text-[var(--text-heading)] transition shrink-0"
+                                  title={isExpanded ? 'Collapse sub-processes' : 'Expand sub-processes'}
+                                >
+                                  {isExpanded ? (
+                                    <ChevronDown size={14} className="text-[var(--accent-primary)]" />
+                                  ) : (
+                                    <ChevronRight size={14} />
                                   )}
-                                </div>
-                              </div>
-                            </td>
+                                </button>
+                              ) : (
+                                <span className="w-5 shrink-0" />
+                              )}
 
-                            {/* Child PID */}
-                            <td className="py-2 text-slate-400 font-mono text-xs">
-                              <span className="bg-white/5 px-1.5 py-0.5 rounded border border-white/5">
-                                #{subProc.pid}
+                              {getAppIcon(group.name, group.category)}
+
+                              <span className="font-semibold text-[var(--text-heading)] text-xs sm:text-sm truncate max-w-[140px] sm:max-w-xs">
+                                {group.name}
                               </span>
-                            </td>
 
-                            {/* Child User */}
-                            <td className="py-2 text-slate-400 hidden sm:table-cell text-xs">
-                              {subProc.user || 'SYSTEM'}
-                            </td>
+                              {isMulti && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-[var(--accent-container)] text-[var(--accent-on-container)] border border-[var(--border-active)]">
+                                  {group.items.length}
+                                </span>
+                              )}
+                            </div>
+                          </td>
 
-                            {/* Child CPU */}
-                            <td className="py-2 text-slate-300 font-mono text-xs">
-                              {subProc.cpu}%
-                            </td>
+                          <td className="py-2.5 text-[var(--text-muted)] font-mono text-xs">
+                            {isMulti ? (
+                              <span className="text-[var(--text-muted)] italic text-[11px]">
+                                {group.items.length} tasks
+                              </span>
+                            ) : (
+                              <span>{group.items[0].pid}</span>
+                            )}
+                          </td>
 
-                            {/* Child Memory */}
-                            <td className="py-2 text-[#82D5A5] font-mono text-xs">
-                              {formatMemory(subProc.memoryMb)}
-                            </td>
+                          <td className="py-2.5 text-[var(--text-muted)] hidden sm:table-cell">
+                            {group.items.every(i => i.user === group.items[0].user)
+                              ? group.items[0].user || 'SYSTEM'
+                              : 'Multiple'}
+                          </td>
 
-                            {/* Child Action */}
-                            <td className="py-2 text-right pr-3 sticky right-0 bg-[#1D2024] group-hover/child:bg-[#282A2F] z-10 shadow-[-6px_0_10px_rgba(0,0,0,0.35)] transition-colors">
+                          <td
+                            className={`py-2.5 font-medium ${
+                              group.totalCpu > 5 ? 'text-[#FFB4AB]' : 'text-[var(--text-heading)]'
+                            }`}
+                          >
+                            {group.totalCpu.toFixed(1)}%
+                          </td>
+
+                          <td className="py-2.5 text-[#6DD58C] font-medium">
+                            {formatMemory(group.totalMemoryMb)}
+                          </td>
+
+                          <td className="py-2.5 text-right pr-3 sticky right-0 bg-[var(--surface-container)] group-hover:bg-[var(--surface-elevated)] z-10 shadow-[-6px_0_10px_rgba(0,0,0,0.35)] transition-colors">
+                            {isMulti ? (
                               <button
-                                onClick={() => handleKillClick(subProc.pid)}
-                                className={`h-7 px-2 rounded transition-colors inline-flex items-center gap-1 touch-manipulation ${
-                                  isSubKilling
-                                    ? 'bg-[#93000A] text-[#FFB4AB] font-bold px-2.5 border border-[#FFB4AB]/30'
-                                    : 'text-[#FFB4AB]/80 hover:text-[#FFB4AB] hover:bg-[#93000A]/20'
+                                onClick={() => handleKillGroup(group)}
+                                className={`h-8 px-2.5 rounded-lg transition-colors inline-flex items-center gap-1.5 touch-manipulation ${
+                                  isGroupKilling
+                                    ? 'bg-[#93000A] text-[#FFB4AB] font-bold px-3 border border-[#FFB4AB]/30'
+                                    : 'text-[#FFB4AB] hover:bg-[#93000A]/20'
                                 }`}
-                                title={`Terminate process #${subProc.pid}`}
+                                title={`Terminate entire ${group.name} (${group.items.length} processes)`}
                               >
-                                <Skull className="w-3 h-3" />
-                                <span className="text-[10px]">
-                                  {isSubKilling ? 'Kill?' : 'End'}
+                                <Skull className="w-3.5 h-3.5" />
+                                <span className="text-[11px]">
+                                  {isGroupKilling ? `Kill All (${group.items.length})?` : 'End task'}
                                 </span>
                               </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                  </React.Fragment>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+                            ) : (
+                              <button
+                                onClick={() => handleKillClick(group.items[0].pid)}
+                                className={`h-8 px-2.5 rounded-lg transition-colors inline-flex items-center gap-1.5 touch-manipulation ${
+                                  confirmPid === group.items[0].pid
+                                    ? 'bg-[#93000A] text-[#FFB4AB] font-bold px-3 border border-[#FFB4AB]/30'
+                                    : 'text-[#FFB4AB] hover:bg-[#93000A]/20'
+                                }`}
+                                title={`Terminate PID ${group.items[0].pid}`}
+                              >
+                                <Skull className="w-3.5 h-3.5" />
+                                <span className="text-[11px]">
+                                  {confirmPid === group.items[0].pid ? 'Confirm Kill?' : 'End task'}
+                                </span>
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+
+                        {/* Child Process Rows when Expanded */}
+                        {isExpanded &&
+                          isMulti &&
+                          group.items.map(child => (
+                            <tr
+                              key={child.pid}
+                              className="bg-[var(--surface-base)]/50 hover:bg-[var(--surface-base)]/80 text-[11px] text-[var(--text-body)] transition-colors"
+                            >
+                              <td className="py-2 pl-9 font-sans text-[var(--text-muted)]">
+                                <div className="flex items-center gap-2">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-primary)]/50" />
+                                  <span className="truncate max-w-[160px] sm:max-w-xs">{child.name}</span>
+                                </div>
+                              </td>
+                              <td className="py-2 text-[var(--text-muted)] font-mono">{child.pid}</td>
+                              <td className="py-2 text-[var(--text-muted)] hidden sm:table-cell">{child.user || 'SYSTEM'}</td>
+                              <td className="py-2 text-[var(--text-body)] font-mono">{child.cpu.toFixed(1)}%</td>
+                              <td className="py-2 text-[#6DD58C] font-mono">{formatMemory(child.memoryMb)}</td>
+                              <td className="py-2 text-right pr-3 sticky right-0 bg-[var(--surface-base)] group-hover:bg-[var(--surface-base)] z-10 shadow-[-6px_0_10px_rgba(0,0,0,0.35)]">
+                                <button
+                                  onClick={() => handleKillClick(child.pid)}
+                                  className={`h-7 px-2 rounded transition-colors inline-flex items-center gap-1 ${
+                                    confirmPid === child.pid
+                                      ? 'bg-[#93000A] text-[#FFB4AB] font-bold border border-[#FFB4AB]/30'
+                                      : 'text-[#FFB4AB] hover:bg-[#93000A]/20'
+                                  }`}
+                                  title={`Kill PID ${child.pid}`}
+                                >
+                                  <Skull className="w-3 h-3" />
+                                  <span className="text-[10px]">
+                                    {confirmPid === child.pid ? 'Kill?' : 'Kill'}
+                                  </span>
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                      </React.Fragment>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   );
 };

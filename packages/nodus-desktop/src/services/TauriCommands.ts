@@ -15,6 +15,10 @@ export const isTauri = (): boolean => {
 };
 
 export const TauriService = {
+  isTauri(): boolean {
+    return isTauri();
+  },
+
   async getProcesses(): Promise<DeviceProcess[]> {
     if (!isTauri()) {
       return [];
@@ -255,6 +259,26 @@ export const TauriService = {
       return await invoke<{ content_type: string; text?: string; image_data?: string }>('get_clipboard_content');
     } catch (e) {
       return { content_type: 'text', text: '' };
+    }
+  },
+
+  async broadcastClipboard(
+    text: string | null,
+    imageData: string | undefined,
+    targetIps: string[],
+    authToken?: string
+  ): Promise<boolean> {
+    if (!isTauri()) return true;
+    try {
+      return await invoke<boolean>('broadcast_clipboard', {
+        text,
+        imageData,
+        targetIps,
+        authToken,
+      });
+    } catch (e) {
+      console.warn('[TauriService] broadcastClipboard invoke error:', e);
+      return false;
     }
   },
 
@@ -743,7 +767,8 @@ export const TauriService = {
     cols = 80,
     rows = 24,
     cwd?: string,
-    shell?: string
+    shell?: string,
+    args?: string[]
   ): Promise<boolean> {
     if (!isTauri()) return false;
     try {
@@ -754,11 +779,32 @@ export const TauriService = {
           rows,
           cwd,
           shell,
+          args,
         },
       });
     } catch (e) {
       console.error(`[TauriService] spawnPty(${sessionId}) error:`, e);
       return false;
+    }
+  },
+
+  async checkAdbStatus(deviceIp?: string): Promise<{ is_installed: boolean; is_connected: boolean; output: string }> {
+    if (!isTauri()) {
+      return { is_installed: true, is_connected: true, output: 'Web mock: device active' };
+    }
+    try {
+      return await invoke('check_adb_status', { deviceIp });
+    } catch (e: any) {
+      return { is_installed: false, is_connected: false, output: e?.message || String(e) };
+    }
+  },
+
+  async connectAdbDevice(deviceIp: string): Promise<string> {
+    if (!isTauri()) return 'connected to ' + deviceIp;
+    try {
+      return await invoke<string>('connect_adb_device', { deviceIp });
+    } catch (e: any) {
+      throw new Error(e?.message || String(e));
     }
   },
 

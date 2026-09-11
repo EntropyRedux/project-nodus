@@ -52,6 +52,17 @@
             android:permission="com.nodus.permission.FLEET_ACCESS"
             android:exported="true" />
 
+        <!-- FileProvider for sharing clipboard images with other Android applications -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.nodus.fleet.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <!-- Persistent Background WebSocket Cluster Daemon -->
         <service
             android:name=".service.FleetDaemonService"
@@ -62,6 +73,19 @@
         <service
             android:name=".service.ClipboardSyncService"
             android:exported="false" />
+
+        <!-- Zero-Overhead Remote Control Accessibility Service (Optional / Experimental) -->
+        <service
+            android:name=".service.NodusAccessibilityService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
 
     </application>
 </manifest>

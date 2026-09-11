@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DeviceInfo } from '@nodus/common';
+import { DeviceInfo } from '../nodus-common';
 import {
   X,
   Volume2,

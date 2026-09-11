@@ -127,6 +127,69 @@ pub fn get_clipboard_content() -> Result<ClipboardPayload, String> {
     }
 }
 
+#[tauri::command]
+pub fn broadcast_clipboard(
+    text: Option<String>,
+    image_data: Option<String>,
+    target_ips: Vec<String>,
+    auth_token: Option<String>,
+) -> Result<bool, String> {
+    let token = auth_token.unwrap_or_else(|| "NODUS-FLEET-SECURE".to_string());
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+
+    let payload = serde_json::json!({
+        "text": text,
+        "imageData": image_data,
+        "image_data": image_data,
+        "sourceDevice": "this-pc",
+        "deviceName": "Workstation Host",
+        "timestamp": ts,
+    }).to_string();
+
+    std::thread::spawn(move || {
+        use std::io::Write;
+        use std::net::{SocketAddr, TcpStream};
+        use std::time::Duration;
+
+        let mut all_ips = target_ips;
+        // Merge any known discovered devices from UDP beacon engine
+        for dev in crate::discovery::get_discovered_devices() {
+            if !dev.is_local && dev.id != "this-pc" && dev.id != "local" {
+                let ip_part = dev.ip_address.split(':').next().unwrap_or("").trim().to_string();
+                if !ip_part.is_empty() && !all_ips.contains(&ip_part) {
+                    all_ips.push(ip_part);
+                }
+            }
+        }
+
+        for ip in all_ips {
+            let clean_ip = ip.split(':').next().unwrap_or("").trim().to_string();
+            if clean_ip.is_empty() || clean_ip == "127.0.0.1" || clean_ip == "localhost" || clean_ip == "0.0.0.0" {
+                continue;
+            }
+
+            let addr_str = format!("{}:9120", clean_ip);
+            if let Ok(addr) = addr_str.parse::<SocketAddr>() {
+                if let Ok(mut stream) = TcpStream::connect_timeout(&addr, Duration::from_millis(800)) {
+                    let _ = stream.set_read_timeout(Some(Duration::from_millis(1500)));
+                    let _ = stream.set_write_timeout(Some(Duration::from_millis(1500)));
+                    let body_bytes = payload.as_bytes();
+                    let req = format!(
+                        "POST /api/clipboard HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nAuthorization: Bearer {}\r\nX-Nodus-Auth-Token: {}\r\nConnection: close\r\n\r\n{}",
+                        clean_ip, body_bytes.len(), token, token, payload
+                    );
+                    let _ = stream.write_all(req.as_bytes());
+                }
+            }
+        }
+    });
+
+    Ok(true)
+}
+
 #[cfg(windows)]
 pub fn has_win32_clipboard_image() -> bool {
     use windows::core::w;
@@ -341,10 +404,16 @@ pub fn set_win32_clipboard_image(base64_png: &str) -> Result<bool, String> {
         }
     }
 
-    // For PNG / JPEG payloads, use fast STA PowerShell
+    // For PNG / JPEG / other payloads, write to a temp file and load via memory stream in STA PowerShell to avoid command-line length limits
+    let temp_file = std::env::temp_dir().join(format!("nodus_clip_{}.png", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis()));
+    if let Err(e) = std::fs::write(&temp_file, &bytes) {
+        return Err(format!("Failed to write temp clipboard image: {}", e));
+    }
+
+    let temp_path_str = temp_file.to_string_lossy().replace('\\', "/");
     let script = format!(
-        "[System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms') | Out-Null; [System.Reflection.Assembly]::LoadWithPartialName('System.Drawing') | Out-Null; $b = [System.Convert]::FromBase64String('{}'); $ms = New-Object System.IO.MemoryStream(@(,$b), 0, $b.Length); $img = [System.Drawing.Image]::FromStream($ms, $true); [System.Windows.Forms.Clipboard]::SetImage($img)",
-        raw_b64.trim()
+        "[System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms') | Out-Null; [System.Reflection.Assembly]::LoadWithPartialName('System.Drawing') | Out-Null; $b = [System.IO.File]::ReadAllBytes('{}'); $ms = New-Object System.IO.MemoryStream(@(,$b), 0, $b.Length); $img = [System.Drawing.Image]::FromStream($ms); [System.Windows.Forms.Clipboard]::SetImage($img); [System.IO.File]::Delete('{}')",
+        temp_path_str, temp_path_str
     );
 
     let output = std::process::Command::new("powershell")

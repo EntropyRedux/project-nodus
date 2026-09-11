@@ -195,49 +195,7 @@ export const DesktopProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } catch (_) {}
   }, [remoteExecutables]);
 
-  // Real-time Windows Clipboard Watcher & Automatic Mesh Broadcast
-  const lastLocalClipRef = React.useRef<string>('');
-
-  useEffect(() => {
-    const pollClipboard = async () => {
-      try {
-        const content = await TauriService.getClipboardContent();
-        let newClipText: string | null = null;
-        let newClipImage: string | undefined = undefined;
-
-        if ((content.content_type === 'image' || content.image_data) && content.image_data) {
-          const imgKey = `img_${content.image_data.length}_${content.image_data.slice(20, 60)}_${content.image_data.slice(-40)}`;
-          if (imgKey && imgKey !== lastLocalClipRef.current) {
-            lastLocalClipRef.current = imgKey;
-            newClipText = content.text || 'Image';
-            newClipImage = content.image_data;
-            addClipboardItem(newClipText, 'this-pc', newClipImage);
-          }
-        } else if (content.text) {
-          const trimmed = content.text.trim();
-          if (trimmed && trimmed !== lastLocalClipRef.current) {
-            lastLocalClipRef.current = trimmed;
-            newClipText = trimmed;
-            addClipboardItem(trimmed, 'this-pc');
-          }
-        }
-
-        // Automatic Mesh Broadcast to connected remote devices via ClipboardBroadcastService
-        if (newClipText || newClipImage) {
-          ClipboardBroadcastService.queueBroadcast(
-            newClipText || null,
-            newClipImage || undefined,
-            devices,
-            serverConfig?.auth_token || serverConfig?.pairingSecret || 'NODUS-FLEET-SECURE'
-          );
-        }
-      } catch (_) {}
-    };
-
-    pollClipboard();
-    const interval = setInterval(pollClipboard, 1500);
-    return () => clearInterval(interval);
-  }, [devices]);
+  // DaemonManager manages headless clipboard and fleet polling via Zustand stores
 
   // Track explicitly removed devices so UDP background discovery does not auto-readd them
   const removedDeviceIdsRef = React.useRef<Set<string>>(new Set());

@@ -21,8 +21,20 @@ export interface ProcessMonitorProps {
   onSelectDevice?: (deviceId: string) => void;
   processes: Array<{ pid: number; name: string; memory_kb: number }> | DeviceProcess[];
   isLoading?: boolean;
+  isMonitoringEnabled?: boolean;
+  onToggleMonitoring?: (enabled: boolean) => void;
+  refreshIntervalMs?: number;
+  onChangeInterval?: (intervalMs: number) => void;
   onRefresh: () => void;
   onKillProcess: (pid: number) => void;
+  systemMetrics?: {
+    totalRamMb?: number;
+    availRamMb?: number;
+    usedRamMb?: number;
+    lowMemory?: boolean;
+    appHeapUsedMb?: number;
+    appHeapMaxMb?: number;
+  };
 }
 
 // 4. Remote Terminal Shell
@@ -30,6 +42,7 @@ export interface RemoteTerminalProps {
   sessions?: TerminalSession[];
   activeSessionId?: string | null;
   availableDevices: DeviceInfo[];
+  theme?: string;
   onSendCommand?: (sessionId: string, command: string) => void;
   onCreateSession?: (device: DeviceInfo) => void;
   onCloseSession?: (sessionId: string) => void;

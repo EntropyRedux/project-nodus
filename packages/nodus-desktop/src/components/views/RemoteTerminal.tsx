@@ -15,6 +15,7 @@ import {
   X,
   Trash2,
   Copy,
+  Clipboard,
   Check,
   Monitor,
   Laptop,
@@ -26,6 +27,7 @@ import {
   RotateCcw,
   Sparkles,
   Layers,
+  Zap,
 } from 'lucide-react';
 
 function getDeviceIcon(type?: DeviceInfo['type'] | string, size = 13) {
@@ -71,7 +73,7 @@ function getTerminalThemeColors(themeName?: string) {
       };
     case 'obsidian':
       return {
-        background: '#07070C',
+        background: 'rgba(8, 8, 14, 0.65)',
         foreground: '#F1F5F9',
         cursor: '#C084FC',
         cursorAccent: '#07070C',
@@ -91,54 +93,6 @@ function getTerminalThemeColors(themeName?: string) {
         brightBlue: '#93C5FD',
         brightMagenta: '#E9D5FF',
         brightCyan: '#7DD3FC',
-        brightWhite: '#FFFFFF',
-      };
-    case 'cyberpunk':
-      return {
-        background: '#090D16',
-        foreground: '#E2E8F0',
-        cursor: '#22D3EE',
-        cursorAccent: '#090D16',
-        selectionBackground: 'rgba(34, 211, 238, 0.35)',
-        black: '#1E293B',
-        red: '#FF0055',
-        green: '#00FF9F',
-        yellow: '#FFE600',
-        blue: '#00B8FF',
-        magenta: '#D600FF',
-        cyan: '#00F0FF',
-        white: '#F8FAFC',
-        brightBlack: '#475569',
-        brightRed: '#FF4D88',
-        brightGreen: '#5CFFBF',
-        brightYellow: '#FFF066',
-        brightBlue: '#66D4FF',
-        brightMagenta: '#E666FF',
-        brightCyan: '#66F5FF',
-        brightWhite: '#FFFFFF',
-      };
-    case 'slate':
-      return {
-        background: '#0F172A',
-        foreground: '#F8FAFC',
-        cursor: '#94A3B8',
-        cursorAccent: '#0F172A',
-        selectionBackground: 'rgba(148, 163, 184, 0.35)',
-        black: '#1E293B',
-        red: '#EF4444',
-        green: '#10B981',
-        yellow: '#F59E0B',
-        blue: '#3B82F6',
-        magenta: '#8B5CF6',
-        cyan: '#06B6D4',
-        white: '#F8FAFC',
-        brightBlack: '#64748B',
-        brightRed: '#F87171',
-        brightGreen: '#34D399',
-        brightYellow: '#FBBF24',
-        brightBlue: '#60A5FA',
-        brightMagenta: '#A78BFA',
-        brightCyan: '#22D3EE',
         brightWhite: '#FFFFFF',
       };
     case 'midnight':
@@ -172,9 +126,10 @@ function getTerminalThemeColors(themeName?: string) {
 interface XTermViewProps {
   session: TerminalSession;
   theme?: string;
+  isExpAdbEnabled?: boolean;
 }
 
-const XTermView: React.FC<XTermViewProps> = ({ session, theme }) => {
+const XTermView: React.FC<XTermViewProps> = ({ session, theme, isExpAdbEnabled = false }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -218,7 +173,12 @@ const XTermView: React.FC<XTermViewProps> = ({ session, theme }) => {
     let unlistenData: (() => void) | null = null;
     let unlistenExit: (() => void) | null = null;
 
-    // Spawn native Windows ConPTY session
+    const isAndroidDevice =
+      session.targetDevice.os?.toLowerCase() === 'android' ||
+      session.targetDevice.type === 'tablet' ||
+      session.targetDevice.type === 'phone';
+
+    // Spawn native Windows ConPTY session or Wireless ADB Shell
     const initPty = async () => {
       const cols = term.cols || 80;
       const rows = term.rows || 24;
@@ -232,8 +192,61 @@ const XTermView: React.FC<XTermViewProps> = ({ session, theme }) => {
         term.writeln('\r\n[Process terminated]');
       });
 
-      // 2. Spawn ConPTY process
-      await TauriService.spawnPty(session.id, cols, rows, session.cwd);
+      // 2. Determine target process
+      if (isAndroidDevice && isExpAdbEnabled) {
+        const ip = session.targetDevice.ipAddress;
+        term.writeln('\x1b[1;36m══════════════════════════════════════════════════════════════════\x1b[0m');
+        term.writeln(' \x1b[1;33m⚡ NODUS WIRELESS ADB SHELL BRIDGE (EXPERIMENTAL)\x1b[0m');
+        term.writeln(` \x1b[90mTarget Companion: \x1b[37m${session.targetDevice.name}\x1b[90m (${ip || 'unknown'})\x1b[0m`);
+        term.writeln('\x1b[1;36m══════════════════════════════════════════════════════════════════\x1b[0m\r\n');
+
+        if (ip && ip !== '127.0.0.1' && ip !== 'localhost') {
+          term.write(`\x1b[90m[bridge] Checking ADB daemon status for ${ip}:5555...\x1b[0m\r\n`);
+          try {
+            const status = await TauriService.checkAdbStatus(ip);
+            if (!status.is_connected) {
+              term.write(`\x1b[33m[bridge] Device not connected. Attempting wireless handshake with ${ip}:5555...\x1b[0m\r\n`);
+              const connectRes = await TauriService.connectAdbDevice(ip);
+              term.write(`\x1b[32m[bridge] Handshake response: ${connectRes.trim()}\x1b[0m\r\n\r\n`);
+            } else {
+              term.write(`\x1b[32m[bridge] Verified active connection to ${ip}:5555.\x1b[0m\r\n\r\n`);
+            }
+          } catch (err: any) {
+            term.write(`\x1b[31m[bridge] ADB handshake warning: ${err?.message || err}\x1b[0m\r\n\r\n`);
+          }
+
+          // Spawn ADB interactive shell via ConPTY
+          await TauriService.spawnPty(
+            session.id,
+            cols,
+            rows,
+            session.cwd,
+            'adb',
+            ['-s', `${ip}:5555`, 'shell']
+          );
+        } else {
+          // Local emulator or USB connected device fallback
+          term.write(`\x1b[33m[bridge] Spawning generic ADB shell for connected device...\x1b[0m\r\n\r\n`);
+          await TauriService.spawnPty(
+            session.id,
+            cols,
+            rows,
+            session.cwd,
+            'adb',
+            ['shell']
+          );
+        }
+      } else {
+        if (isAndroidDevice && !isExpAdbEnabled) {
+          term.writeln('\x1b[90m┌────────────────────────────────────────────────────────────────┐\x1b[0m');
+          term.writeln('\x1b[90m│ \x1b[33mTarget: Android Companion\x1b[90m • \x1b[37mLocal Host Shell Active\x1b[90m             │\x1b[0m');
+          term.writeln('\x1b[90m│ \x1b[90mTo spawn a direct remote Android shell via Wireless ADB,       │\x1b[0m');
+          term.writeln('\x1b[90m│ \x1b[36mclick "⚡ ADB Bridge: OFF" above or in Settings > Experimental.  \x1b[90m│\x1b[0m');
+          term.writeln('\x1b[90m└────────────────────────────────────────────────────────────────┘\x1b[0m\r\n');
+        }
+        // Spawn standard host shell
+        await TauriService.spawnPty(session.id, cols, rows, session.cwd);
+      }
     };
 
     initPty();
@@ -266,7 +279,7 @@ const XTermView: React.FC<XTermViewProps> = ({ session, theme }) => {
       TauriService.killPty(session.id);
       term.dispose();
     };
-  }, [session.id]);
+  }, [session.id, isExpAdbEnabled]);
 
   return (
     <div
@@ -296,6 +309,27 @@ export const RemoteTerminal: React.FC<RemoteTerminalProps> = ({
   const [showDeviceModal, setShowDeviceModal] = useState(false);
   const [deviceSearch, setDeviceSearch] = useState('');
   const [isCopied, setIsCopied] = useState(false);
+  const [isExpAdbEnabled, setIsExpAdbEnabled] = useState(
+    () => localStorage.getItem('nodus_exp_android_adb') === 'true'
+  );
+
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'nodus_exp_android_adb') {
+        setIsExpAdbEnabled(e.newValue === 'true');
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
+  const toggleExpAdb = () => {
+    setIsExpAdbEnabled(prev => {
+      const next = !prev;
+      localStorage.setItem('nodus_exp_android_adb', String(next));
+      return next;
+    });
+  };
 
   const activeSession = useMemo(() => {
     if (activeSessionId) {
@@ -304,6 +338,13 @@ export const RemoteTerminal: React.FC<RemoteTerminalProps> = ({
     }
     return sessions[0] || null;
   }, [sessions, activeSessionId]);
+
+  const isActiveSessionAndroid = useMemo(() => {
+    if (!activeSession) return false;
+    const os = activeSession.targetDevice.os?.toLowerCase();
+    const type = activeSession.targetDevice.type;
+    return os === 'android' || type === 'tablet' || type === 'phone';
+  }, [activeSession]);
 
   const handleSelectSession = (id: string) => {
     onSetActiveSession?.(id);
@@ -335,6 +376,9 @@ export const RemoteTerminal: React.FC<RemoteTerminalProps> = ({
     onCreateSession?.(dev);
   };
 
+  const [isPasted, setIsPasted] = useState(false);
+  const [restartKey, setRestartKey] = useState(0);
+
   const handleSendVirtualKey = (key: string) => {
     if (!activeSession) return;
     TauriService.writePty(activeSession.id, key);
@@ -343,6 +387,39 @@ export const RemoteTerminal: React.FC<RemoteTerminalProps> = ({
   const handleQuickMacro = (command: string) => {
     if (!activeSession) return;
     TauriService.writePty(activeSession.id, `${command}\r`);
+  };
+
+  const handleCopy = async () => {
+    try {
+      const sel = window.getSelection()?.toString();
+      if (sel) {
+        await navigator.clipboard.writeText(sel);
+      }
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 1500);
+    } catch (_) {}
+  };
+
+  const handlePaste = async () => {
+    if (!activeSession) return;
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        TauriService.writePty(activeSession.id, text);
+        setIsPasted(true);
+        setTimeout(() => setIsPasted(false), 1200);
+      }
+    } catch (_) {}
+  };
+
+  const handleClear = () => {
+    if (!activeSession) return;
+    const clearCmd = activeSession.targetDevice.os === 'windows' ? 'cls\r' : 'clear\r';
+    TauriService.writePty(activeSession.id, clearCmd);
+  };
+
+  const handleRestart = () => {
+    setRestartKey(k => k + 1);
   };
 
   // Filtered devices for the modal
@@ -426,8 +503,62 @@ export const RemoteTerminal: React.FC<RemoteTerminalProps> = ({
           </button>
         </div>
 
-        {/* Right Section: Status Indicator */}
+        {/* Right Section: Status Indicator, Action Controls & ADB Bridge Toggle */}
         <div className="flex items-center gap-2 shrink-0 text-xs font-mono text-[var(--text-muted)]">
+          {isActiveSessionAndroid && (
+            <button
+              onClick={toggleExpAdb}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-mono font-medium transition active:scale-95 shadow-sm ${
+                isExpAdbEnabled
+                  ? 'bg-amber-500/15 border-amber-500/40 text-amber-400 hover:bg-amber-500/25'
+                  : 'bg-[var(--surface-base)] border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-heading)]'
+              }`}
+              title={
+                isExpAdbEnabled
+                  ? 'Wireless ADB Bridge is ACTIVE: Spawning remote Android shell on this tab'
+                  : 'Enable Wireless ADB Bridge to spawn direct Android shell instead of local workstation shell'
+              }
+            >
+              <Zap size={13} className={isExpAdbEnabled ? 'text-amber-400 fill-amber-400' : 'text-[var(--text-muted)]'} />
+              <span>ADB Bridge: <strong>{isExpAdbEnabled ? 'ON' : 'OFF'}</strong></span>
+            </button>
+          )}
+
+          {/* Quick Terminal Action Bar */}
+          <div className="flex items-center gap-1 bg-[var(--surface-base)] p-0.5 rounded-lg border border-[var(--border-subtle)]">
+            <button
+              onClick={handlePaste}
+              className="h-7 px-2 rounded-md hover:bg-[var(--surface-elevated)] text-[var(--text-body)] text-[11px] font-mono flex items-center gap-1 transition active:scale-95 cursor-pointer"
+              title="Paste clipboard text into interactive shell (Ctrl+V)"
+            >
+              {isPasted ? <Check size={12} className="text-emerald-400" /> : <Clipboard size={12} />}
+              <span className="hidden md:inline">Paste</span>
+            </button>
+            <button
+              onClick={handleCopy}
+              className="h-7 px-2 rounded-md hover:bg-[var(--surface-elevated)] text-[var(--text-body)] text-[11px] font-mono flex items-center gap-1 transition active:scale-95 cursor-pointer"
+              title="Copy terminal selection to clipboard"
+            >
+              {isCopied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+              <span className="hidden md:inline">Copy</span>
+            </button>
+            <button
+              onClick={handleClear}
+              className="h-7 px-2 rounded-md hover:bg-[var(--surface-elevated)] text-[var(--text-body)] text-[11px] font-mono flex items-center gap-1 transition active:scale-95 cursor-pointer"
+              title="Clear terminal buffer (cls / clear)"
+            >
+              <Trash2 size={12} />
+              <span className="hidden md:inline">Clear</span>
+            </button>
+            <button
+              onClick={handleRestart}
+              className="h-7 px-2 rounded-md hover:bg-[var(--surface-elevated)] text-[var(--text-body)] text-[11px] font-mono flex items-center gap-1 transition active:scale-95 cursor-pointer"
+              title="Restart PTY shell session"
+            >
+              <RotateCcw size={12} />
+            </button>
+          </div>
+
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[var(--surface-base)] border border-[var(--border-subtle)] text-[10px] font-semibold text-emerald-500">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
             ConPTY Active
@@ -586,7 +717,12 @@ export const RemoteTerminal: React.FC<RemoteTerminalProps> = ({
         }}
       >
         {activeSession ? (
-          <XTermView key={activeSession.id} session={activeSession} theme={theme} />
+          <XTermView
+            key={`${activeSession.id}-${isExpAdbEnabled ? 'adb' : 'host'}-${restartKey}`}
+            session={activeSession}
+            theme={theme}
+            isExpAdbEnabled={isExpAdbEnabled}
+          />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-[var(--text-muted)] gap-3 p-8">
             <TerminalIcon size={48} className="opacity-40 text-[var(--accent-primary)]" />
@@ -648,7 +784,7 @@ export const RemoteTerminal: React.FC<RemoteTerminalProps> = ({
         {/* Quick Agent & Shell Launch Macros */}
         <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
           <span className="text-[10px] uppercase font-bold text-[var(--text-muted)] mr-1">Launch:</span>
-          {['cline', 'aider', 'git status', 'python', 'help', 'cls'].map((macro) => (
+          {['agy', 'claude', 'cline', 'aider', 'git status', 'python', 'help', 'cls'].map((macro) => (
             <button
               key={macro}
               onClick={() => handleQuickMacro(macro)}

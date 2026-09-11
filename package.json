@@ -4,14 +4,10 @@
   "private": true,
   "description": "Nodus Ecosystem Monorepo & Multi-Device Shell Workspace",
   "workspaces": [
-    "packages/nodus-common",
     "packages/nodus-home",
     "packages/nodus-fleet",
-    "packages/nodus-assistive",
-    "packages/nodus-desktop",
-    "packages/nodus-legacy"
+    "packages/nodus-desktop"
   ],
-
   "scripts": {
     "dev:home": "npm run --prefix packages/nodus-home dev",
     "build:home": "npm run --prefix packages/nodus-home build",
@@ -21,10 +17,9 @@
     "build:desktop": "npm run --prefix packages/nodus-desktop tauri build",
     "build": "npm run build --workspaces --if-present",
     "build:all": "npm run build --workspaces --if-present",
-    "test:common": "npm run --prefix packages/nodus-common test",
     "test:home": "npm run --prefix packages/nodus-home test",
     "test:desktop": "cargo test --manifest-path packages/nodus-desktop/src-tauri/Cargo.toml",
-    "test": "npm run test:common && npm run test:home && npm run test:desktop",
+    "test": "npm run test:home && npm run test:desktop",
     "clean": "npm run clean --workspaces --if-present"
   },
   "keywords": [

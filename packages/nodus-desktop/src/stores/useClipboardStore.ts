@@ -36,12 +36,14 @@ function downloadBlob(content: string, filename: string, mimeType: string) {
 interface ClipboardState {
   items: ClipboardItem[];
   pinnedIds: Set<string>;
+  isSyncEnabled: boolean;
   autoExportSettings: AutoExportSettings;
-  pushClip: (text: string, sourceDeviceId?: string, imageData?: string) => void;
+  pushClip: (text: string, sourceDeviceId?: string, imageData?: string, customDeviceName?: string) => void;
   deleteClip: (id: string) => void;
   togglePin: (id: string) => void;
   clearUnpinned: () => void;
   clearAll: () => void;
+  toggleSync: (enabled?: boolean) => void;
   exportToFile: (format?: 'json' | 'txt' | 'md') => void;
   updateAutoExportSettings: (partial: Partial<AutoExportSettings>) => void;
 }
@@ -49,6 +51,13 @@ interface ClipboardState {
 export const useClipboardStore = create<ClipboardState>((set, get) => ({
   items: [],
   pinnedIds: new Set<string>(),
+  isSyncEnabled: (() => {
+    try {
+      const saved = localStorage.getItem('nodus_clipboard_sync_enabled');
+      if (saved !== null) return JSON.parse(saved);
+    } catch (_) {}
+    return true;
+  })(),
   autoExportSettings: (() => {
     try {
       const saved = localStorage.getItem('nodus_clipboard_auto_export');
@@ -57,17 +66,32 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
     return DEFAULT_AUTO_EXPORT_SETTINGS;
   })(),
 
-  pushClip: (text: string, sourceDeviceId = 'this-pc', imageData?: string) => {
+  toggleSync: (enabled?: boolean) => {
+    set((state) => {
+      const next = typeof enabled === 'boolean' ? enabled : !state.isSyncEnabled;
+      try {
+        localStorage.setItem('nodus_clipboard_sync_enabled', JSON.stringify(next));
+      } catch (_) {}
+      return { isSyncEnabled: next };
+    });
+  },
+
+  pushClip: (text: string, sourceDeviceId = 'this-pc', imageData?: string, customDeviceName?: string) => {
     const isUrl = text.startsWith('http://') || text.startsWith('https://');
     const isCode = text.includes('\n') && (text.includes('{') || text.includes('const ') || text.includes('function '));
+
+    const isLocal = sourceDeviceId === 'this-pc' || sourceDeviceId === 'local';
+    const devName = customDeviceName || (isLocal ? 'This PC' : 'POCO Pad');
+    const devType = isLocal ? 'desktop' : 'tablet';
+    const devColor = isLocal ? '#A8C7FA' : '#6DD58C';
 
     const newItem: ClipboardItem = {
       id: `clip-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       text,
       deviceId: sourceDeviceId,
-      deviceName: sourceDeviceId === 'this-pc' ? 'This PC' : 'Remote Device',
-      deviceType: 'desktop',
-      deviceColor: '#A8C7FA',
+      deviceName: devName,
+      deviceType: devType,
+      deviceColor: devColor,
       type: imageData ? 'image' : isUrl ? 'link' : isCode ? 'code' : 'text',
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       pinned: false,

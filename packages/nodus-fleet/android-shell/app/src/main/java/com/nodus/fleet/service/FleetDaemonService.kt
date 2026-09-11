@@ -54,6 +54,7 @@ class FleetDaemonService : Service() {
 
         // Register local tablet node
         registerLocalDevice()
+        loadSavedPairedDevices()
 
         // Start Embedded HTTP Server on Port 9120 for companion status & RPC
         httpServer = com.nodus.fleet.net.FleetHttpServer(this, 9120).apply {
@@ -149,6 +150,13 @@ class FleetDaemonService : Service() {
 
         // Deduplicate any existing connected node with the same IP address
         if (newIp.isNotEmpty()) {
+            try {
+                val prefs = getSharedPreferences("nodus_fleet_prefs", Context.MODE_PRIVATE)
+                val set = prefs.getStringSet("known_companion_ips", mutableSetOf<String>())?.toMutableSet() ?: mutableSetOf<String>()
+                set.add(newIp)
+                prefs.edit().putStringSet("known_companion_ips", set).apply()
+            } catch (_: Exception) {}
+
             val duplicateKeys = mutableListOf<String>()
             for ((existingId, existingDev) in connectedDevices) {
                 if (existingId != "poco-pad" && existingId != id) {
@@ -165,6 +173,7 @@ class FleetDaemonService : Service() {
 
         val isNew = !connectedDevices.containsKey(id)
         connectedDevices[id] = device
+        savePairedDevices()
 
         if (isNew) {
             Log.i(TAG, "New peer explicitly paired: ${device.optString("name")} (${device.optString("ipAddress")})")
@@ -179,6 +188,7 @@ class FleetDaemonService : Service() {
     fun removeRemoteDevice(id: String) {
         val removed = connectedDevices.remove(id)
         discoveredPeers.remove(id)
+        savePairedDevices()
         if (removed != null) {
             Log.i(TAG, "Peer disconnected: ${removed.optString("name")}")
             val intent = Intent(NodusIpcContract.ACTION_DEVICE_DISCONNECTED).apply {
@@ -186,6 +196,40 @@ class FleetDaemonService : Service() {
             }
             sendBroadcast(intent, NodusIpcContract.PERMISSION_FLEET_ACCESS)
             notifyStateChanged()
+        }
+    }
+
+    private fun savePairedDevices() {
+        try {
+            val prefs = getSharedPreferences("nodus_fleet_prefs", Context.MODE_PRIVATE)
+            val array = JSONArray()
+            for ((id, dev) in connectedDevices) {
+                if (id != "poco-pad" && !dev.optBoolean("isLocal", false)) {
+                    array.put(dev)
+                }
+            }
+            prefs.edit().putString("paired_devices_json", array.toString()).apply()
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to persist paired devices: ${e.message}")
+        }
+    }
+
+    private fun loadSavedPairedDevices() {
+        try {
+            val prefs = getSharedPreferences("nodus_fleet_prefs", Context.MODE_PRIVATE)
+            val jsonStr = prefs.getString("paired_devices_json", null)
+            if (!jsonStr.isNullOrBlank()) {
+                val array = JSONArray(jsonStr)
+                for (i in 0 until array.length()) {
+                    val obj = array.getJSONObject(i)
+                    val id = obj.optString("id")
+                    if (id.isNotEmpty() && id != "poco-pad") {
+                        connectedDevices[id] = obj
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to load saved paired devices: ${e.message}")
         }
     }
 
@@ -259,8 +303,18 @@ class FleetDaemonService : Service() {
 
     fun getDevicesJson(): String {
         val array = JSONArray()
+        val seenIps = mutableSetOf<String>()
         for (device in connectedDevices.values) {
+            val ip = device.optString("ipAddress").split(":")[0].trim()
+            if (ip.isNotEmpty()) seenIps.add(ip)
             array.put(device)
+        }
+        for (peer in discoveredPeers.values) {
+            val ip = peer.optString("ipAddress").split(":")[0].trim()
+            if (ip.isNotEmpty() && !seenIps.contains(ip)) {
+                seenIps.add(ip)
+                array.put(peer)
+            }
         }
         return array.toString()
     }
@@ -310,14 +364,64 @@ class FleetDaemonService : Service() {
         )
     }
 
-    fun broadcastClipboardToPeers(text: String) {
+    fun broadcastClipboardToPeers(text: String, imageData: String? = null) {
+        val targets = mutableSetOf<Pair<String, Int>>()
+
+        val resolveIp: (JSONObject) -> String = { dev ->
+            val raw = if (dev.has("ipAddress") && dev.optString("ipAddress").isNotBlank()) {
+                dev.optString("ipAddress")
+            } else if (dev.has("ip") && dev.optString("ip").isNotBlank()) {
+                dev.optString("ip")
+            } else {
+                ""
+            }
+            raw.removePrefix("http://").removePrefix("https://").substringBefore(":").trim()
+        }
+
         for ((_, dev) in connectedDevices) {
             if (dev.optBoolean("isLocal", false)) continue
-            val ip = dev.optString("ipAddress")
+            val rawIp = resolveIp(dev)
             val port = dev.optInt("httpPort", dev.optInt("port", 9120))
-            if (ip.isNotEmpty()) {
-                httpRpcClient.syncClipboard(ip, port, text)
+            if (rawIp.isNotEmpty() && rawIp != "127.0.0.1" && rawIp != "localhost" && rawIp != "0.0.0.0") {
+                targets.add(Pair(rawIp, port))
             }
+        }
+
+        for ((_, dev) in discoveredPeers) {
+            if (dev.optBoolean("isLocal", false)) continue
+            val rawIp = resolveIp(dev)
+            val port = dev.optInt("httpPort", dev.optInt("port", 9120))
+            if (rawIp.isNotEmpty() && rawIp != "127.0.0.1" && rawIp != "localhost" && rawIp != "0.0.0.0") {
+                targets.add(Pair(rawIp, port))
+            }
+        }
+
+        try {
+            val prefs = getSharedPreferences("nodus_fleet_prefs", Context.MODE_PRIVATE)
+            val jsonStr = prefs.getString("paired_devices_json", null)
+            if (!jsonStr.isNullOrBlank()) {
+                val array = JSONArray(jsonStr)
+                for (i in 0 until array.length()) {
+                    val obj = array.getJSONObject(i)
+                    val rawIp = resolveIp(obj)
+                    val port = obj.optInt("httpPort", obj.optInt("port", 9120))
+                    if (rawIp.isNotEmpty() && rawIp != "127.0.0.1" && rawIp != "localhost" && rawIp != "0.0.0.0") {
+                        targets.add(Pair(rawIp, port))
+                    }
+                }
+            }
+            val knownIps = prefs.getStringSet("known_companion_ips", emptySet<String>()) ?: emptySet<String>()
+            for (kIp in knownIps) {
+                val clean = kIp.split(":")[0].trim()
+                if (clean.isNotEmpty() && clean != "127.0.0.1" && clean != "localhost" && clean != "0.0.0.0") {
+                    targets.add(Pair(clean, 9120))
+                }
+            }
+        } catch (_: Exception) {}
+
+        Log.i(TAG, "Broadcasting clipboard snippet to ${targets.size} targets: $targets")
+        for ((ip, port) in targets) {
+            httpRpcClient.syncClipboard(ip, port, text, imageData)
         }
     }
 

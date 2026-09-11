@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getRegisteredIcon, ICON_REGISTRY } from '@nodus/common';
+import { getRegisteredIcon, ICON_REGISTRY } from '../utils/iconRegistry';
 import { Settings, AppWindow, Smartphone, Tablet, Monitor } from 'lucide-react';
 
 describe('iconRegistry (@nodus/common)', () => {

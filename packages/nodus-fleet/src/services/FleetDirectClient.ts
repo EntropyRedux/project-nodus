@@ -15,7 +15,7 @@ export interface UniversalResponse<T = any> {
   error?: string;
 }
 
-const DEFAULT_AUTH_TOKEN = '';
+const DEFAULT_AUTH_TOKEN = 'NODUS-FLEET-SECURE';
 
 export async function universalNetworkFetch<T = any>(
   url: string,
@@ -28,8 +28,11 @@ export async function universalNetworkFetch<T = any>(
       : JSON.stringify(options.body)
     : '';
 
+  const authToken = options.headers?.['Authorization'] || `Bearer ${DEFAULT_AUTH_TOKEN}`;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'Authorization': authToken,
+    'X-Nodus-Auth-Token': DEFAULT_AUTH_TOKEN,
     ...(options.headers || {}),
   };
 

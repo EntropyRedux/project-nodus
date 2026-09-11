@@ -293,32 +293,32 @@
   --m3-on-background: #FFFFFF;
 }
 
-/* --- Theme 3: Obsidian Glass (Deep Frosted Glassmorphism) --- */
+/* --- Theme 3: Obsidian Glass (Translucent Frosted Glassmorphism) --- */
 .theme-obsidian {
   --app-font-sans: 'Sora', system-ui, -apple-system, sans-serif;
   --app-font-mono: 'Space Mono', monospace;
-  --app-bg: #030305;
-  --surface-base: rgba(14, 14, 22, 0.72);
-  --surface-container: rgba(22, 22, 34, 0.75);
-  --surface-elevated: rgba(32, 32, 48, 0.82);
-  --surface-header: rgba(5, 5, 8, 0.90);
-  --surface-modal: rgba(20, 20, 32, 0.95);
+  --app-bg: #050508;
+  --surface-base: rgba(14, 14, 24, 0.45);
+  --surface-container: rgba(20, 20, 34, 0.48);
+  --surface-elevated: rgba(30, 30, 50, 0.58);
+  --surface-header: rgba(6, 6, 12, 0.60);
+  --surface-modal: rgba(16, 16, 28, 0.75);
   --text-heading: #F8FAFC;
   --text-body: #CBD5E1;
   --text-muted: #94A3B8;
-  --border-subtle: rgba(167, 139, 250, 0.14);
-  --border-active: rgba(167, 139, 250, 0.45);
+  --border-subtle: rgba(167, 139, 250, 0.18);
+  --border-active: rgba(167, 139, 250, 0.50);
   --accent-primary: #A78BFA;
   --accent-container: rgba(124, 58, 237, 0.35);
   --accent-on-container: #F5F3FF;
   --chip-bg: rgba(255, 255, 255, 0.08);
   --chip-text: #F1F5F9;
-  --card-bg: rgba(22, 22, 34, 0.70);
-  --card-hover: rgba(34, 34, 52, 0.85);
-  --input-bg: rgba(10, 10, 18, 0.85);
-  --input-border: rgba(167, 139, 250, 0.22);
-  --control-btn-bg: rgba(40, 42, 62, 0.75);
-  --control-btn-hover: rgba(55, 58, 86, 0.90);
+  --card-bg: rgba(20, 20, 34, 0.45);
+  --card-hover: rgba(32, 32, 54, 0.60);
+  --input-bg: rgba(8, 8, 16, 0.50);
+  --input-border: rgba(167, 139, 250, 0.28);
+  --control-btn-bg: rgba(36, 38, 62, 0.50);
+  --control-btn-hover: rgba(52, 55, 88, 0.70);
   --control-btn-text: #F1F5F9;
 
   /* Semantic Status & Button Tokens */
@@ -349,49 +349,53 @@
   --badge-trusted-text: #DDD6FE;
   --badge-trusted-border: rgba(167, 139, 250, 0.4);
 
-  /* Terminal Obsidian Glass Tokens */
-  --terminal-bg: rgba(10, 10, 18, 0.88);
+  /* Terminal Obsidian Glass Tokens (Translucent) */
+  --terminal-bg: rgba(8, 8, 16, 0.60);
   --terminal-text: #F1F5F9;
   --terminal-text-muted: #94A3B8;
   --terminal-prompt: #A78BFA;
-  --terminal-border: rgba(167, 139, 250, 0.18);
-  --terminal-system-bg: rgba(124, 58, 237, 0.18);
+  --terminal-border: rgba(167, 139, 250, 0.22);
+  --terminal-system-bg: rgba(124, 58, 237, 0.20);
   --terminal-system-text: #DDD6FE;
   --terminal-system-border: #8B5CF6;
-  --terminal-error-bg: rgba(239, 68, 68, 0.18);
+  --terminal-error-bg: rgba(239, 68, 68, 0.20);
   --terminal-error-text: #FCA5A5;
   --terminal-error-border: #EF4444;
-  --terminal-warn-bg: rgba(245, 158, 11, 0.18);
+  --terminal-warn-bg: rgba(245, 158, 11, 0.20);
   --terminal-warn-text: #FDE68A;
   --terminal-warn-border: #F59E0B;
   --terminal-cursor: #C084FC;
-  --terminal-macro-bg: rgba(22, 22, 34, 0.75);
-  --terminal-macro-hover: rgba(34, 34, 52, 0.85);
-  --terminal-input-bg: rgba(14, 14, 22, 0.85);
+  --terminal-macro-bg: rgba(20, 20, 34, 0.45);
+  --terminal-macro-hover: rgba(34, 34, 56, 0.60);
+  --terminal-input-bg: rgba(12, 12, 22, 0.55);
 
   /* M3 Obsidian Bridge */
   --m3-primary: #A78BFA;
   --m3-on-primary: #1E1035;
   --m3-primary-container: rgba(124, 58, 237, 0.35);
   --m3-on-primary-container: #F5F3FF;
-  --m3-surface: rgba(14, 14, 22, 0.72);
+  --m3-surface: rgba(14, 14, 24, 0.45);
   --m3-on-surface: #F8FAFC;
   --m3-on-surface-variant: #94A3B8;
-  --m3-surface-variant: rgba(32, 32, 48, 0.82);
-  --m3-outline: rgba(167, 139, 250, 0.22);
-  --m3-surface-container-lowest: #030305;
-  --m3-surface-container-low: rgba(14, 14, 22, 0.72);
-  --m3-surface-container: rgba(22, 22, 34, 0.75);
-  --m3-surface-container-high: rgba(32, 32, 48, 0.82);
-  --m3-surface-container-highest: rgba(45, 45, 68, 0.9);
+  --m3-surface-variant: rgba(30, 30, 50, 0.58);
+  --m3-outline: rgba(167, 139, 250, 0.28);
+  --m3-surface-container-lowest: #050508;
+  --m3-surface-container-low: rgba(14, 14, 24, 0.45);
+  --m3-surface-container: rgba(20, 20, 34, 0.48);
+  --m3-surface-container-high: rgba(30, 30, 50, 0.58);
+  --m3-surface-container-highest: rgba(42, 42, 68, 0.68);
   --m3-on-background: #F8FAFC;
 }
 
-.theme-obsidian .glass-panel {
-  background: var(--surface-container);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--border-subtle);
+.theme-obsidian header,
+.theme-obsidian nav,
+.theme-obsidian aside,
+.theme-obsidian .glass-panel,
+.theme-obsidian [class*="bg-[var(--surface-"],
+.theme-obsidian [class*="bg-[var(--card-bg)"],
+.theme-obsidian [class*="bg-[var(--terminal-bg)"] {
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
 }
 
 html, body, #root {

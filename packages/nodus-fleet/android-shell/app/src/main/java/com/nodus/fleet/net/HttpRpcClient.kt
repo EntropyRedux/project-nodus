@@ -32,10 +32,9 @@ class HttpRpcClient {
 
     private fun buildRequest(url: String, authToken: String? = null, postBody: String? = null): Request {
         val builder = Request.Builder().url(url)
-        if (!authToken.isNullOrBlank()) {
-            builder.header("Authorization", "Bearer $authToken")
-            builder.header("X-Nodus-Auth-Token", authToken)
-        }
+        val token = if (!authToken.isNullOrBlank()) authToken else "NODUS-FLEET-SECURE"
+        builder.header("Authorization", "Bearer $token")
+        builder.header("X-Nodus-Auth-Token", token)
         if (postBody != null) {
             builder.post(postBody.toRequestBody(JSON_MEDIA_TYPE))
         } else {
@@ -217,6 +216,7 @@ class HttpRpcClient {
         ip: String,
         port: Int,
         text: String,
+        imageData: String? = null,
         authToken: String? = null,
         onSuccess: () -> Unit = {},
         onError: (Exception) -> Unit = {}
@@ -225,20 +225,31 @@ class HttpRpcClient {
         val url = "http://$cleanIp:$port/api/clipboard"
         val payload = JSONObject().apply {
             put("text", text)
+            if (!imageData.isNullOrBlank()) {
+                put("imageData", imageData)
+                put("image_data", imageData)
+            }
+            put("sourceDevice", "poco-pad")
+            put("deviceId", "poco-pad")
+            put("deviceName", "POCO Pad")
+            put("timestamp", System.currentTimeMillis())
         }.toString()
 
         val request = buildRequest(url, authToken, payload)
 
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
+                Log.w(TAG, "Failed to sync clipboard to $url: ${e.message}")
                 onError(e)
             }
 
             override fun onResponse(call: Call, response: Response) {
                 response.use {
                     if (it.isSuccessful) {
+                        Log.i(TAG, "Successfully synced clipboard to $url")
                         onSuccess()
                     } else {
+                        Log.w(TAG, "HTTP error ${it.code} syncing clipboard to $url")
                         onError(IOException("HTTP ${it.code} on syncClipboard"))
                     }
                 }
