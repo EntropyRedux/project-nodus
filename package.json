@@ -6,7 +6,8 @@
   "workspaces": [
     "packages/nodus-home",
     "packages/nodus-fleet",
-    "packages/nodus-desktop"
+    "packages/nodus-desktop",
+    "packages/nodus-common"
   ],
   "scripts": {
     "dev:home": "npm run --prefix packages/nodus-home dev",
@@ -20,6 +21,7 @@
     "test:home": "npm run --prefix packages/nodus-home test",
     "test:desktop": "cargo test --manifest-path packages/nodus-desktop/src-tauri/Cargo.toml",
     "test": "npm run test:home && npm run test:desktop",
+    "sync:android": "node scripts/sync-android-assets.mjs",
     "clean": "npm run clean --workspaces --if-present"
   },
   "keywords": [

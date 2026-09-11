@@ -1,0 +1,72 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main, "refactor/*", "feat/*"]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-web:
+    name: Typecheck, Test & Build Frontend Shells
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Typecheck Nodus Home
+        run: npx --prefix packages/nodus-home tsc --noEmit
+
+      - name: Typecheck Nodus Fleet
+        run: npx --prefix packages/nodus-fleet tsc --noEmit
+
+      - name: Typecheck Nodus Desktop
+        run: npx --prefix packages/nodus-desktop tsc --noEmit
+
+      - name: Run Tests (Nodus Home)
+        run: npm run --prefix packages/nodus-home test
+
+      - name: Build Nodus Home
+        run: npm run --prefix packages/nodus-home build
+
+      - name: Build Nodus Fleet
+        run: npm run --prefix packages/nodus-fleet build
+
+      - name: Verify Asset Synchronization
+        run: node scripts/sync-android-assets.mjs
+
+  validate-desktop-rust:
+    name: Rust Backend Tests & Verification
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/nodus-desktop/src-tauri
+
+      - name: Cargo Check
+        run: cargo check --manifest-path packages/nodus-desktop/src-tauri/Cargo.toml
+
+      - name: Cargo Test
+        run: cargo test --manifest-path packages/nodus-desktop/src-tauri/Cargo.toml
