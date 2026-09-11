@@ -69,7 +69,7 @@ class FleetActivity : AppCompatActivity() {
                 databaseEnabled = true
                 cacheMode = WebSettings.LOAD_NO_CACHE
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                    mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                 }
             }
             clearCache(true)
@@ -723,20 +723,18 @@ class FleetActivity : AppCompatActivity() {
         }
 
         @JavascriptInterface
-        fun httpFetch(urlStr: String, method: String, body: String, timeoutMs: Int = 1000): String {
+        fun httpFetch(urlStr: String, method: String, body: String, timeoutMs: Int = 3500): String {
             return try {
                 val url = java.net.URL(urlStr)
                 val conn = url.openConnection() as java.net.HttpURLConnection
-                val timeout = if (timeoutMs > 0) timeoutMs else 1000
+                val timeout = if (timeoutMs > 0) timeoutMs else 3500
                 conn.requestMethod = method.uppercase()
                 conn.connectTimeout = timeout
                 conn.readTimeout = timeout
                 conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                val pairedToken = FleetDaemonService.instance?.getTokenForHost(url.host)
-                if (!pairedToken.isNullOrBlank()) {
-                    conn.setRequestProperty("Authorization", "Bearer $pairedToken")
-                    conn.setRequestProperty("X-Nodus-Auth-Token", pairedToken)
-                }
+                val pairedToken = FleetDaemonService.instance?.getTokenForHost(url.host)?.takeIf { it.isNotBlank() } ?: "NODUS-FLEET-SECURE"
+                conn.setRequestProperty("Authorization", "Bearer $pairedToken")
+                conn.setRequestProperty("X-Nodus-Auth-Token", pairedToken)
 
                 if (method.equals("POST", ignoreCase = true) || method.equals("PUT", ignoreCase = true)) {
                     conn.doOutput = true

@@ -23,11 +23,13 @@ export function getActiveFleetSessionToken(): string {
   if (typeof window !== 'undefined') {
     const bridge = (window as any).NodusNativeBridge;
     if (bridge && typeof bridge.getSessionToken === 'function') {
-      return bridge.getSessionToken() || '';
+      const tok = bridge.getSessionToken();
+      if (tok) return tok;
     }
-    return sessionStorage.getItem('nodus_fleet_session_token') || '';
+    const sess = sessionStorage.getItem('nodus_fleet_session_token');
+    if (sess) return sess;
   }
-  return '';
+  return 'NODUS-FLEET-SECURE';
 }
 
 /**

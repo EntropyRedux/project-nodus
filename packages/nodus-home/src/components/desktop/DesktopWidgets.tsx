@@ -37,7 +37,7 @@ export const DesktopWidgets: React.FC = () => {
 
   const [timeStr, setTimeStr] = useState('');
   const [dateStr, setDateStr] = useState('');
-  const [cpuVal, setCpuVal] = useState(activeDevice.cpuLoad || 0);
+  const [cpuVal, setCpuVal] = useState(activeDevice?.cpuLoad || 0);
 
   useEffect(() => {
     const updateTime = () => {

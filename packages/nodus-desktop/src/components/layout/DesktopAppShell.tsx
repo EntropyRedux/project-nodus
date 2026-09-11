@@ -104,6 +104,7 @@ export const DesktopAppShell: React.FC = () => {
 
   const {
     executables: remoteExecutables,
+    loadShortcuts,
     executeShortcut,
     updateExecutable: updateRemoteExecutable,
     addExecutable: addRemoteExecutable,
@@ -140,11 +141,12 @@ export const DesktopAppShell: React.FC = () => {
 
   useEffect(() => {
     fetchServerStatus();
+    loadShortcuts();
     const interval = setInterval(() => {
       refreshLanCount();
     }, 15000);
     return () => clearInterval(interval);
-  }, []);
+  }, [loadShortcuts]);
 
   // Auto-initialize default local terminal session when terminal tab is selected
   useEffect(() => {
@@ -200,7 +202,10 @@ export const DesktopAppShell: React.FC = () => {
     try {
       await fetch(`http://${cleanIp}:${portNum}/api/fleet/pair-confirm`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Nodus-Auth-Token': serverConfig?.auth_token || serverConfig?.pairingSecret || 'NODUS-FLEET-SECURE',
+        },
         body: JSON.stringify({
           id: 'desktop-host',
           deviceId: 'desktop-host',
@@ -211,7 +216,7 @@ export const DesktopAppShell: React.FC = () => {
           ipAddress: '192.168.1.177',
           httpPort: 9120,
           port: 9120,
-          token: serverConfig?.auth_token || serverConfig?.pairingSecret || '',
+          token: serverConfig?.auth_token || serverConfig?.pairingSecret || 'NODUS-FLEET-SECURE',
           isAck: true,
           action: 'confirm',
         }),
@@ -369,14 +374,14 @@ export const DesktopAppShell: React.FC = () => {
 
   const handleBroadcastClipboard = (content: string) => {
     pushClip(content, 'this-pc', undefined, 'This PC');
-    const token = serverConfig?.auth_token || serverConfig?.pairingSecret || '';
+    const token = serverConfig?.auth_token || serverConfig?.pairingSecret || 'NODUS-FLEET-SECURE';
     ClipboardBroadcastService.queueBroadcast(content, undefined, fleetDevices, token);
     TauriService.setClipboardText(content).catch(() => {});
   };
 
   const handleCopyClipboardItem = async (item: any) => {
     try {
-      const token = serverConfig?.auth_token || serverConfig?.pairingSecret || '';
+      const token = serverConfig?.auth_token || serverConfig?.pairingSecret || 'NODUS-FLEET-SECURE';
       if (item.type === 'image' && item.imageData) {
         await TauriService.setClipboardImage(item.imageData);
         pushClip(item.text || 'Image', 'this-pc', item.imageData, 'This PC');
@@ -934,7 +939,7 @@ export const DesktopAppShell: React.FC = () => {
                 ipAddress: '192.168.1.177',
                 httpPort: 9120,
                 port: 9120,
-                token: token || serverConfig?.auth_token || serverConfig?.pairingSecret || '',
+                token: token || serverConfig?.auth_token || serverConfig?.pairingSecret || 'NODUS-FLEET-SECURE',
                 isAck: false,
               }),
             }).catch(() => {});

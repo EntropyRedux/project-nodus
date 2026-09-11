@@ -62,10 +62,10 @@ export class NodusBridgeClient {
   private port: number;
   private authToken: string;
 
-  constructor(host: string = '127.0.0.1', port: number = 9120, authToken: string = '') {
+  constructor(host: string = '127.0.0.1', port: number = 9120, authToken: string = 'NODUS-FLEET-SECURE') {
     this.host = host;
     this.port = port;
-    this.authToken = authToken;
+    this.authToken = authToken || 'NODUS-FLEET-SECURE';
   }
 
   async call(action: BridgeRpcMessage['action'], params: RpcParams = {}): Promise<BridgeRpcResponse> {
@@ -74,14 +74,13 @@ export class NodusBridgeClient {
     const cleanHost = this.host.replace(/^https?:\/\//, '').split(':')[0];
     const baseUrl = `http://${cleanHost}:${this.port}`;
 
+    const token = this.authToken || 'NODUS-FLEET-SECURE';
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
+      'Authorization': `Bearer ${token}`,
+      'X-Nodus-Auth-Token': token,
     };
-    if (this.authToken) {
-      headers['Authorization'] = `Bearer ${this.authToken}`;
-      headers['X-Nodus-Auth-Token'] = this.authToken;
-    }
 
     try {
       let res: Response;
@@ -190,7 +189,7 @@ export async function sendBridgeRpc(
   action: BridgeRpcMessage['action'],
   targetDevice: string,
   params: RpcParams = {},
-  authToken: string = ''
+  authToken: string = 'NODUS-FLEET-SECURE'
 ): Promise<{ request: BridgeRpcMessage; response: BridgeRpcResponse; packet: WirePacketLog }> {
   const reqId = `rpc-${Math.random().toString(36).substring(2, 9)}`;
   const startTime = performance.now();

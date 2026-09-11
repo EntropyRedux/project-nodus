@@ -8,7 +8,7 @@ export default function App() {
 
   // Headless background worker bootstrap
   useEffect(() => {
-    const token = serverConfig?.auth_token || serverConfig?.pairingSecret || '';
+    const token = serverConfig?.auth_token || serverConfig?.pairingSecret || 'NODUS-FLEET-SECURE';
     DaemonManager.start(token);
     return () => DaemonManager.stop();
   }, [serverConfig]);

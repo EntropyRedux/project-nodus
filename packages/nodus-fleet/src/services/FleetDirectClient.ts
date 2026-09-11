@@ -26,16 +26,14 @@ export async function universalNetworkFetch<T = any>(
       : JSON.stringify(options.body)
     : '';
 
-  const explicitToken = options.headers?.['X-Nodus-Auth-Token'];
+  const explicitToken = options.headers?.['X-Nodus-Auth-Token'] || 'NODUS-FLEET-SECURE';
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers || {}),
   };
-  if (explicitToken) {
-    headers['X-Nodus-Auth-Token'] = explicitToken;
-    if (!headers['Authorization']) {
-      headers['Authorization'] = `Bearer ${explicitToken}`;
-    }
+  headers['X-Nodus-Auth-Token'] = explicitToken;
+  if (!headers['Authorization']) {
+    headers['Authorization'] = `Bearer ${explicitToken}`;
   }
 
   // 1. Try standard browser fetch with timeout controller

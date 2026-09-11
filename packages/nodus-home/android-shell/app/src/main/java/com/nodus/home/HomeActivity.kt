@@ -1,6 +1,7 @@
 package com.nodus.home
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.app.ActivityManager
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -117,7 +118,7 @@ class HomeActivity : AppCompatActivity() {
                 allowContentAccess = false
                 databaseEnabled = true
                 cacheMode = WebSettings.LOAD_NO_CACHE
-                mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                 mediaPlaybackRequiresUserGesture = false
                 useWideViewPort = true
                 loadWithOverviewMode = true
@@ -269,6 +270,7 @@ class HomeActivity : AppCompatActivity() {
 
     private fun dispatchPrimaryClipboardToWeb() {
         try {
+            if (!hasWindowFocus()) return
             val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
             val clip = cm.primaryClip
             if (clip != null && clip.itemCount > 0) {
@@ -496,7 +498,7 @@ class HomeActivity : AppCompatActivity() {
             }.toString()
         }
 
-        private var activeSessionToken: String = ""
+        private var activeSessionToken: String = "NODUS-FLEET-SECURE"
 
         @JavascriptInterface
         fun getSessionToken(): String = activeSessionToken
@@ -519,8 +521,9 @@ class HomeActivity : AppCompatActivity() {
                 conn.readTimeout = 4000
                 conn.setRequestProperty("Content-Type", "application/json")
                 conn.setRequestProperty("Accept", "application/json")
-                conn.setRequestProperty("Authorization", "Bearer ${getSessionToken()}")
-                conn.setRequestProperty("X-Nodus-Auth-Token", getSessionToken())
+                val token = getSessionToken().takeIf { it.isNotBlank() } ?: "NODUS-FLEET-SECURE"
+                conn.setRequestProperty("Authorization", "Bearer $token")
+                conn.setRequestProperty("X-Nodus-Auth-Token", token)
                 if (reqMethod == "POST" && !body.isNullOrEmpty()) {
                     conn.doOutput = true
                     conn.outputStream.use { os ->
@@ -634,6 +637,7 @@ class HomeActivity : AppCompatActivity() {
         @JavascriptInterface
         fun getPrimaryClipboard(): String {
             return try {
+                if ((context as? Activity)?.hasWindowFocus() != true) return ""
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 val clip = clipboard.primaryClip
                 if (clip != null && clip.itemCount > 0) {

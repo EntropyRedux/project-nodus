@@ -49,7 +49,7 @@ const DEFAULT_SERVER_CONFIG: NetworkServerConfig = {
   serverHost: '0.0.0.0',
   autoDiscover: true,
   heartbeatIntervalMs: 5000,
-  pairingSecret: '',
+  pairingSecret: 'NODUS-FLEET-SECURE',
   encryptionEnabled: true,
   autoStartOnBoot: true,
   broadcastMdns: true,

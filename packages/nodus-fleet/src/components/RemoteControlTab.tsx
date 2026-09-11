@@ -238,7 +238,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
   const [sensitivity, setSensitivity] = useState<'normal' | 'precision' | 'fast'>('normal');
 
   const targetDevice = devices.find(d => d.id === targetDeviceId) || devices.find(d => !d.isLocal) || devices[0] || null;
-  const targetToken = (targetDevice as any)?.authToken || (targetDevice as any)?.token || '';
+  const targetToken = (targetDevice as any)?.authToken || (targetDevice as any)?.token || 'NODUS-FLEET-SECURE';
   const controllableDevices = devices.filter(d => !d.isLocal);
 
   // Device selection dropdown menu state
