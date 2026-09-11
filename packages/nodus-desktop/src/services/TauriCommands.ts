@@ -14,6 +14,21 @@ export const isTauri = (): boolean => {
   return typeof window !== 'undefined' && Boolean((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__);
 };
 
+export function getStoredAuthToken(explicitToken?: string): string {
+  if (explicitToken && explicitToken.trim()) return explicitToken.trim();
+  try {
+    const raw = localStorage.getItem('nodus_desktop_paired_devices');
+    if (raw) {
+      const devices = JSON.parse(raw);
+      if (Array.isArray(devices) && devices.length > 0) {
+        const d = devices.find((x: any) => x.authToken || x.token);
+        if (d) return d.authToken || d.token || '';
+      }
+    }
+  } catch (_) {}
+  return '';
+}
+
 export const TauriService = {
   isTauri(): boolean {
     return isTauri();
@@ -63,14 +78,15 @@ export const TauriService = {
     }
   },
 
-  async getRemoteProcesses(ip: string, port = 9120, token = 'NODUS-FLEET-SECURE'): Promise<DeviceProcess[]> {
+  async getRemoteProcesses(ip: string, port = 9120, token?: string): Promise<DeviceProcess[]> {
     try {
+      const authToken = getStoredAuthToken(token);
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3500);
       const res = await fetch(`http://${ip}:${port}/api/processes`, {
         method: 'GET',
         headers: {
-          'X-Nodus-Auth-Token': token,
+          'X-Nodus-Auth-Token': authToken,
         },
         signal: controller.signal,
       });
@@ -96,15 +112,16 @@ export const TauriService = {
     return [];
   },
 
-  async killRemoteProcess(ip: string, port = 9120, pid: number, token = 'NODUS-FLEET-SECURE'): Promise<boolean> {
+  async killRemoteProcess(ip: string, port = 9120, pid: number, token?: string): Promise<boolean> {
     try {
+      const authToken = getStoredAuthToken(token);
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3500);
       const res = await fetch(`http://${ip}:${port}/api/process/kill`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Nodus-Auth-Token': token,
+          'X-Nodus-Auth-Token': authToken,
         },
         body: JSON.stringify({ pid }),
         signal: controller.signal,
@@ -125,7 +142,7 @@ export const TauriService = {
       try {
         const res = await fetch('http://127.0.0.1:9120/api/system/control', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': getStoredAuthToken() },
           body: JSON.stringify({ action: 'lock' }),
         });
         return res.ok;
@@ -189,7 +206,7 @@ export const TauriService = {
       try {
         const res = await fetch('http://127.0.0.1:9120/api/media', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': getStoredAuthToken() },
           body: JSON.stringify({ action }),
         });
         return res.ok;
@@ -287,7 +304,7 @@ export const TauriService = {
       try {
         const res = await fetch('http://127.0.0.1:9120/api/exec', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': getStoredAuthToken() },
           body: JSON.stringify({ command_or_path: commandOrPath, args, working_dir: workingDir }),
         });
         return res.ok;
@@ -314,7 +331,7 @@ export const TauriService = {
       try {
         const res = await fetch('http://127.0.0.1:9120/api/input/mouse/move', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': getStoredAuthToken() },
           body: JSON.stringify({ dx, dy }),
         });
         return res.ok;
@@ -334,7 +351,7 @@ export const TauriService = {
       try {
         const res = await fetch('http://127.0.0.1:9120/api/input/mouse/click', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': getStoredAuthToken() },
           body: JSON.stringify({ button }),
         });
         return res.ok;
@@ -354,7 +371,7 @@ export const TauriService = {
       try {
         const res = await fetch('http://127.0.0.1:9120/api/input/mouse/scroll', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': getStoredAuthToken() },
           body: JSON.stringify({ dx, dy }),
         });
         return res.ok;
@@ -374,7 +391,7 @@ export const TauriService = {
       try {
         const res = await fetch('http://127.0.0.1:9120/api/input/keyboard/hotkey', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': getStoredAuthToken() },
           body: JSON.stringify({ keys }),
         });
         return res.ok;
@@ -394,7 +411,7 @@ export const TauriService = {
       try {
         const res = await fetch('http://127.0.0.1:9120/api/input/keyboard/text', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': getStoredAuthToken() },
           body: JSON.stringify({ text }),
         });
         return res.ok;
@@ -717,16 +734,17 @@ export const TauriService = {
     port = 9120,
     command: string,
     cwd?: string,
-    token = 'NODUS-FLEET-SECURE'
+    token?: string
   ): Promise<{ stdout: string; stderr: string; exit_code: number; success: boolean; cwd?: string }> {
     try {
+      const authToken = getStoredAuthToken(token);
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
       const res = await fetch(`http://${ip}:${port}/api/terminal/exec`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Nodus-Auth-Token': token,
+          'X-Nodus-Auth-Token': authToken,
         },
         body: JSON.stringify({ command, cwd }),
         signal: controller.signal,

@@ -66,7 +66,7 @@ export const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({
     systemStats
   } = useFleetStore();
 
-  const [pairingToken, setPairingToken] = useState(serverConfig.pairingSecret || 'NODUS-FLEET-SECURE');
+  const [pairingToken, setPairingToken] = useState(serverConfig.pairingSecret || '');
   const [showToken, setShowToken] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null);

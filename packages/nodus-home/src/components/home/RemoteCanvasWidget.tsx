@@ -8,12 +8,12 @@ export const RemoteCanvasWidget: React.FC = () => {
   const { activeDevice, devices, addNotification } = useLauncher();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [runningMacroId, setRunningMacroId] = useState<string | null>(null);
-  const [cpuHistory, setCpuHistory] = useState<number[]>([15, 18, 22, 20, 25, 19, 17, 24, 21, 18, 26, 20]);
+  const [cpuHistory, setCpuHistory] = useState<number[]>([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
 
   // Live Canvas Sparkline Drawing
   useEffect(() => {
     const interval = setInterval(() => {
-      const currentLoad = activeDevice.cpuLoad ?? Math.floor(Math.random() * 15 + 15);
+      const currentLoad = activeDevice.cpuLoad ?? 0;
       setCpuHistory((prev) => [...prev.slice(1), currentLoad]);
     }, 2000);
     return () => clearInterval(interval);

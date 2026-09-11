@@ -134,7 +134,7 @@ pub fn broadcast_clipboard(
     target_ips: Vec<String>,
     auth_token: Option<String>,
 ) -> Result<bool, String> {
-    let token = auth_token.unwrap_or_else(|| "NODUS-FLEET-SECURE".to_string());
+    let token = auth_token.unwrap_or_default();
     let ts = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()

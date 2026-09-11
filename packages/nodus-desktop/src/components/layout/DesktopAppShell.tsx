@@ -210,7 +210,7 @@ export const DesktopAppShell: React.FC = () => {
           ipAddress: '192.168.1.177',
           httpPort: 9120,
           port: 9120,
-          token: 'NODUS-FLEET-SECURE',
+          token: serverConfig?.auth_token || serverConfig?.pairingSecret || '',
           isAck: true,
           action: 'confirm',
         }),
@@ -252,10 +252,10 @@ export const DesktopAppShell: React.FC = () => {
       status: d.status as any,
       ipAddress: d.ipAddress,
       resolution: d.resolution || '1920x1080',
-      latencyMs: d.isLocal ? 1 : 12,
-      batteryPercent: d.battery || 100,
+      latencyMs: d.isLocal ? 0 : (d.latencyMs ?? 0),
+      batteryPercent: d.battery ?? 100,
       isLocal: Boolean(d.isLocal || d.id === 'this-pc' || d.id === 'local' || d.ipAddress === '127.0.0.1' || d.ipAddress?.startsWith('127.')),
-      cpuUsagePercent: d.cpuLoad || 15,
+      cpuUsagePercent: d.cpuLoad ?? 0,
     }));
   }, [fleetDevices]);
 
@@ -368,14 +368,14 @@ export const DesktopAppShell: React.FC = () => {
 
   const handleBroadcastClipboard = (content: string) => {
     pushClip(content, 'this-pc', undefined, 'This PC');
-    const token = serverConfig?.auth_token || serverConfig?.pairingSecret || 'NODUS-FLEET-SECURE';
+    const token = serverConfig?.auth_token || serverConfig?.pairingSecret || '';
     ClipboardBroadcastService.queueBroadcast(content, undefined, fleetDevices, token);
     TauriService.setClipboardText(content).catch(() => {});
   };
 
   const handleCopyClipboardItem = async (item: any) => {
     try {
-      const token = serverConfig?.auth_token || serverConfig?.pairingSecret || 'NODUS-FLEET-SECURE';
+      const token = serverConfig?.auth_token || serverConfig?.pairingSecret || '';
       if (item.type === 'image' && item.imageData) {
         await TauriService.setClipboardImage(item.imageData);
         pushClip(item.text || 'Image', 'this-pc', item.imageData, 'This PC');
@@ -933,7 +933,7 @@ export const DesktopAppShell: React.FC = () => {
                 ipAddress: '192.168.1.177',
                 httpPort: 9120,
                 port: 9120,
-                token: 'NODUS-FLEET-SECURE',
+                token: token || serverConfig?.auth_token || serverConfig?.pairingSecret || '',
                 isAck: false,
               }),
             }).catch(() => {});

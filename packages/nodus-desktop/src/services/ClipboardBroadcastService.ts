@@ -32,7 +32,7 @@ export class ClipboardBroadcastService {
       if (!useClipboardStore.getState().isSyncEnabled) return;
       this.lastBroadcastSignature = signature;
 
-      const authToken = token || 'NODUS-FLEET-SECURE';
+      const authToken = token || '';
       const targetIps = new Set<string>();
 
       const addTarget = (rawIp: string | undefined) => {

@@ -116,13 +116,14 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
   }, [peerApps]);
 
   const targetHostIp = peerApps[0]?.deviceIp || '127.0.0.1';
+  const targetAuthToken = (peerApps[0] as any)?.authToken || (peerApps[0] as any)?.token || '';
 
   const fetchInstalledApps = async () => {
     setIsScanningInstalled(true);
     try {
       const host = targetHostIp.includes(':') ? targetHostIp : `${targetHostIp}:9120`;
       const res = await universalNetworkFetch<any>(`http://${host}/api/shortcuts/installed`, {
-        headers: { 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+        headers: targetAuthToken ? { 'X-Nodus-Auth-Token': targetAuthToken } : undefined,
         timeoutMs: 8000,
       });
       if (res.ok && res.data && Array.isArray(res.data.apps)) {
@@ -155,7 +156,7 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
       const host = targetHostIp.includes(':') ? targetHostIp : `${targetHostIp}:9120`;
       await universalNetworkFetch(`http://${host}/api/exec`, {
         method: 'POST',
-        headers: { 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+        headers: targetAuthToken ? { 'X-Nodus-Auth-Token': targetAuthToken } : undefined,
         body: { command_or_path: app.path || app.name },
       });
     } catch (_) {}

@@ -52,7 +52,7 @@ export const DevicePairingModal: React.FC<DevicePairingModalProps> = ({
   onSubnetChange,
   onPair,
 }) => {
-  const [authToken, setAuthToken] = useState('NODUS-FLEET-SECURE');
+  const [authToken, setAuthToken] = useState('');
   const [showToken, setShowToken] = useState(false);
   const [pairedEndpoints, setPairedEndpoints] = useState<Set<string>>(new Set());
 

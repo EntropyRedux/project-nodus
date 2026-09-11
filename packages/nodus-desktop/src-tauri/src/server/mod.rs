@@ -121,6 +121,7 @@ struct FolderScanReq {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct PairRequest {
     #[serde(alias = "deviceId", alias = "id")]
     device_id: Option<String>,

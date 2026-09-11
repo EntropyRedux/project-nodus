@@ -4,35 +4,33 @@
 >
 > **Version:** `1.3.0`  
 > **GitHub Repository:** [https://github.com/EntropyRedux/project-nodus](https://github.com/EntropyRedux/project-nodus)  
-> **Latest Release:** [📥 Download Nodus Home v1.3.0 APK](releases/nodus-home-v1.3.0-debug.apk)
+> **License:** AGPL-3.0-only  
 
 ---
 
 ## 📚 Documentation & Quick Links
 
-- **📥 [Download Nodus Home v1.3.0 APK](releases/nodus-home-v1.3.0-debug.apk)**: Direct link to the compiled `v1.3.0` debug APK stored directly in the repository for fast testing.
-- **📖 [User & Operations Guide](USER_GUIDE.md)**: Full instructions for tablet setup, gesture controls, window management, calendar sync & settings.
-- **📝 [Version Changelog](CHANGELOG.md)**: Detailed historical release notes across all ecosystem versions (`v1.0.0` through `v1.3.0`).
+- **📖 [User & Operations Guide](USER_GUIDE.md)**: Full instructions for tablet setup, gesture controls, window management & settings.
+- **📝 [Version Changelog](CHANGELOG.md)**: Detailed historical release notes across ecosystem versions.
+- **🛡️ [Master Refactor Strategy Plan](generated_documents/REFACTOR_AND_UPDATE_STRATEGY_PLAN_2026.md)**: Forensic security hardening and architectural roadmap.
 
 ---
 
 ## 🌟 Overview
-**Project Nodus** is a universal cross-device desktop and launcher ecosystem engineered for **all Android tablets** (supporting Android 10–14+, foldables, and OEM multitasking environments like Xiaomi HyperOS, Samsung One UI, and Lenovo ZUI), paired with Windows companion bridges and multi-device workstation control.
+**Project Nodus** is a universal cross-device desktop and launcher ecosystem engineered for **Android tablets** (supporting Android 10–14+, foldables, and OEM multitasking environments like Xiaomi HyperOS, Samsung One UI, and Lenovo ZUI), paired with Windows companion bridges and multi-device workstation control.
 
 All Nodus subsystem modules live inside this unified workspace repository under `packages/`.
 
 ---
 
-## 🚦 Module Status & Ecosystem Progress
+## 🚦 Module Status & Ecosystem Architecture
 
-| Module / Package | Type | Target Platform | Current Status | Description |
+| Module / Package | Type | Target Platform | Status | Description |
 | :--- | :---: | :---: | :---: | :--- |
-| **`nodus-home`** | App / APK | Universal Android Tablets | 🟢 **v1.3.0 Production Ready** | Desktop Launcher Shell, Widgets, Window Manager & System Settings |
-| **`nodus-common`** | Shared Library | TypeScript / Kotlin | 🟢 **Stable v1.1.0** | Single Source of Truth for IPC Contracts, Types & Icon Registry |
-| **`nodus-fleet`** | App / APK | Android Tablets / Mobile | 🟡 **Active Development** | Standalone LAN Mesh Controller, Device Discovery & Remote RPC |
-| **`nodus-assistive`** | Overlay APK | Android Tablets / Phones | 🟡 **Prototype Stage** | System-Wide Assistive Touch Overlay & Navigation Pill |
-| **`nodus-desktop`** | Companion App | Windows 10/11 | 🟡 **Active Development** | Tauri v2 + Rust Win32 Remote Bridge, Media & Workstation Server |
-| **`nodus-legacy`** | Archive | Android | ⚪ **Archived** | Legacy Monolith Launcher Prototype (Reference Only) |
+| **`nodus-home`** | App / APK | Universal Android Tablets | 🟢 **Production Ready** | Desktop Launcher Shell, Widgets, Window Manager & System Settings |
+| **`nodus-fleet`** | App / APK | Android Tablets / Mobile | 🟢 **Active Mesh** | Standalone LAN Mesh Controller, Device Discovery, ConPTY Remote Shell |
+| **`nodus-desktop`** | Companion App | Windows 10/11 | 🟢 **Active Desktop** | Tauri v2 + Rust Win32 Remote Bridge, ConPTY Server & Workstation Control |
+| **`@nodus/common`** | Shared Contracts | TypeScript | 🟢 **Canonical Types** | Single Source of Truth for IPC Contracts, Mesh Topology & Hardware Types |
 
 ---
 
@@ -45,14 +43,14 @@ project-nodus/
 ├── CHANGELOG.md                        # Historical Release Notes & Changelogs
 ├── LICENSE                             # GNU AGPLv3 License
 ├── package.json                        # Root NPM Workspace
+├── scripts/                            # Cross-platform maintenance & asset sync tools
+│   └── sync-android-assets.mjs         # Safe bundle synchronization script
 │
 └── packages/
-    ├── nodus-common/                   # Shared TypeScript types, IPC contracts & Kotlin mirrors
+    ├── nodus-common/                   # Canonical TypeScript types & IPC contracts (@nodus/common)
     ├── nodus-desktop/                  # Windows Companion HUD & Fleet Bridge (Tauri v2 + Rust)
     ├── nodus-home/                     # Primary Launcher & Desktop Shell (com.nodus.home)
-    ├── nodus-fleet/                    # Multi-Device Mesh Extension (com.nodus.fleet)
-    ├── nodus-assistive/                # System-Wide Assistive Touch Overlay (com.nodus.assistive)
-    └── nodus-legacy/                   # Legacy Monolith Launcher (com.nodus.launcher archive)
+    └── nodus-fleet/                    # Multi-Device Mesh Extension (com.nodus.fleet)
 ```
 
 ---
@@ -62,11 +60,10 @@ project-nodus/
 Run the unified test suite across all workspace packages:
 
 ```bash
-# Run tests across common, home, and desktop
+# Run tests across home and desktop
 npm run test
 
 # Run individual test suites
-npm run test:common   # Vitest unit tests for @nodus/common
 npm run test:home     # Vitest unit tests for nodus-home
 npm run test:desktop  # Cargo test for Tauri Rust backend
 ```
@@ -78,22 +75,25 @@ npm run test:desktop  # Cargo test for Tauri Rust backend
 From the workspace root (`project-nodus/`):
 
 ```bash
-# Run Nodus Home frontend dev server
-npm run dev:home
+# Development
+npm run dev:home      # Nodus Home frontend dev server
+npm run dev:fleet     # Nodus Fleet frontend dev server
+npm run dev:desktop   # Nodus Desktop Tauri dev server
 
-# Build Nodus Home frontend
-npm run build:home
+# Production Builds
+npm run build:home    # Build Nodus Home web bundle
+npm run build:fleet   # Build Nodus Fleet web bundle
+npm run build:desktop # Build Nodus Desktop production binary
 
-# Compile and Deploy Nodus Home APK to connected tablet:
-cd packages/nodus-home/android-shell
-./gradlew assembleDebug
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+# Android Asset Sync (copies dist bundles to android-shell assets cleanly)
+npm run sync:android
+
+# Compile Android APKs
+cd packages/nodus-home/android-shell && ./gradlew assembleDebug
+cd packages/nodus-fleet/android-shell && ./gradlew assembleDebug
 ```
 
 ---
 
 ## 📄 License
 GNU AGPLv3 (GNU Affero General Public License v3) © 2026 EntropyRedux.
-
-> **Development License Note:**  
-> This project is currently licensed under the **GNU Affero General Public License v3 (AGPLv3)** during active ecosystem development to protect source integrity and network deployment reciprocity. Upon completion of full ecosystem development, selected subsystem packages may be re-licensed under more permissive open-source licenses (e.g., MIT / Apache 2.0).

@@ -238,6 +238,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
   const [sensitivity, setSensitivity] = useState<'normal' | 'precision' | 'fast'>('normal');
 
   const targetDevice = devices.find(d => d.id === targetDeviceId) || devices.find(d => !d.isLocal) || devices[0] || null;
+  const targetToken = (targetDevice as any)?.authToken || (targetDevice as any)?.token || '';
   const controllableDevices = devices.filter(d => !d.isLocal);
 
   // Device selection dropdown menu state
@@ -304,7 +305,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
     if (dx !== 0 || dy !== 0) {
       universalNetworkFetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/mouse/move'), {
         method: 'POST',
-        headers: { 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+        headers: { 'X-Nodus-Auth-Token': targetToken },
         body: { dx, dy },
         timeoutMs: 1500,
       }).catch(() => {});
@@ -341,7 +342,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
     if (dx !== 0 || dy !== 0) {
       universalNetworkFetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/mouse/move'), {
         method: 'POST',
-        headers: { 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+        headers: { 'X-Nodus-Auth-Token': targetToken },
         body: { dx, dy },
         timeoutMs: 1500,
       }).catch(() => {});
@@ -375,7 +376,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
 
     universalNetworkFetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/mouse/click'), {
       method: 'POST',
-      headers: { 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+      headers: { 'X-Nodus-Auth-Token': targetToken },
       body: { button: buttonName },
       timeoutMs: 1500,
     }).catch(() => {});
@@ -389,7 +390,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
 
     universalNetworkFetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/mouse/scroll'), {
       method: 'POST',
-      headers: { 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+      headers: { 'X-Nodus-Auth-Token': targetToken },
       body: { dx: 0, dy },
       timeoutMs: 1500,
     }).catch(() => {});
@@ -404,7 +405,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
 
     universalNetworkFetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/mouse/click'), {
       method: 'POST',
-      headers: { 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+      headers: { 'X-Nodus-Auth-Token': targetToken },
       body: { button: buttonName },
       timeoutMs: 1500,
     }).catch(() => {});
@@ -424,7 +425,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
 
     universalNetworkFetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/media'), {
       method: 'POST',
-      headers: { 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+      headers: { 'X-Nodus-Auth-Token': targetToken },
       body: { action: mappedAction },
       timeoutMs: 2000,
     }).catch(() => {});
@@ -438,7 +439,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
 
     universalNetworkFetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/media'), {
       method: 'POST',
-      headers: { 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+      headers: { 'X-Nodus-Auth-Token': targetToken },
       body: { action: 'volume_mute' },
       timeoutMs: 2000,
     }).catch(() => {});
@@ -457,7 +458,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
     for (let i = 0; i < steps; i++) {
       universalNetworkFetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/media'), {
         method: 'POST',
-        headers: { 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+        headers: { 'X-Nodus-Auth-Token': targetToken },
         body: { action },
         timeoutMs: 2000,
       }).catch(() => {});
@@ -471,7 +472,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
 
     universalNetworkFetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/keyboard/hotkey'), {
       method: 'POST',
-      headers: { 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+      headers: { 'X-Nodus-Auth-Token': targetToken },
       body: { keys: hk.keys },
       timeoutMs: 2000,
     }).catch(() => {});
@@ -484,7 +485,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
 
     universalNetworkFetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/system/control'), {
       method: 'POST',
-      headers: { 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+      headers: { 'X-Nodus-Auth-Token': targetToken },
       body: { action: 'lock' },
       timeoutMs: 2000,
     }).catch(() => {});
@@ -499,7 +500,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
 
     universalNetworkFetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/keyboard/text'), {
       method: 'POST',
-      headers: { 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+      headers: { 'X-Nodus-Auth-Token': targetToken },
       body: { text: clean },
       timeoutMs: 2000,
     }).catch(() => {});

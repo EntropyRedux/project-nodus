@@ -67,7 +67,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   const clearClipboard = fleet?.clearClipboard || (() => {});
 
   const [showToken, setShowToken] = useState(false);
-  const [pairingToken, setPairingToken] = useState('NODUS-FLEET-SECURE');
+  const [pairingToken, setPairingToken] = useState('');
   const [confirmReset, setConfirmReset] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 

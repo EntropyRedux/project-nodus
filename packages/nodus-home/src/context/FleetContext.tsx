@@ -520,7 +520,7 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 ...d,
                 status: d.type === 'desktop' ? 'online' : 'connected',
                 isRebooting: false,
-                cpuLoad: Math.floor(Math.random() * 15 + 10),
+                cpuLoad: undefined,
               }
             : d
         )

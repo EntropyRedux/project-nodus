@@ -254,6 +254,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
   };
 
   const targetDevice = devices.find(d => d.id === targetDeviceId) || localHostDevice;
+  const targetToken = (targetDevice as any)?.authToken || (targetDevice as any)?.token || '';
   const controllableDevices = devices.length > 0 ? devices : [localHostDevice];
 
   // Android Haptic Feedback Helper
@@ -300,7 +301,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
         } else if (targetDevice.ipAddress) {
           fetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/mouse/move'), {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+            headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': targetToken },
             body: JSON.stringify({ dx, dy }),
           }).catch(() => {});
         }
@@ -346,7 +347,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
         } else if (targetDevice.ipAddress) {
           fetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/mouse/move'), {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+            headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': targetToken },
             body: JSON.stringify({ dx, dy }),
           }).catch(() => {});
         }
@@ -388,7 +389,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
       try {
         await fetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/mouse/click'), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': targetToken },
           body: JSON.stringify({ button: buttonName }),
         });
       } catch (_) {}
@@ -408,7 +409,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
       try {
         await fetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/mouse/scroll'), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': targetToken },
           body: JSON.stringify({ dy: deltaY * 120 }),
         });
       } catch (_) {}
@@ -429,7 +430,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
       try {
         await fetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/mouse/click'), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': targetToken },
           body: JSON.stringify({ button: buttonName }),
         });
       } catch (_) {}
@@ -455,7 +456,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
       try {
         await fetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/media'), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': targetToken },
           body: JSON.stringify({ action: mappedAction }),
         });
         if (action === 'play_pause') {
@@ -477,7 +478,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
       try {
         await fetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/keyboard/hotkey'), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': targetToken },
           body: JSON.stringify({ keys: hk.keys }),
         });
       } catch (_) {}
@@ -496,7 +497,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
       try {
         await fetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/system/control'), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': targetToken },
           body: JSON.stringify({ action: 'lock' }),
         });
       } catch (_) {}
@@ -517,7 +518,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
       try {
         await fetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/keyboard/text'), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': targetToken },
           body: JSON.stringify({ text: payload }),
         });
       } catch (_) {}
@@ -620,7 +621,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
       try {
         await fetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/media'), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': targetToken },
           body: JSON.stringify({ action: 'volume_mute' }),
         });
       } catch (_) {}
@@ -644,7 +645,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
       try {
         await fetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/media'), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': targetToken },
           body: JSON.stringify({ action }),
         });
       } catch (_) {}
@@ -661,7 +662,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
       try {
         await fetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/system/control'), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE' },
+          headers: { 'Content-Type': 'application/json', 'X-Nodus-Auth-Token': targetToken },
           body: JSON.stringify({ action }),
         });
         showTelemetry(`Android ${action.toUpperCase()} dispatched`);

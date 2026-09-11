@@ -139,9 +139,9 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 status: (d.status || 'online') as any,
                 ipAddress: cleanIp,
                 batteryPercent: d.batteryPercent ?? d.battery ?? 100,
-                cpuUsagePercent: d.cpuUsagePercent ?? d.cpuLoad ?? 10,
+                cpuUsagePercent: d.cpuUsagePercent ?? d.cpuLoad ?? 0,
                 isLocal: false,
-                latencyMs: d.latencyMs ?? 5,
+                latencyMs: d.latencyMs ?? 0,
               });
             }
           }

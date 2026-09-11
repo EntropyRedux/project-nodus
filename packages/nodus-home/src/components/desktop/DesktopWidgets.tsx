@@ -37,7 +37,7 @@ export const DesktopWidgets: React.FC = () => {
 
   const [timeStr, setTimeStr] = useState('');
   const [dateStr, setDateStr] = useState('');
-  const [cpuVal, setCpuVal] = useState(activeDevice.cpuLoad || 22);
+  const [cpuVal, setCpuVal] = useState(activeDevice.cpuLoad || 0);
 
   useEffect(() => {
     const updateTime = () => {
@@ -54,17 +54,10 @@ export const DesktopWidgets: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Slight dynamic jitter for live CPU meter
+  // Live CPU meter tracking actual telemetry
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCpuVal((prev) => {
-        const base = activeDevice.cpuLoad || 24;
-        const delta = Math.floor(Math.random() * 7) - 3;
-        return Math.max(8, Math.min(95, base + delta));
-      });
-    }, 2500);
-    return () => clearInterval(timer);
-  }, [activeDevice]);
+    setCpuVal(activeDevice?.cpuLoad ?? 0);
+  }, [activeDevice?.cpuLoad]);
 
   return (
     <div className="w-80 flex-shrink-0 flex flex-col gap-3 p-3 select-none overflow-y-auto scrollbar-none">
