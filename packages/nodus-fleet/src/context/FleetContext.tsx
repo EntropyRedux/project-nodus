@@ -37,8 +37,8 @@ const DEFAULT_LOCAL_TABLET: DeviceInfo = {
   os: 'android',
   status: 'online',
   ipAddress: '127.0.0.1',
-  batteryPercent: 85,
-  cpuUsagePercent: 12,
+  batteryPercent: undefined,
+  cpuUsagePercent: undefined,
   isLocal: true,
   latencyMs: 1,
 };

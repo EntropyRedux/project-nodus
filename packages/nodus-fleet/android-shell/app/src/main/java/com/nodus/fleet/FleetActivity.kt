@@ -64,12 +64,12 @@ class FleetActivity : AppCompatActivity() {
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
-                allowFileAccess = true
-                allowContentAccess = true
+                allowFileAccess = false
+                allowContentAccess = false
                 databaseEnabled = true
                 cacheMode = WebSettings.LOAD_NO_CACHE
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                    mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
                 }
             }
             clearCache(true)
@@ -560,7 +560,7 @@ class FleetActivity : AppCompatActivity() {
                 val cleanPrefix = subnetPrefix.trim().removeSuffix(".")
                 val localIp = getLocalWifiIp() ?: "127.0.0.1"
                 val discoveredMap = java.util.concurrent.ConcurrentHashMap<String, JSONObject>()
-                val executor = java.util.concurrent.Executors.newFixedThreadPool(96)
+                val executor = java.util.concurrent.Executors.newFixedThreadPool(16)
                 val futures = java.util.concurrent.CopyOnWriteArrayList<java.util.concurrent.Future<*>>()
 
                 for (i in 1..254) {
@@ -732,8 +732,11 @@ class FleetActivity : AppCompatActivity() {
                 conn.connectTimeout = timeout
                 conn.readTimeout = timeout
                 conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                conn.setRequestProperty("Authorization", "Bearer NODUS-FLEET-SECURE")
-                conn.setRequestProperty("X-Nodus-Auth-Token", "NODUS-FLEET-SECURE")
+                val pairedToken = FleetDaemonService.instance?.getTokenForHost(url.host)
+                if (!pairedToken.isNullOrBlank()) {
+                    conn.setRequestProperty("Authorization", "Bearer $pairedToken")
+                    conn.setRequestProperty("X-Nodus-Auth-Token", pairedToken)
+                }
 
                 if (method.equals("POST", ignoreCase = true) || method.equals("PUT", ignoreCase = true)) {
                     conn.doOutput = true

@@ -57,6 +57,7 @@ pub fn run() {
             discovery::get_lan_device_count,
             server::get_server_status,
             server::set_server_running,
+            server::approve_pair_request,
             hotcorners::get_hotcorner_config,
             hotcorners::set_hotcorner_enabled,
         ])

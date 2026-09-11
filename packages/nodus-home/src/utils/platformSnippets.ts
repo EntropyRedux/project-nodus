@@ -25,14 +25,14 @@ export interface BridgeConfigOptions {
 }
 
 export const DEFAULT_BRIDGE_CONFIG: BridgeConfigOptions = {
-  hostIp: '192.168.1.104',
+  hostIp: '',
   hostPort: 9120,
   bridgePort: 9120,
-  authToken: 'win-bridge-sec-token-894',
-  packageName: 'com.novalauncher.cluster',
-  secretKey: '748-921',
+  authToken: '',
+  packageName: 'com.nodus.home',
+  secretKey: '',
   allowedPaths: 'C:\\Program Files;C:\\Tools;C:\\Windows\\System32',
-  serviceName: 'NovaClusterBridge',
+  serviceName: 'NodusBridge',
 };
 
 export const PLATFORM_SNIPPETS: CodeFileSnippet[] = [

@@ -233,6 +233,33 @@ class FleetDaemonService : Service() {
         }
     }
 
+    fun isValidAuthToken(tokenCandidate: String): Boolean {
+        if (tokenCandidate.isBlank()) return false
+        val candidateBytes = tokenCandidate.toByteArray(Charsets.UTF_8)
+        for ((_, dev) in connectedDevices) {
+            val token = dev.optString("authToken", dev.optString("token", ""))
+            if (token.isNotBlank()) {
+                val tokenBytes = token.toByteArray(Charsets.UTF_8)
+                if (tokenBytes.size == candidateBytes.size && java.security.MessageDigest.isEqual(tokenBytes, candidateBytes)) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    fun getTokenForHost(host: String): String? {
+        val cleanHost = host.split(":")[0].trim()
+        for ((_, dev) in connectedDevices) {
+            val devIp = dev.optString("ipAddress", dev.optString("ip", "")).split(":")[0].trim()
+            if (devIp == cleanHost) {
+                val token = dev.optString("authToken", dev.optString("token", ""))
+                if (token.isNotBlank()) return token
+            }
+        }
+        return null
+    }
+
     private fun startTelemetryLoop() {
         telemetryRunnable = object : Runnable {
             override fun run() {

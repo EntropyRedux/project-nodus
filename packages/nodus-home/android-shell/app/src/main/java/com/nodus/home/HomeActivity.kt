@@ -114,7 +114,7 @@ class HomeActivity : AppCompatActivity() {
                 javaScriptEnabled = true
                 domStorageEnabled = true
                 allowFileAccess = false
-                allowContentAccess = true
+                allowContentAccess = false
                 databaseEnabled = true
                 cacheMode = WebSettings.LOAD_NO_CACHE
                 mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
@@ -324,9 +324,9 @@ class HomeActivity : AppCompatActivity() {
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            registerReceiver(fleetReceiver, filter, Context.RECEIVER_EXPORTED)
+            registerReceiver(fleetReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {
-            registerReceiver(fleetReceiver, filter)
+            registerReceiver(fleetReceiver, filter, NodusIpcContract.PERMISSION_FLEET_ACCESS, null)
         }
 
         webView?.evaluateJavascript(
@@ -428,11 +428,12 @@ class HomeActivity : AppCompatActivity() {
 
         private fun isOriginTrusted(): Boolean {
             val url = webView?.url ?: return false
-            return url.startsWith("https://appassets.androidplatform.net/")
+            return url.startsWith("https://appassets.androidplatform.net")
         }
 
         @JavascriptInterface
         fun isPackageInstalled(packageName: String): Boolean {
+            if (!isOriginTrusted()) return false
             return NodusModuleDetector.isInstalled(context, packageName)
         }
 
@@ -1283,8 +1284,8 @@ class HomeActivity : AppCompatActivity() {
                             put("pid", pid)
                             put("name", appName)
                             put("user", user)
-                            put("cpu", if (category == "user") (1..6).random().toDouble() else 0.0)
-                            put("memoryMb", if (memMb > 0) memMb else 25)
+                            put("cpu", 0.0)
+                            put("memoryMb", if (memMb > 0) memMb else 0)
                             put("status", "running")
                             put("category", category)
                             put("description", procName)

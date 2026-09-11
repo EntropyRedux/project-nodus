@@ -142,8 +142,14 @@ export class NodusBridgeClient {
           res = await fetch(`${baseUrl}/api/shortcuts`, { method: 'GET', headers });
           break;
         default:
-          res = await fetch(`${baseUrl}/api/status`, { method: 'GET', headers });
-          break;
+          return {
+            id,
+            version: '2.0',
+            status: 'ERROR',
+            latencyMs: Math.round(performance.now() - startTime),
+            error: `Unsupported bridge action: ${action}`,
+            timestamp: Date.now(),
+          };
       }
 
       const latencyMs = Math.round(performance.now() - startTime);

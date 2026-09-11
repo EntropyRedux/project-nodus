@@ -37,6 +37,15 @@ class FleetHttpServer(
     private val executor = Executors.newFixedThreadPool(8)
     private var serverThread: Thread? = null
 
+    private fun isAllowedOrigin(origin: String?, clientIp: String): Boolean {
+        if (origin.isNullOrBlank()) return false
+        return origin == "https://appassets.androidplatform.net" ||
+                origin.startsWith("tauri://") ||
+                origin.startsWith("http://localhost") ||
+                origin.startsWith("http://127.0.0.1") ||
+                origin.contains(clientIp)
+    }
+
     fun start() {
         if (isRunning.getAndSet(true)) return
 
@@ -146,6 +155,50 @@ class FleetHttpServer(
                     set.add(clientIp)
                     prefs.edit().putStringSet("known_companion_ips", set).apply()
                 } catch (_: Exception) {}
+            }
+
+            val origin = headers["origin"]
+
+            // Preflight CORS request
+            if (method == "OPTIONS") {
+                val os: OutputStream = socket.getOutputStream()
+                val allowOriginHeader = if (isAllowedOrigin(origin, clientIp)) "Access-Control-Allow-Origin: $origin\r\n" else ""
+                val header = "HTTP/1.1 204 No Content\r\n" +
+                        allowOriginHeader +
+                        "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n" +
+                        "Access-Control-Allow-Headers: Content-Type, Authorization, X-Nodus-Auth-Token, X-Requested-With\r\n" +
+                        "Access-Control-Max-Age: 86400\r\n" +
+                        "Connection: close\r\n\r\n"
+                os.write(header.toByteArray(Charsets.UTF_8))
+                os.flush()
+                return
+            }
+
+            // Mandatory Token Authentication Gate on non-public endpoints
+            val isPublic = uri == "/api/status" || uri == "/api/info" || uri == "/api/ping" || uri == "/api/health" || uri == "/" || uri.startsWith("/api/fleet/pair-request") || uri.startsWith("/api/pair")
+            if (!isPublic) {
+                val authHeader = headers["authorization"] ?: headers["x-nodus-auth-token"] ?: ""
+                val tokenCandidate = if (authHeader.startsWith("Bearer ", ignoreCase = true)) {
+                    authHeader.substring(7).trim()
+                } else {
+                    authHeader.trim()
+                }
+
+                val isAuthed = FleetDaemonService.instance?.isValidAuthToken(tokenCandidate) == true
+                if (!isAuthed) {
+                    val errBytes = "{\"ok\":false,\"status\":\"error\",\"message\":\"Unauthorized: valid X-Nodus-Auth-Token required\"}".toByteArray(Charsets.UTF_8)
+                    val os: OutputStream = socket.getOutputStream()
+                    val allowOriginHeader = if (isAllowedOrigin(origin, clientIp)) "Access-Control-Allow-Origin: $origin\r\n" else ""
+                    val header = "HTTP/1.1 401 Unauthorized\r\n" +
+                            "Content-Type: application/json; charset=utf-8\r\n" +
+                            "Content-Length: ${errBytes.size}\r\n" +
+                            allowOriginHeader +
+                            "Connection: close\r\n\r\n"
+                    os.write(header.toByteArray(Charsets.UTF_8))
+                    os.write(errBytes)
+                    os.flush()
+                    return
+                }
             }
 
             // Route dispatch
@@ -275,12 +328,16 @@ class FleetHttpServer(
                             )
                         }
 
+                        val token = "nodus-fleet-" + java.util.UUID.randomUUID().toString()
+                        pairedDevice.put("token", token)
+                        pairedDevice.put("authToken", token)
+
                         val resp = JSONObject().apply {
                             put("status", "success")
                             put("ok", true)
                             put("accepted", true)
                             put("message", "Device paired successfully")
-                            put("authToken", "NODUS-FLEET-SECURE")
+                            put("authToken", token)
                             put("deviceId", "poco-pad")
                             put("name", "POCO Pad")
                         }
@@ -716,12 +773,13 @@ class FleetHttpServer(
 
             // Write HTTP response
             val os: OutputStream = socket.getOutputStream()
+            val allowOriginHeader = if (isAllowedOrigin(origin, clientIp)) "Access-Control-Allow-Origin: $origin\r\n" else ""
             val header = "HTTP/1.1 $statusCode OK\r\n" +
                     "Content-Type: $contentType\r\n" +
                     "Content-Length: ${responseBytes.size}\r\n" +
-                    "Access-Control-Allow-Origin: *\r\n" +
+                    allowOriginHeader +
                     "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n" +
-                    "Access-Control-Allow-Headers: *\r\n" +
+                    "Access-Control-Allow-Headers: Content-Type, Authorization, X-Nodus-Auth-Token, X-Requested-With\r\n" +
                     "Connection: close\r\n\r\n"
 
             os.write(header.toByteArray(Charsets.UTF_8))

@@ -573,7 +573,8 @@ export const AppGridProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (launched) return;
       }
 
-      simulateBridgeRpc('LAUNCH_INTENT', activeDeviceId, { packageName: targetApp.packageName });
+      const targetIp = (activeDevice as any).ipAddress || (activeDevice as any).ip || activeDeviceId;
+      simulateBridgeRpc('LAUNCH_INTENT', targetIp, { packageName: targetApp.packageName });
       addNotification({
         appId: 'settings',
         appName: 'Intent Dispatcher',

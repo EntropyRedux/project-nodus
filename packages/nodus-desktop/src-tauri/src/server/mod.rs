@@ -145,54 +145,59 @@ static TRUSTED_TOKENS: Mutex<Option<std::collections::HashSet<String>>> = Mutex:
 pub fn add_trusted_token(token: String) {
     let mut lock = TRUSTED_TOKENS.lock().unwrap();
     if lock.is_none() {
-        let mut set = std::collections::HashSet::new();
-        set.insert("NODUS-FLEET-SECURE".to_string());
-        set.insert("nodus-fleet-token".to_string());
-        set.insert("nodus-sec-key".to_string());
-        *lock = Some(set);
+        *lock = Some(std::collections::HashSet::new());
     }
     if let Some(ref mut set) = *lock {
         set.insert(token);
     }
 }
 
-/// Authentication checker: allows loopback and validates token against pre-shared and dynamically minted fleet tokens
+/// Constant-time byte slice comparison to prevent timing attacks
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
+/// Authentication checker: validates token against dynamically minted fleet tokens (loopback also requires token)
 fn is_authorized(request: &tiny_http::Request) -> bool {
-    // 1. Loopback / local desktop internal calls always authorized
-    if let Some(remote) = request.remote_addr() {
-        if remote.ip().is_loopback() {
-            return true;
+    let auth_header = request.headers().iter().find(|h| {
+        let field = h.field.as_str().as_str();
+        field.eq_ignore_ascii_case("authorization") || field.eq_ignore_ascii_case("x-nodus-auth-token")
+    });
+
+    let token_candidate = match auth_header {
+        Some(h) => {
+            let val = h.value.as_str().trim();
+            if let Some(stripped) = val.strip_prefix("Bearer ") {
+                stripped.trim()
+            } else {
+                val
+            }
         }
+        None => return false,
+    };
+
+    if token_candidate.is_empty() {
+        return false;
     }
 
-    let mut lock = TRUSTED_TOKENS.lock().unwrap();
-    if lock.is_none() {
-        let mut set = std::collections::HashSet::new();
-        set.insert("NODUS-FLEET-SECURE".to_string());
-        set.insert("nodus-fleet-token".to_string());
-        set.insert("nodus-sec-key".to_string());
-        set.insert("nodus-secure-token-fleet-mesh-2026".to_string());
-        *lock = Some(set);
-    }
+    let lock = match TRUSTED_TOKENS.lock() {
+        Ok(guard) => guard,
+        Err(_) => return false,
+    };
 
     let tokens = match *lock {
         Some(ref set) => set,
-        _ => return false,
+        None => return false,
     };
 
-    request.headers().iter().any(|h| {
-        let field = h.field.as_str().as_str().to_ascii_lowercase();
-        if field == "authorization" {
-            let val = h.value.as_str();
-            let cleaned = val.strip_prefix("Bearer ").unwrap_or(val).trim();
-            tokens.contains(cleaned) || cleaned == "NODUS-FLEET-SECURE" || cleaned == "nodus-fleet-token" || cleaned == "nodus-secure-token-fleet-mesh-2026"
-        } else if field == "x-nodus-auth-token" {
-            let cleaned = h.value.as_str().trim();
-            tokens.contains(cleaned) || cleaned == "NODUS-FLEET-SECURE" || cleaned == "nodus-fleet-token" || cleaned == "nodus-secure-token-fleet-mesh-2026"
-        } else {
-            false
-        }
-    })
+    tokens.iter().any(|t| constant_time_eq(t.as_bytes(), token_candidate.as_bytes()))
 }
 
 fn read_request_body_capped(request: &mut tiny_http::Request, max_bytes: u64) -> Result<String, String> {
@@ -212,17 +217,21 @@ fn cors_headers_for(origin: Option<&str>) -> Vec<Header> {
         Some(o) if o.starts_with("tauri://")
                 || o.starts_with("http://localhost")
                 || o.starts_with("http://127.0.0.1")
-                || o == "https://appassets.androidplatform.net" => o,
-        _ => "https://appassets.androidplatform.net",
+                || o == "https://appassets.androidplatform.net" => Some(o),
+        _ => None,
     };
 
-    vec![
-        Header::from_bytes(&b"Access-Control-Allow-Origin"[..], allowed_origin.as_bytes()).unwrap(),
+    let mut headers = vec![
         Header::from_bytes(&b"Access-Control-Allow-Methods"[..], &b"GET, POST, OPTIONS"[..]).unwrap(),
         Header::from_bytes(&b"Access-Control-Allow-Headers"[..], &b"Content-Type, Authorization, X-Nodus-Auth-Token, X-Requested-With"[..]).unwrap(),
         Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap(),
         Header::from_bytes(&b"Connection"[..], &b"close"[..]).unwrap(),
-    ]
+    ];
+
+    if let Some(ao) = allowed_origin {
+        headers.push(Header::from_bytes(&b"Access-Control-Allow-Origin"[..], ao.as_bytes()).unwrap());
+    }
+    headers
 }
 
 #[tauri::command]
@@ -246,6 +255,69 @@ pub fn set_server_running(running: bool, port: Option<u16>) -> bool {
     SERVER_RUNNING.load(Ordering::SeqCst)
 }
 
+#[tauri::command]
+pub fn approve_pair_request(
+    device_id: String,
+    device_name: String,
+    device_type: Option<String>,
+    os: Option<String>,
+    ip_address: Option<String>,
+    http_port: Option<u16>,
+) -> Result<serde_json::Value, String> {
+    let peer_ip = ip_address.unwrap_or_else(|| "127.0.0.1".to_string());
+    let peer_port = http_port.unwrap_or(9120);
+    let dev_type = device_type.unwrap_or_else(|| "tablet".to_string());
+    let dev_os = os.unwrap_or_else(|| "Android".to_string());
+
+    let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    let token = format!("nodus-sec-{:016x}-{:08x}", ts, device_id.len());
+    add_trusted_token(token.clone());
+
+    {
+        let mut lock = REGISTERED_DEVICES.lock().unwrap();
+        if lock.is_none() {
+            *lock = Some(HashMap::new());
+        }
+        if let Some(ref mut map) = *lock {
+            map.insert(
+                device_id.clone(),
+                json!({
+                    "name": device_name,
+                    "pairedAt": SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+                    "token": token,
+                }),
+            );
+        }
+    }
+
+    crate::discovery::register_node(crate::discovery::DiscoveredDeviceNode {
+        id: device_id.clone(),
+        name: device_name.clone(),
+        device_type: dev_type,
+        os: dev_os,
+        ip_address: format!("{}:{}", peer_ip, peer_port),
+        http_port: peer_port,
+        status: "connected".to_string(),
+        battery: None,
+        cpu_load: None,
+        ram_usage: None,
+        last_seen: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+        is_local: false,
+    });
+
+    if let Ok(guard) = APP_HANDLE.lock() {
+        if let Some(ref handle) = *guard {
+            let _ = handle.emit("fleet_devices_updated", ());
+        }
+    }
+
+    Ok(json!({
+        "status": "approved",
+        "deviceId": device_id,
+        "token": token
+    }))
+}
+
 pub fn stop_server() {
     if !SERVER_RUNNING.swap(false, Ordering::SeqCst) {
         return;
@@ -259,10 +331,6 @@ pub fn start_server(port: u16) {
     if SERVER_RUNNING.swap(true, Ordering::SeqCst) {
         return; // Already running
     }
-
-    add_trusted_token("NODUS-FLEET-SECURE".to_string());
-    add_trusted_token("nodus-fleet-token".to_string());
-    add_trusted_token("nodus-sec-key".to_string());
 
     thread::spawn(move || {
         let addr = format!("0.0.0.0:{}", port);
@@ -323,12 +391,8 @@ fn process_single_http_request(mut request: tiny_http::Request) {
             let is_public = path == "/api/status" 
                 || path == "/api/health" 
                 || path == "/" 
-                || path == "/api/fleet/pair-request" 
-                || path == "/api/fleet/pair-confirm"
-                || path == "/api/fleet/register"
-                || path == "/api/fleet/devices"
-                || path == "/api/fleet/peers"
-                || (method == Method::Get && path == "/api/shortcuts");
+                || path == "/api/fleet/pair-request"
+                || path == "/api/pair";
 
             let (status_code, json_body) = if !is_public && !is_authorized(&request) {
                 (401, json!({ "status": "error", "message": "Unauthorized: Missing or invalid X-Nodus-Auth-Token / Bearer token" }))
@@ -637,8 +701,8 @@ fn process_single_http_request(mut request: tiny_http::Request) {
                         }
                     }
 
-                    // Fleet Pairing Handshake (Secure token minting with client details)
-                    (Method::Post, "/api/fleet/pair-request") | (Method::Post, "/api/fleet/pair-confirm") | (Method::Post, "/api/fleet/register") | (Method::Post, "/api/pair") => {
+                    // Fleet Pairing Handshake (Requires explicit UI confirmation before active token is granted)
+                    (Method::Post, "/api/fleet/pair-request") | (Method::Post, "/api/pair") => {
                         if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
                             let pair_req: PairRequest = serde_json::from_str(&body_str).unwrap_or(PairRequest {
                                 device_id: None,
@@ -652,83 +716,35 @@ fn process_single_http_request(mut request: tiny_http::Request) {
                                 action: None,
                             });
 
-                            let is_ack = pair_req.is_ack.unwrap_or(false)
-                                || pair_req.action.as_deref() == Some("ack")
-                                || pair_req.action.as_deref() == Some("confirm")
-                                || path == "/api/fleet/pair-confirm";
-
                             let client_ip = request.remote_addr().map(|a| a.ip().to_string()).unwrap_or_else(|| "127.0.0.1".to_string());
                             let dev_id = pair_req.device_id.unwrap_or_else(|| format!("node-{}", client_ip.replace('.', "-")));
-                            let dev_name = pair_req.name.unwrap_or_else(|| "POCO Pad".to_string());
-                            let pub_key = pair_req.public_key.unwrap_or_default();
+                            let dev_name = pair_req.name.unwrap_or_else(|| "Tablet Device".to_string());
                             let peer_ip = pair_req.ip_address.unwrap_or(client_ip);
                             let peer_port = pair_req.http_port.unwrap_or(9120);
                             let dev_type = pair_req.device_type.unwrap_or_else(|| "tablet".to_string());
-                            let dev_os = pair_req.os.unwrap_or_else(|| "Android 14 (HyperOS)".to_string());
+                            let dev_os = pair_req.os.unwrap_or_else(|| "Android".to_string());
 
-                            let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-                            let token = format!("nodus-sec-{:016x}-{:08x}", ts, dev_id.len());
-                            add_trusted_token(token.clone());
-
-                            {
-                                let mut lock = REGISTERED_DEVICES.lock().unwrap();
-                                if lock.is_none() {
-                                    *lock = Some(HashMap::new());
-                                }
-                                if let Some(ref mut map) = *lock {
-                                    map.insert(
-                                        dev_id.clone(),
-                                        json!({
-                                            "name": dev_name,
-                                            "pairedAt": SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
-                                            "publicKey": pub_key,
-                                        }),
-                                    );
-                                }
-                            }
-
-                            // Automatically register in Desktop Discovered Devices
-                            crate::discovery::register_node(crate::discovery::DiscoveredDeviceNode {
-                                id: dev_id.clone(),
-                                name: dev_name.clone(),
-                                device_type: dev_type.clone(),
-                                os: dev_os.clone(),
-                                ip_address: format!("{}:{}", peer_ip, peer_port),
-                                http_port: peer_port,
-                                status: "connected".to_string(),
-                                battery: Some(90),
-                                cpu_load: Some(10),
-                                ram_usage: Some("3.4 / 8.0 GB".to_string()),
-                                last_seen: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
-                                is_local: false,
-                            });
-
-                            // Only emit incoming-pair-request prompt if this is an INITIAL request (not an ACK/confirmation)
+                            // Emit incoming-pair-request prompt to Desktop UI for out-of-band user approval
                             if let Ok(guard) = APP_HANDLE.lock() {
                                 if let Some(ref handle) = *guard {
-                                    if !is_ack {
-                                        let _ = handle.emit("incoming-pair-request", json!({
-                                            "id": dev_id,
-                                            "name": dev_name,
-                                            "deviceType": dev_type,
-                                            "os": dev_os,
-                                            "ipAddress": peer_ip,
-                                            "httpPort": peer_port,
-                                            "token": token
-                                        }));
-                                    }
-                                    let _ = handle.emit("fleet_devices_updated", ());
+                                    let _ = handle.emit("incoming-pair-request", json!({
+                                        "id": dev_id.clone(),
+                                        "name": dev_name.clone(),
+                                        "deviceType": dev_type.clone(),
+                                        "os": dev_os.clone(),
+                                        "ipAddress": peer_ip.clone(),
+                                        "httpPort": peer_port,
+                                    }));
                                 }
                             }
 
                             (
                                 200,
                                 json!({
-                                    "status": "success",
+                                    "status": "pending_approval",
                                     "ok": true,
-                                    "accepted": true,
-                                    "message": "Device paired successfully",
-                                    "authToken": token,
+                                    "accepted": false,
+                                    "message": "Pairing request received. Waiting for desktop user approval.",
                                     "deviceId": dev_id,
                                     "name": dev_name,
                                 }),
@@ -736,6 +752,11 @@ fn process_single_http_request(mut request: tiny_http::Request) {
                         } else {
                             (400, json!({ "status": "error", "message": "Body exceeds maximum size" }))
                         }
+                    }
+
+                    // Authenticated Pairing Confirmation
+                    (Method::Post, "/api/fleet/pair-confirm") | (Method::Post, "/api/fleet/register") => {
+                        (200, json!({ "status": "success", "ok": true, "message": "Pairing state recorded" }))
                     }
 
                     // Query Installed & Discovered Applications with Device Attribution
@@ -915,15 +936,19 @@ fn process_single_http_request(mut request: tiny_http::Request) {
                             if let Ok(req) = serde_json::from_str::<serde_json::Value>(&body_str) {
                                 let cmd = req.get("command").and_then(|v| v.as_str()).unwrap_or_default().to_string();
                                 let cwd = req.get("cwd").and_then(|v| v.as_str()).map(|s| s.to_string());
-                                match run_terminal_command_internal(cmd, cwd) {
-                                    Ok(res) => (200, json!({
-                                        "status": "success",
-                                        "stdout": res.stdout,
-                                        "stderr": res.stderr,
-                                        "exit_code": res.exit_code,
-                                        "success": res.success
-                                    })),
-                                    Err(e) => (500, json!({ "status": "error", "message": e })),
+                                if crate::commands::exec::contains_dangerous_shell_chars(&cmd) {
+                                    (400, json!({ "status": "error", "message": "Command contains forbidden shell metacharacters (&, |, ;, `, $, newline)" }))
+                                } else {
+                                    match run_terminal_command_internal(cmd, cwd) {
+                                        Ok(res) => (200, json!({
+                                            "status": "success",
+                                            "stdout": res.stdout,
+                                            "stderr": res.stderr,
+                                            "exit_code": res.exit_code,
+                                            "success": res.success
+                                        })),
+                                        Err(e) => (500, json!({ "status": "error", "message": e })),
+                                    }
                                 }
                             } else {
                                 (400, json!({ "status": "error", "message": "Invalid JSON body" }))
@@ -1068,8 +1093,8 @@ mod tests {
     #[test]
     fn test_cors_headers_origin_matching() {
         let default_headers = cors_headers_for(None);
-        let allow_origin = default_headers.iter().find(|h| h.field.as_str().as_str().eq_ignore_ascii_case("access-control-allow-origin")).unwrap();
-        assert_eq!(allow_origin.value.as_str(), "https://appassets.androidplatform.net");
+        let allow_origin = default_headers.iter().find(|h| h.field.as_str().as_str().eq_ignore_ascii_case("access-control-allow-origin"));
+        assert!(allow_origin.is_none());
 
         let tauri_headers = cors_headers_for(Some("tauri://localhost"));
         let tauri_origin = tauri_headers.iter().find(|h| h.field.as_str().as_str().eq_ignore_ascii_case("access-control-allow-origin")).unwrap();
@@ -1084,8 +1109,8 @@ mod tests {
         assert_eq!(ip_origin.value.as_str(), "http://127.0.0.1:5173");
 
         let untrusted_headers = cors_headers_for(Some("https://malicious-tracker.com"));
-        let untrusted_origin = untrusted_headers.iter().find(|h| h.field.as_str().as_str().eq_ignore_ascii_case("access-control-allow-origin")).unwrap();
-        assert_eq!(untrusted_origin.value.as_str(), "https://appassets.androidplatform.net");
+        let untrusted_origin = untrusted_headers.iter().find(|h| h.field.as_str().as_str().eq_ignore_ascii_case("access-control-allow-origin"));
+        assert!(untrusted_origin.is_none());
     }
 
     #[test]
@@ -1096,7 +1121,6 @@ mod tests {
         let lock = TRUSTED_TOKENS.lock().unwrap();
         let set = lock.as_ref().unwrap();
         assert!(set.contains(&custom_token));
-        assert!(set.contains("NODUS-FLEET-SECURE"));
     }
 
     #[test]

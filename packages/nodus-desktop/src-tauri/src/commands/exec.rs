@@ -312,7 +312,7 @@ fn is_path_whitelisted(target: &Path) -> bool {
     false
 }
 
-fn contains_dangerous_shell_chars(s: &str) -> bool {
+pub fn contains_dangerous_shell_chars(s: &str) -> bool {
     s.chars().any(|c| matches!(c, '&' | '|' | ';' | '`' | '$' | '\n' | '\r'))
 }
 
