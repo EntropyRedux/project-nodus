@@ -791,5 +791,65 @@ class FleetActivity : AppCompatActivity() {
                 Log.e(TAG, "Failed to launch Nodus Home: ${e.message}")
             }
         }
+
+        @JavascriptInterface
+        fun getInstalledApps(): String {
+            return try {
+                val pm = context.packageManager
+                val intent = Intent(Intent.ACTION_MAIN, null).apply {
+                    addCategory(Intent.CATEGORY_LAUNCHER)
+                }
+                val resolveInfos = pm.queryIntentActivities(intent, 0)
+                val array = org.json.JSONArray()
+                for (info in resolveInfos) {
+                    val appName = info.loadLabel(pm).toString()
+                    val packageName = info.activityInfo.packageName
+                    val obj = org.json.JSONObject().apply {
+                        put("id", "android-$packageName")
+                        put("name", appName)
+                        put("path", packageName)
+                        put("path_or_appid", packageName)
+                        put("category", "utility")
+                        put("is_android", true)
+                        try {
+                            val drawable = info.loadIcon(pm)
+                            val w = drawable.intrinsicWidth.coerceIn(48, 96)
+                            val h = drawable.intrinsicHeight.coerceIn(48, 96)
+                            val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+                            val canvas = android.graphics.Canvas(bmp)
+                            drawable.setBounds(0, 0, w, h)
+                            drawable.draw(canvas)
+                            val stream = java.io.ByteArrayOutputStream()
+                            bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 85, stream)
+                            val base64 = android.util.Base64.encodeToString(stream.toByteArray(), android.util.Base64.NO_WRAP)
+                            put("icon_base64", "data:image/png;base64,$base64")
+                        } catch (_: Exception) {}
+                    }
+                    array.put(obj)
+                }
+                org.json.JSONObject().apply {
+                    put("status", "success")
+                    put("apps", array)
+                }.toString()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to get installed apps", e)
+                "{\"status\":\"error\",\"apps\":[]}"
+            }
+        }
+
+        @JavascriptInterface
+        fun launchApp(packageName: String): Boolean {
+            return try {
+                val intent = context.packageManager.getLaunchIntentForPackage(packageName)
+                if (intent != null) {
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
+                    true
+                } else false
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to launch app $packageName", e)
+                false
+            }
+        }
     }
 }
