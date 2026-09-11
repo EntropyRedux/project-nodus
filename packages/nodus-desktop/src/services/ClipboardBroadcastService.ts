@@ -73,7 +73,7 @@ export class ClipboardBroadcastService {
       } catch (_) {}
 
       try {
-        const savedPeers = localStorage.getItem('nodus_fleet_paired_devices');
+        const savedPeers = localStorage.getItem('nodus_desktop_paired_devices') || localStorage.getItem('nodus_fleet_paired_devices');
         if (savedPeers) {
           const parsed = JSON.parse(savedPeers);
           if (Array.isArray(parsed)) {

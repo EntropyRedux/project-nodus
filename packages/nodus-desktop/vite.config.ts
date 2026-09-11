@@ -27,7 +27,7 @@ export default defineConfig(async () => ({
     strictPort: true,
     host: host || false,
     warmup: {
-      clientFiles: ["./src/main.tsx", "./src/App.tsx", "./src/context/DesktopContext.tsx"],
+      clientFiles: ["./src/main.tsx", "./src/App.tsx"],
     },
     hmr: host
       ? {

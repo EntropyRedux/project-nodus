@@ -33,8 +33,8 @@ import { RemoteControlTab } from '../views/RemoteControlTab';
 import { ProcessMonitorTable } from '../views/ProcessMonitorTable';
 import { RemoteTerminal } from '../views/RemoteTerminal';
 import { RemoteAppShortcuts } from '../views/RemoteAppShortcuts';
-import { ConfigPanel } from '../panels/ConfigPanel';
 import { HotCornerConfigPanel } from '../panels/HotCornerConfigPanel';
+import { useHotCorners } from '../../hooks/useHotCorners';
 import { AppSettingsPanel } from '../views/AppSettingsPanel';
 import { ClipboardDrawer } from '../views/ClipboardDrawer';
 import { DevicePairingModal } from '../views/DevicePairingModal';
@@ -47,6 +47,14 @@ export const DesktopAppShell: React.FC = () => {
   const [activeTab, setActiveTab] = useState<
     'topology' | 'control' | 'processes' | 'terminal' | 'shortcuts' | 'settings' | 'hotcorners'
   >('topology');
+
+  useHotCorners((tab) => {
+    if (tab === 'fleet') setActiveTab('topology');
+    else if (tab === 'processes') setActiveTab('processes');
+    else if (tab === 'shortcuts') setActiveTab('shortcuts');
+    else if (tab === 'hotcorners') setActiveTab('hotcorners');
+    else if (tab === 'config' as any) setActiveTab('settings');
+  });
 
   const {
     devices: fleetDevices,
@@ -696,7 +704,7 @@ export const DesktopAppShell: React.FC = () => {
                             <button
                               onClick={e => {
                                 e.stopPropagation();
-                                setActiveTab('config' as any);
+                                setActiveTab('settings');
                               }}
                               title="Configure Local Daemon Server"
                               className="h-8 px-2.5 rounded-lg bg-[var(--surface-container)] hover:bg-[var(--surface-elevated)] text-xs font-medium text-[var(--accent-primary)] transition-colors border border-[var(--border-subtle)] active:scale-95 inline-flex items-center justify-center gap-1.5"

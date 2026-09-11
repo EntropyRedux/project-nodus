@@ -1,31 +1,17 @@
 import React, { useEffect } from 'react';
-import { DesktopProvider, useDesktop } from './context/DesktopContext';
 import { DesktopAppShell } from './components/layout/DesktopAppShell';
-import { useHotCorners } from './hooks/useHotCorners';
 import { DaemonManager } from './services/DaemonManager';
+import { useFleetStore } from './stores/useFleetStore';
 
-function DesktopContent() {
-  const { setActiveTab, serverConfig } = useDesktop();
+export default function App() {
+  const serverConfig = useFleetStore((state) => state.serverConfig);
 
   // Headless background worker bootstrap
   useEffect(() => {
-    const token = serverConfig?.auth_token || serverConfig?.pairingSecret || 'NODUS-FLEET-SECURE';
+    const token = serverConfig?.auth_token || serverConfig?.pairingSecret || '';
     DaemonManager.start(token);
     return () => DaemonManager.stop();
   }, [serverConfig]);
 
-  // Listen to hot-corner and tray triggers
-  useHotCorners((tab) => {
-    setActiveTab(tab);
-  });
-
   return <DesktopAppShell />;
-}
-
-export default function App() {
-  return (
-    <DesktopProvider>
-      <DesktopContent />
-    </DesktopProvider>
-  );
 }
