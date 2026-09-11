@@ -47,10 +47,10 @@ opt-level = 1
 debug = 0
 
 [profile.release]
-opt-level = 1
+opt-level = 3
 debug = 0
-lto = "off"
-codegen-units = 16
+lto = "thin"
+codegen-units = 8
 panic = "abort"
 
 

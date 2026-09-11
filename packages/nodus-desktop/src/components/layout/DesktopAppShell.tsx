@@ -53,7 +53,8 @@ export const DesktopAppShell: React.FC = () => {
     else if (tab === 'processes') setActiveTab('processes');
     else if (tab === 'shortcuts') setActiveTab('shortcuts');
     else if (tab === 'hotcorners') setActiveTab('hotcorners');
-    else if (tab === 'config' as any) setActiveTab('settings');
+    else if (tab === 'clipboard') setShowClipboardDrawer(true);
+    else if ((tab as string) === 'config' || (tab as string) === 'settings') setActiveTab('settings');
   });
 
   const {
