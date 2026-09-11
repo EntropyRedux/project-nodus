@@ -22,6 +22,8 @@ export interface DeviceInfo {
   resolution?: string;
   model?: string;
   manufacturer?: string;
+  color?: string;
+  token?: string;
 }
 
 export interface DeviceProcess {

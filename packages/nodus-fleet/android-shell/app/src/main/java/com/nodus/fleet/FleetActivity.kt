@@ -792,6 +792,29 @@ class FleetActivity : AppCompatActivity() {
             }
         }
 
+        private fun inferCategory(appInfo: android.content.pm.ApplicationInfo, name: String): String {
+            val lower = name.lowercase()
+            if (lower.contains("chrome") || lower.contains("browser") || lower.contains("edge") || lower.contains("firefox")) return "browser"
+            if (lower.contains("youtube") || lower.contains("music") || lower.contains("gallery") || lower.contains("camera") || lower.contains("video") || lower.contains("photo") || lower.contains("player")) return "media"
+            if (lower.contains("code") || lower.contains("git") || lower.contains("term") || lower.contains("develop") || lower.contains("studio")) return "dev"
+            if (lower.contains("note") || lower.contains("doc") || lower.contains("calendar") || lower.contains("mail") || lower.contains("drive") || lower.contains("sheet") || lower.contains("office")) return "productivity"
+            if (lower.contains("game") || lower.contains("play")) return "game"
+            if (lower.contains("setting") || lower.contains("security") || lower.contains("system")) return "system"
+            if (lower.contains("calc") || lower.contains("clock") || lower.contains("file") || lower.contains("compass") || lower.contains("record") || lower.contains("weather")) return "utility"
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                when (appInfo.category) {
+                    android.content.pm.ApplicationInfo.CATEGORY_GAME -> return "game"
+                    android.content.pm.ApplicationInfo.CATEGORY_AUDIO,
+                    android.content.pm.ApplicationInfo.CATEGORY_VIDEO,
+                    android.content.pm.ApplicationInfo.CATEGORY_IMAGE -> return "media"
+                    android.content.pm.ApplicationInfo.CATEGORY_PRODUCTIVITY -> return "productivity"
+                    android.content.pm.ApplicationInfo.CATEGORY_NEWS,
+                    android.content.pm.ApplicationInfo.CATEGORY_SOCIAL -> return "browser"
+                }
+            }
+            return "utility"
+        }
+
         @JavascriptInterface
         fun getInstalledApps(): String {
             return try {
@@ -800,8 +823,9 @@ class FleetActivity : AppCompatActivity() {
                     addCategory(Intent.CATEGORY_LAUNCHER)
                 }
                 val resolveInfos = pm.queryIntentActivities(intent, 0)
+                val sorted = resolveInfos.sortedBy { it.loadLabel(pm).toString().lowercase() }
                 val array = org.json.JSONArray()
-                for (info in resolveInfos) {
+                for (info in sorted) {
                     val appName = info.loadLabel(pm).toString()
                     val packageName = info.activityInfo.packageName
                     val obj = org.json.JSONObject().apply {
@@ -809,12 +833,12 @@ class FleetActivity : AppCompatActivity() {
                         put("name", appName)
                         put("path", packageName)
                         put("path_or_appid", packageName)
-                        put("category", "utility")
+                        put("category", inferCategory(info.activityInfo.applicationInfo, appName))
                         put("is_android", true)
                         try {
                             val drawable = info.loadIcon(pm)
-                            val w = drawable.intrinsicWidth.coerceIn(48, 96)
-                            val h = drawable.intrinsicHeight.coerceIn(48, 96)
+                            val w = drawable.intrinsicWidth.coerceIn(48, 72)
+                            val h = drawable.intrinsicHeight.coerceIn(48, 72)
                             val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
                             val canvas = android.graphics.Canvas(bmp)
                             drawable.setBounds(0, 0, w, h)
@@ -834,6 +858,18 @@ class FleetActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to get installed apps", e)
                 "{\"status\":\"error\",\"apps\":[]}"
+            }
+        }
+
+        @JavascriptInterface
+        fun syncSharedApps(json: String) {
+            try {
+                context.getSharedPreferences("nodus_fleet_prefs", Context.MODE_PRIVATE)
+                    .edit()
+                    .putString("nodus_shared_apps_json", json)
+                    .apply()
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to sync shared apps to prefs", e)
             }
         }
 

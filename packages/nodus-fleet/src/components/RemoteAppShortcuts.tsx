@@ -51,14 +51,14 @@ const DEFAULT_PRESETS: Array<{
   category: AppCategory;
   description: string;
 }> = [
-  { name: 'Visual Studio Code', path: 'code .', category: 'dev', description: 'Open workspace in VS Code' },
-  { name: 'Windows Terminal', path: 'wt', category: 'dev', description: 'Launch Windows Terminal' },
-  { name: 'PowerShell', path: 'powershell.exe', category: 'dev', description: 'Windows PowerShell prompt' },
-  { name: 'Google Chrome', path: 'chrome.exe', category: 'browser', description: 'Launch Chrome browser' },
-  { name: 'File Explorer', path: 'explorer.exe', category: 'productivity', description: 'Open File Explorer' },
-  { name: 'Task Manager', path: 'taskmgr.exe', category: 'system', description: 'Windows Task Manager' },
-  { name: 'Calculator', path: 'calc.exe', category: 'utility', description: 'Windows Calculator' },
-  { name: 'Notepad', path: 'notepad.exe', category: 'productivity', description: 'Simple text editor' },
+  { name: 'Google Chrome', path: 'com.android.chrome', category: 'browser', description: 'Chrome mobile browser' },
+  { name: 'YouTube', path: 'com.google.android.youtube', category: 'media', description: 'YouTube video player' },
+  { name: 'Android Settings', path: 'com.android.settings', category: 'system', description: 'Device system settings' },
+  { name: 'Calculator', path: 'com.google.android.calculator', category: 'utility', description: 'System calculator' },
+  { name: 'Camera', path: 'com.android.camera', category: 'media', description: 'System camera' },
+  { name: 'Files', path: 'com.google.android.documentsui', category: 'productivity', description: 'Android file manager' },
+  { name: 'Clock & Alarms', path: 'com.android.deskclock', category: 'utility', description: 'Alarms and timer' },
+  { name: 'Media Gallery', path: 'com.miui.gallery', category: 'media', description: 'Photo & video gallery' },
 ];
 
 function getDeviceIcon(type?: SharedApp['deviceType'] | DeviceInfo['type'], size = 12) {
@@ -109,10 +109,11 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
   const [launchedAppId, setLaunchedAppId] = useState<string | null>(null);
   const [sharedFeedback, setSharedFeedback] = useState<string | null>(null);
 
-  // Installed Apps state with cached persistence
+  // Installed Apps state with cached persistence strictly for Android apps
   const [installedApps, setInstalledApps] = useState<any[]>(() => {
     try {
-      const cached = localStorage.getItem('nodus_cached_installed_apps');
+      localStorage.removeItem('nodus_cached_installed_apps'); // Clean out any old Windows cache
+      const cached = localStorage.getItem('nodus_cached_android_apps');
       return cached ? JSON.parse(cached) : [];
     } catch {
       return [];
@@ -149,7 +150,7 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
     return Array.from(map.values());
   }, [peerApps]);
 
-  // Fetch installed applications on this device
+  // Fetch installed applications on this Android device exclusively
   const fetchInstalledApps = async () => {
     setIsScanningInstalled(true);
     try {
@@ -157,41 +158,24 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
       if (bridge && typeof bridge.getInstalledApps === 'function') {
         const rawJson = bridge.getInstalledApps();
         const parsed = typeof rawJson === 'string' ? JSON.parse(rawJson) : rawJson;
-        if (parsed && Array.isArray(parsed.apps) && parsed.apps.length > 0) {
+        if (parsed && Array.isArray(parsed.apps)) {
           setInstalledApps(parsed.apps);
           try {
-            localStorage.setItem('nodus_cached_installed_apps', JSON.stringify(parsed.apps));
+            localStorage.setItem('nodus_cached_android_apps', JSON.stringify(parsed.apps));
           } catch (_) {}
           setIsScanningInstalled(false);
           return;
         }
       }
-
-      // Fallback: If companion PC is available, query companion PC installed apps
-      const peerIp = targetDevice?.ipAddress || devices?.find(d => !d.isLocal && d.ipAddress && d.ipAddress !== '127.0.0.1')?.ipAddress;
-      if (peerIp && peerIp !== '127.0.0.1') {
-        const token = targetDevice?.token || 'NODUS-FLEET-SECURE';
-        const host = peerIp.includes(':') ? peerIp : `${peerIp}:9120`;
-        const res = await universalNetworkFetch<any>(`http://${host}/api/shortcuts/installed`, {
-          headers: { 'X-Nodus-Auth-Token': token },
-          timeoutMs: 45000,
-        });
-        if (res.ok && res.data && Array.isArray(res.data.apps)) {
-          setInstalledApps(res.data.apps);
-          try {
-            localStorage.setItem('nodus_cached_installed_apps', JSON.stringify(res.data.apps));
-          } catch (_) {}
-        }
-      }
     } catch (e) {
-      console.warn('[RemoteAppShortcuts] Failed to fetch installed apps:', e);
+      console.warn('[RemoteAppShortcuts] Failed to fetch installed apps from Android bridge:', e);
     } finally {
       setIsScanningInstalled(false);
     }
   };
 
   useEffect(() => {
-    if (activeSubTab === 'installed' && installedApps.length === 0) {
+    if (activeSubTab === 'installed') {
       fetchInstalledApps();
     }
   }, [activeSubTab]);
@@ -866,8 +850,8 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
                   onChange={(e) => setFormCategory(e.target.value as AppCategory)}
                   className="w-full h-8 px-2 text-xs bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg text-[var(--text-heading)] focus:outline-none focus:border-[var(--border-active)]"
                 >
-                  {(Object.keys(CATEGORY_ICONS) as AppCategory[])
-                    .filter(c => c !== 'all')
+                  {(Object.keys(CATEGORY_ICONS) as string[])
+                    .filter((c): c is AppCategory => c !== 'all')
                     .map(cat => (
                       <option key={cat} value={cat}>{CATEGORY_ICONS[cat].label}</option>
                     ))}

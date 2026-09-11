@@ -1,5 +1,5 @@
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Network & Hardware Permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -17,9 +17,14 @@
         android:protectionLevel="signature" />
 
     <uses-permission android:name="com.nodus.permission.FLEET_ACCESS" />
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" tools:ignore="QueryAllPackagesPermission" />
 
     <!-- Android 11+ Package Visibility -->
     <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
         <package android:name="com.nodus.home" />
         <package android:name="com.nodus.assistive" />
         <package android:name="com.nodus.launcher" />

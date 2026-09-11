@@ -463,33 +463,41 @@ class FleetHttpServer(
                             contentType = "application/json; charset=utf-8"
                         }
                     } else {
-                        val pm = context.packageManager
-                        val intent = Intent(Intent.ACTION_MAIN, null).apply {
-                            addCategory(Intent.CATEGORY_LAUNCHER)
-                        }
-                        val apps = pm.queryIntentActivities(intent, 0)
-                        val appArray = JSONArray()
-                        for (app in apps.take(24)) {
-                            val label = app.loadLabel(pm).toString()
-                            val pkg = app.activityInfo.packageName
-                            appArray.put(JSONObject().apply {
-                                put("id", "app-$pkg")
-                                put("name", label)
-                                put("category", "productivity")
-                                put("path", pkg)
-                                put("commandOrPackage", pkg)
-                                put("description", pkg)
-                                put("enabled", true)
-                            })
+                        val prefs = context.getSharedPreferences("nodus_fleet_prefs", Context.MODE_PRIVATE)
+                        val rawJson = prefs.getString("nodus_shared_apps_json", "[]") ?: "[]"
+                        val savedArray = try { JSONArray(rawJson) } catch (_: Exception) { JSONArray() }
+                        val sharedArray = JSONArray()
+                        for (i in 0 until savedArray.length()) {
+                            val item = savedArray.getJSONObject(i)
+                            val isEnabled = item.optBoolean("enabled", true)
+                            if (isEnabled) {
+                                val pkg = item.optString("path", item.optString("commandOrPackage", ""))
+                                sharedArray.put(JSONObject().apply {
+                                    put("id", item.optString("id", "app-$pkg"))
+                                    put("name", item.optString("name", pkg))
+                                    put("category", item.optString("category", "utility"))
+                                    put("path", pkg)
+                                    put("commandOrPackage", pkg)
+                                    put("description", item.optString("description", pkg))
+                                    put("icon_base64", item.optString("icon_base64", ""))
+                                    put("enabled", true)
+                                    put("deviceId", "poco-pad")
+                                    put("deviceName", "POCO Pad")
+                                    put("deviceType", "tablet")
+                                    put("deviceColor", "#D4AAFF")
+                                    put("sharedBy", "peer")
+                                })
+                            }
                         }
                         val resp = JSONObject().apply {
                             put("ok", true)
-                            put("shortcuts", appArray)
-                            put("apps", appArray)
+                            put("shortcuts", sharedArray)
+                            put("apps", sharedArray)
                             put("device", JSONObject().apply {
+                                put("id", "poco-pad")
                                 put("name", "POCO Pad")
                                 put("type", "tablet")
-                                put("color", "#6DD58C")
+                                put("color", "#D4AAFF")
                             })
                         }
                         responseBytes = resp.toString().toByteArray(Charsets.UTF_8)

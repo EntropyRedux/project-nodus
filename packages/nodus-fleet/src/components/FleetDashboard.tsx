@@ -311,6 +311,10 @@ export const FleetDashboard: React.FC = () => {
   useEffect(() => {
     try {
       localStorage.setItem('nodus_fleet_my_apps', JSON.stringify(myApps));
+      const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
+      if (bridge && typeof bridge.syncSharedApps === 'function') {
+        bridge.syncSharedApps(JSON.stringify(myApps));
+      }
     } catch (_) {}
   }, [myApps]);
 
@@ -1073,8 +1077,13 @@ export const FleetDashboard: React.FC = () => {
                 }}
                 onLaunchMyApp={async app => {
                   triggerHaptic([15, 25, 15]);
+                  const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
+                  if (bridge && typeof bridge.launchApp === 'function' && app.path) {
+                    bridge.launchApp(app.path);
+                    return;
+                  }
                   const peerIp = app.deviceIp || targetDevice?.ipAddress || activeRemotePeer?.ipAddress;
-                  if (peerIp && peerIp !== '127.0.0.1') {
+                  if (peerIp && peerIp !== '127.0.0.1' && peerIp !== 'local') {
                     try {
                       const url = `http://${peerIp}:9120/api/shortcuts/launch`;
                       const token = targetDevice?.token || 'NODUS-FLEET-SECURE';
@@ -1084,7 +1093,7 @@ export const FleetDashboard: React.FC = () => {
                         body: { command_or_path: app.path || app.name }
                       });
                     } catch (err) {
-                      console.warn('Failed to launch custom shortcut on remote peer', err);
+                      console.warn('Failed to launch shortcut on peer', err);
                     }
                   }
                 }}
@@ -1095,16 +1104,17 @@ export const FleetDashboard: React.FC = () => {
                   setMyApps(prev => [
                     ...prev,
                     {
-                      id: `custom-${Date.now()}`,
+                      id: `android-app-${Date.now()}`,
                       name: newApp.name,
-                      category: newApp.category || 'productivity',
-                      deviceId: targetDevice?.id || 'remote-pc',
-                      deviceName: targetDevice?.name || 'Remote Host',
-                      deviceType: targetDevice?.type || 'desktop',
-                      deviceColor: targetDevice?.color || '#A8C7FA',
-                      deviceIp: targetDevice?.ipAddress || activeRemotePeer?.ipAddress || '127.0.0.1',
+                      category: newApp.category || 'utility',
+                      deviceId: 'poco-pad',
+                      deviceName: 'POCO Pad',
+                      deviceType: 'tablet',
+                      deviceColor: '#D4AAFF',
+                      deviceIp: 'local',
                       path: newApp.path,
-                      description: newApp.description,
+                      icon_base64: newApp.icon_base64,
+                      description: newApp.description || `Android application (${newApp.path})`,
                       sharedBy: 'me',
                       enabled: true
                     }

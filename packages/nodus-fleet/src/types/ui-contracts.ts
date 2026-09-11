@@ -1,4 +1,5 @@
 import { DeviceInfo, DeviceProcess, ClipboardItem } from '../nodus-common';
+export type { DeviceInfo, DeviceProcess, ClipboardItem };
 
 // 1. Mesh Topology Visualizer (Interactive SVG Graph)
 export interface MeshTopologyVisualizerProps {
@@ -138,7 +139,7 @@ export interface RemoteAppShortcutsProps {
   onLaunchPeerApp: (app: SharedApp) => void;
   onLaunchMyApp?: (app: SharedApp) => void;
   onDeleteMyApp?: (id: string) => void;
-  onRegisterApp?: (app: { name: string; path: string; category: AppCategory; description?: string }) => void;
+  onRegisterApp?: (app: { name: string; path: string; category: AppCategory; description?: string; icon_base64?: string }) => void;
   onAddMyApp?: () => void;
   onRefreshPeerShortcuts?: () => void;
 }
