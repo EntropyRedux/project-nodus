@@ -49,10 +49,8 @@ releases/*.apk
 .cargo/test-output.txt
 .cargo/cargo-test.log
 
-# Transient Android Shell Assets
-packages/*/android-shell/app/src/main/assets/frontend/assets/index-*.js
-packages/*/android-shell/app/src/main/assets/frontend/assets/index-*.css
-packages/*/android-shell/app/src/main/assets/frontend/assets/vendor-*.js
+# Transient Android Shell Assets (built frontend bundles)
+packages/*/android-shell/app/src/main/assets/frontend/
 
 # Temporary Screenshots & Screen Captures
 *.png
