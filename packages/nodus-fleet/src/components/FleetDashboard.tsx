@@ -315,50 +315,55 @@ export const FleetDashboard: React.FC = () => {
   }, [myApps]);
 
   // Target device resolution
+  const activeRemotePeer = devices.find(d => !d.isLocal && d.ipAddress && d.ipAddress !== '127.0.0.1');
   const targetDevice =
-    devices.find(d => d.id === selectedDeviceId) ||
-    devices.find(d => !d.isLocal) ||
+    (selectedDeviceId && selectedDeviceId !== 'local' ? devices.find(d => d.id === selectedDeviceId) : null) ||
+    activeRemotePeer ||
     devices[0];
 
   // Dynamically load shared shortcuts from target workstation
-  useEffect(() => {
-    if (!targetDevice || !targetDevice.ipAddress || targetDevice.ipAddress === '127.0.0.1') return;
-    const fetchPeerShortcuts = async () => {
-      try {
-        const url = `http://${targetDevice.ipAddress}:9120/api/shortcuts`;
-        const res = await universalNetworkFetch<any>(url);
-        if (res && res.data) {
-          const raw = res.data.shortcuts || res.data.apps || [];
-          const remoteDevice = res.data.device || {};
-          const devName = remoteDevice.name || targetDevice.name || 'Remote Host';
-          const devType = remoteDevice.type || targetDevice.type || 'desktop';
-          const devColor = remoteDevice.color || '#A8C7FA';
-          const devIp = targetDevice.ipAddress;
+  const fetchPeerShortcuts = React.useCallback(async () => {
+    const peerIp = targetDevice?.ipAddress || activeRemotePeer?.ipAddress;
+    if (!peerIp || peerIp === '127.0.0.1') return;
+    try {
+      const url = `http://${peerIp}:9120/api/shortcuts`;
+      const res = await universalNetworkFetch<any>(url);
+      if (res && res.data) {
+        const raw = res.data.shortcuts || res.data.apps || [];
+        const remoteDevice = res.data.device || {};
+        const devName = remoteDevice.name || targetDevice?.name || 'Remote Host';
+        const devType = remoteDevice.type || targetDevice?.type || 'desktop';
+        const devColor = remoteDevice.color || '#A8C7FA';
+        const devIp = peerIp;
 
-          if (Array.isArray(raw)) {
-            setPeerApps(
-              raw.map((a: any) => ({
-                id: a.id || `peer-${a.name}`,
-                name: a.name,
-                category: a.category || 'productivity',
-                deviceId: a.deviceId || targetDevice.id,
-                deviceName: a.deviceName || devName,
-                deviceType: a.deviceType || devType,
-                deviceColor: a.deviceColor || devColor,
-                deviceIp: a.deviceIp || devIp,
-                path: a.path_or_appid || a.path || a.commandOrPackage || a.name,
-                description: a.description,
-                icon_base64: a.icon_base64 || a.icon,
-                sharedBy: 'peer' as const,
-                enabled: a.enabled ?? true,
-              }))
-            );
-          }
+        if (Array.isArray(raw)) {
+          setPeerApps(
+            raw.map((a: any) => ({
+              id: a.id || `peer-${a.name}`,
+              name: a.name,
+              category: a.category || 'productivity',
+              deviceId: a.deviceId || targetDevice?.id || 'remote-pc',
+              deviceName: a.deviceName || devName,
+              deviceType: a.deviceType || devType,
+              deviceColor: a.deviceColor || devColor,
+              deviceIp: a.deviceIp || devIp,
+              path: a.path_or_appid || a.path || a.commandOrPackage || a.name,
+              description: a.description,
+              icon_base64: a.icon_base64 || a.icon,
+              sharedBy: 'peer' as const,
+              enabled: a.enabled ?? true,
+            }))
+          );
         }
-      } catch (_) {}
-    };
-    fetchPeerShortcuts();
-  }, [targetDevice?.id, targetDevice?.ipAddress, activeTab]);
+      }
+    } catch (_) {}
+  }, [targetDevice?.id, targetDevice?.name, targetDevice?.type, targetDevice?.color, targetDevice?.ipAddress, activeRemotePeer?.ipAddress]);
+
+  useEffect(() => {
+    if (activeTab === 'shortcuts' || activeTab === 'topology') {
+      fetchPeerShortcuts();
+    }
+  }, [fetchPeerShortcuts, activeTab]);
 
   // Material 3 Fleet Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
@@ -1043,36 +1048,63 @@ export const FleetDashboard: React.FC = () => {
               <RemoteAppShortcuts
                 myApps={myApps}
                 peerApps={peerApps}
+                targetDevice={targetDevice}
+                devices={devices}
+                onRefreshPeerShortcuts={fetchPeerShortcuts}
                 onToggleMyApp={(id, enabled) => {
                   setMyApps(prev => prev.map(a => (a.id === id ? { ...a, enabled } : a)));
                 }}
                 onLaunchPeerApp={async app => {
-                  const peerIp = app.deviceIp || targetDevice?.ipAddress;
-                  if (!peerIp) return;
+                  const peerIp = app.deviceIp || targetDevice?.ipAddress || activeRemotePeer?.ipAddress;
+                  if (!peerIp || peerIp === '127.0.0.1') return;
                   triggerHaptic([15, 25, 15]);
                   try {
                     const url = `http://${peerIp}:9120/api/shortcuts/launch`;
+                    const token = targetDevice?.token || 'NODUS-FLEET-SECURE';
+                    const targetCmd = app.path || app.name;
                     await universalNetworkFetch(url, {
                       method: 'POST',
-                      body: JSON.stringify({ command_or_path: app.path || app.name })
+                      headers: { 'X-Nodus-Auth-Token': token },
+                      body: { command_or_path: targetCmd }
                     });
                   } catch (err) {
                     console.warn('Failed to launch shortcut on remote peer', err);
                   }
                 }}
-                onAddMyApp={() => {
-                  const name = prompt('Enter shortcut application name:');
-                  if (!name) return;
+                onLaunchMyApp={async app => {
+                  triggerHaptic([15, 25, 15]);
+                  const peerIp = app.deviceIp || targetDevice?.ipAddress || activeRemotePeer?.ipAddress;
+                  if (peerIp && peerIp !== '127.0.0.1') {
+                    try {
+                      const url = `http://${peerIp}:9120/api/shortcuts/launch`;
+                      const token = targetDevice?.token || 'NODUS-FLEET-SECURE';
+                      await universalNetworkFetch(url, {
+                        method: 'POST',
+                        headers: { 'X-Nodus-Auth-Token': token },
+                        body: { command_or_path: app.path || app.name }
+                      });
+                    } catch (err) {
+                      console.warn('Failed to launch custom shortcut on remote peer', err);
+                    }
+                  }
+                }}
+                onDeleteMyApp={id => {
+                  setMyApps(prev => prev.filter(a => a.id !== id));
+                }}
+                onRegisterApp={newApp => {
                   setMyApps(prev => [
                     ...prev,
                     {
-                      id: `app-${Date.now()}`,
-                      name,
-                      category: 'utility',
-                      deviceId: 'local',
-                      deviceName: 'Nodus Tablet Prime',
-                      deviceType: 'tablet',
-                      deviceColor: '#9ECAFF',
+                      id: `custom-${Date.now()}`,
+                      name: newApp.name,
+                      category: newApp.category || 'productivity',
+                      deviceId: targetDevice?.id || 'remote-pc',
+                      deviceName: targetDevice?.name || 'Remote Host',
+                      deviceType: targetDevice?.type || 'desktop',
+                      deviceColor: targetDevice?.color || '#A8C7FA',
+                      deviceIp: targetDevice?.ipAddress || activeRemotePeer?.ipAddress || '127.0.0.1',
+                      path: newApp.path,
+                      description: newApp.description,
                       sharedBy: 'me',
                       enabled: true
                     }

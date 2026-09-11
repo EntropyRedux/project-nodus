@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import {
   RemoteAppShortcutsProps,
   SharedApp,
-  AppCategory
+  AppCategory,
+  DeviceInfo
 } from '../types/ui-contracts';
 import {
   Plus,
@@ -20,21 +21,21 @@ import {
   Laptop,
   Check,
   Sparkles,
-  ExternalLink,
   Layers,
   Search,
   RefreshCw,
   Trash2,
   X,
   Compass,
-  Terminal,
-  Folder,
-  Activity,
-  AppWindow
+  Wrench,
+  AppWindow,
+  BookmarkPlus,
+  Radio
 } from 'lucide-react';
 import { universalNetworkFetch } from '../services/FleetDirectClient';
 
-const CATEGORY_ICONS: Record<AppCategory, { label: string; icon: React.ElementType; color: string }> = {
+const CATEGORY_ICONS: Record<string, { label: string; icon: React.ElementType; color: string }> = {
+  all: { label: 'All', icon: Radio, color: '#A8C7FA' },
   browser: { label: 'Browser', icon: Globe, color: '#9ECAFF' },
   media: { label: 'Media', icon: Music, color: '#D4AAFF' },
   dev: { label: 'Development', icon: Code2, color: '#82D5A5' },
@@ -42,9 +43,10 @@ const CATEGORY_ICONS: Record<AppCategory, { label: string; icon: React.ElementTy
   system: { label: 'System', icon: Settings2, color: '#879099' },
   game: { label: 'Gaming', icon: Gamepad2, color: '#FFB4AB' },
   utility: { label: 'Utility', icon: Zap, color: '#9ECAFF' },
+  tools: { label: 'Tools', icon: Wrench, color: '#67E8F9' },
 };
 
-function getDeviceIcon(type: SharedApp['deviceType'], size = 12) {
+function getDeviceIcon(type?: SharedApp['deviceType'] | DeviceInfo['type'], size = 12) {
   switch (type) {
     case 'tablet':
       return <Tablet size={size} />;
@@ -72,17 +74,31 @@ export function formatIconSrc(rawIcon?: string): string | null {
 export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
   myApps,
   peerApps,
+  targetDevice,
+  devices,
   onToggleMyApp,
   onLaunchPeerApp,
-  onAddMyApp
+  onLaunchMyApp,
+  onDeleteMyApp,
+  onRegisterApp,
+  onAddMyApp,
+  onRefreshPeerShortcuts
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'peer' | 'mine' | 'installed'>('peer');
+  const [activeSubTab, setActiveSubTab] = useState<'peer' | 'installed' | 'mine'>('peer');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [launchedAppId, setLaunchedAppId] = useState<string | null>(null);
+  const [pinnedFeedback, setPinnedFeedback] = useState<string | null>(null);
 
-  // Installed Apps scanned from remote host PC
-  const [installedApps, setInstalledApps] = useState<any[]>([]);
+  // Installed Apps scanned from remote host PC with localStorage cache for instant load
+  const [installedApps, setInstalledApps] = useState<any[]>(() => {
+    try {
+      const cached = localStorage.getItem('nodus_cached_installed_apps');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
   const [isScanningInstalled, setIsScanningInstalled] = useState(false);
 
   // Add Custom Modal state for tablet
@@ -95,6 +111,19 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
   const [formDesc, setFormDesc] = useState('');
 
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('all');
+
+  // Resolve target PC host IP and authorization token
+  const activeTargetDevice =
+    (selectedDeviceId !== 'all' ? devices?.find(d => d.id === selectedDeviceId) : null) ||
+    targetDevice ||
+    devices?.find(d => !d.isLocal && d.ipAddress && d.ipAddress !== '127.0.0.1');
+
+  const targetHostIp =
+    (activeTargetDevice?.ipAddress && activeTargetDevice.ipAddress !== '127.0.0.1' ? activeTargetDevice.ipAddress : null) ||
+    peerApps.find(a => a.deviceIp && a.deviceIp !== '127.0.0.1')?.deviceIp ||
+    '127.0.0.1';
+
+  const targetAuthToken = activeTargetDevice?.token || 'NODUS-FLEET-SECURE';
 
   // Extract unique peer devices
   const availableDevices = React.useMemo(() => {
@@ -115,49 +144,52 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
     return Array.from(map.values());
   }, [peerApps]);
 
-  const targetHostIp = peerApps[0]?.deviceIp || '127.0.0.1';
-  const targetAuthToken = (peerApps[0] as any)?.authToken || (peerApps[0] as any)?.token || '';
-
   const fetchInstalledApps = async () => {
+    if (!targetHostIp || targetHostIp === '127.0.0.1') return;
     setIsScanningInstalled(true);
     try {
       const host = targetHostIp.includes(':') ? targetHostIp : `${targetHostIp}:9120`;
       const res = await universalNetworkFetch<any>(`http://${host}/api/shortcuts/installed`, {
-        headers: targetAuthToken ? { 'X-Nodus-Auth-Token': targetAuthToken } : undefined,
-        timeoutMs: 8000,
+        headers: { 'X-Nodus-Auth-Token': targetAuthToken },
+        timeoutMs: 45000,
       });
       if (res.ok && res.data && Array.isArray(res.data.apps)) {
         setInstalledApps(res.data.apps);
+        try {
+          localStorage.setItem('nodus_cached_installed_apps', JSON.stringify(res.data.apps));
+        } catch (_) {}
       }
-    } catch (_) {
+    } catch (e) {
+      console.warn('[RemoteAppShortcuts] Failed to fetch installed apps:', e);
     } finally {
       setIsScanningInstalled(false);
     }
   };
 
   useEffect(() => {
-    if (activeSubTab === 'installed' && installedApps.length === 0) {
+    if (activeSubTab === 'installed' && installedApps.length === 0 && targetHostIp !== '127.0.0.1') {
       fetchInstalledApps();
     }
-  }, [activeSubTab]);
+  }, [activeSubTab, targetHostIp]);
 
   const handleLaunch = (app: SharedApp) => {
     setLaunchedAppId(app.id);
     onLaunchPeerApp(app);
     setTimeout(() => {
-      setLaunchedAppId(null), 2200;
-    });
+      setLaunchedAppId(null);
+    }, 2200);
   };
 
   const handleLaunchInstalledApp = async (app: any) => {
-    const appId = `inst-${app.name}`;
+    const appId = `inst-${app.id || app.name}`;
     setLaunchedAppId(appId);
     try {
       const host = targetHostIp.includes(':') ? targetHostIp : `${targetHostIp}:9120`;
-      await universalNetworkFetch(`http://${host}/api/exec`, {
+      const target = app.path_or_appid || app.path || app.name;
+      await universalNetworkFetch(`http://${host}/api/shortcuts/launch`, {
         method: 'POST',
-        headers: targetAuthToken ? { 'X-Nodus-Auth-Token': targetAuthToken } : undefined,
-        body: { command_or_path: app.path || app.name },
+        headers: { 'X-Nodus-Auth-Token': targetAuthToken },
+        body: { command_or_path: target },
       });
     } catch (_) {}
     setTimeout(() => {
@@ -169,7 +201,14 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
     e.preventDefault();
     if (!formName.trim() || !formPath.trim()) return;
 
-    if (onAddMyApp) {
+    if (onRegisterApp) {
+      onRegisterApp({
+        name: formName.trim(),
+        path: formPath.trim(),
+        category: formCategory,
+        description: formDesc.trim() || undefined,
+      });
+    } else if (onAddMyApp) {
       onAddMyApp();
     }
     setShowAddModal(false);
@@ -178,6 +217,25 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
     setFormArgs('');
     setFormWorkingDir('');
     setFormDesc('');
+  };
+
+  const isAppPinned = (app: any) => {
+    const name = (app.name || '').toLowerCase();
+    const target = (app.path_or_appid || app.path || '').toLowerCase();
+    return myApps.some(m => m.name.toLowerCase() === name || (m.path && m.path.toLowerCase() === target));
+  };
+
+  const handlePinInstalledApp = (app: any) => {
+    if (onRegisterApp && !isAppPinned(app)) {
+      onRegisterApp({
+        name: app.name,
+        path: app.path_or_appid || app.path || app.name,
+        category: (app.category as AppCategory) || 'utility',
+        description: `Installed application from ${activeTargetDevice?.name || 'PC Host'}`,
+      });
+      setPinnedFeedback(app.name);
+      setTimeout(() => setPinnedFeedback(null), 2200);
+    }
   };
 
   const filteredPeerApps = peerApps.filter(app => {
@@ -199,9 +257,11 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
   });
 
   const filteredInstalledApps = installedApps.filter(app => {
+    const name = app.name || '';
+    const path = app.path_or_appid || app.path || '';
     const matchesSearch =
-      app.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (app.path && app.path.toLowerCase().includes(searchQuery.toLowerCase()));
+      name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      path.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCat = selectedCategory === 'all' || app.category === selectedCategory;
     return matchesSearch && matchesCat;
   });
@@ -224,18 +284,6 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveSubTab('mine')}
-            className={`flex-1 sm:flex-initial h-8 px-3 sm:px-3.5 rounded-md text-xs font-mono font-medium transition flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap ${
-              activeSubTab === 'mine'
-                ? 'bg-[var(--accent-primary)] text-[var(--m3-on-primary)] font-semibold shadow-sm'
-                : 'text-[var(--text-muted)] hover:text-[var(--text-heading)]'
-            }`}
-          >
-            <Compass size={14} />
-            <span>Pinned Launchpad ({myApps.length})</span>
-          </button>
-
-          <button
             onClick={() => setActiveSubTab('installed')}
             className={`flex-1 sm:flex-initial h-8 px-3 sm:px-3.5 rounded-md text-xs font-mono font-medium transition flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap ${
               activeSubTab === 'installed'
@@ -246,14 +294,37 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
             <AppWindow size={14} />
             <span>Installed Windows Apps ({installedApps.length})</span>
           </button>
+
+          <button
+            onClick={() => setActiveSubTab('mine')}
+            className={`flex-1 sm:flex-initial h-8 px-3 sm:px-3.5 rounded-md text-xs font-mono font-medium transition flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap ${
+              activeSubTab === 'mine'
+                ? 'bg-[var(--accent-primary)] text-[var(--m3-on-primary)] font-semibold shadow-sm'
+                : 'text-[var(--text-muted)] hover:text-[var(--text-heading)]'
+            }`}
+          >
+            <Compass size={14} />
+            <span>Pinned Launchpad ({myApps.length})</span>
+          </button>
         </div>
 
         <div className="flex items-center gap-2">
+          {activeSubTab === 'peer' && onRefreshPeerShortcuts && (
+            <button
+              onClick={onRefreshPeerShortcuts}
+              title="Rescan Workstation Shortcuts"
+              className="h-8 px-3 rounded-lg bg-[var(--surface-elevated)] border border-[var(--border-subtle)] text-[var(--text-body)] hover:text-[var(--text-heading)] text-xs font-mono flex items-center gap-1.5 transition active:scale-95"
+            >
+              <RefreshCw size={13} />
+              <span>Rescan PC</span>
+            </button>
+          )}
+
           {activeSubTab === 'installed' && (
             <button
               onClick={fetchInstalledApps}
               disabled={isScanningInstalled}
-              className="h-8 px-3 rounded-lg bg-[var(--surface-elevated)] border border-[var(--border-subtle)] text-[var(--text-body)] hover:text-[var(--text-heading)] text-xs font-mono flex items-center gap-1.5 transition disabled:opacity-50"
+              className="h-8 px-3 rounded-lg bg-[var(--surface-elevated)] border border-[var(--border-subtle)] text-[var(--text-body)] hover:text-[var(--text-heading)] text-xs font-mono flex items-center gap-1.5 transition disabled:opacity-50 active:scale-95"
             >
               <RefreshCw size={13} className={isScanningInstalled ? 'animate-spin text-[var(--accent-primary)]' : ''} />
               <span>{isScanningInstalled ? 'Scanning PC...' : 'Rescan PC'}</span>
@@ -262,7 +333,7 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
 
           <button
             onClick={() => setShowAddModal(true)}
-            className="h-8 px-3.5 rounded-lg bg-[var(--accent-primary)] hover:opacity-90 text-[var(--m3-on-primary)] text-xs font-semibold flex items-center gap-1.5 transition shadow-sm"
+            className="h-8 px-3.5 rounded-lg bg-[var(--accent-primary)] hover:opacity-90 text-[var(--m3-on-primary)] text-xs font-semibold flex items-center gap-1.5 transition shadow-sm active:scale-95"
           >
             <Plus size={14} />
             <span>Add Shortcut</span>
@@ -294,30 +365,20 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
 
         {/* Category Filter Chips */}
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
-          <button
-            onClick={() => setSelectedCategory('all')}
-            className={`h-7 px-2.5 rounded-md text-[11px] font-mono font-medium transition whitespace-nowrap ${
-              selectedCategory === 'all'
-                ? 'bg-[var(--accent-primary)] text-[var(--m3-on-primary)] font-bold'
-                : 'bg-[var(--surface-base)] text-[var(--text-muted)] hover:text-[var(--text-heading)] border border-[var(--border-subtle)]'
-            }`}
-          >
-            All
-          </button>
-          {(Object.keys(CATEGORY_ICONS) as AppCategory[]).map(cat => {
-            const info = CATEGORY_ICONS[cat];
+          {Object.entries(CATEGORY_ICONS).map(([key, info]) => {
             const Icon = info.icon;
+            const isSelected = selectedCategory === key;
             return (
               <button
-                key={cat}
-                onClick={() => setSelectedCategory(cat)}
+                key={key}
+                onClick={() => setSelectedCategory(key)}
                 className={`h-7 px-2.5 rounded-md text-[11px] font-mono font-medium transition flex items-center gap-1.5 whitespace-nowrap ${
-                  selectedCategory === cat
-                    ? 'bg-[var(--accent-primary)] text-[var(--m3-on-primary)] font-bold'
+                  isSelected
+                    ? 'bg-[var(--accent-primary)] text-[var(--m3-on-primary)] font-bold shadow-sm'
                     : 'bg-[var(--surface-base)] text-[var(--text-muted)] hover:text-[var(--text-heading)] border border-[var(--border-subtle)]'
                 }`}
               >
-                <Icon size={12} style={{ color: selectedCategory === cat ? 'inherit' : info.color }} />
+                <Icon size={12} style={{ color: isSelected ? 'inherit' : info.color }} />
                 <span>{info.label}</span>
               </button>
             );
@@ -325,16 +386,68 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
         </div>
       </div>
 
+      {/* Peer Device Origin Filter Pills */}
+      {activeSubTab === 'peer' && availableDevices.length > 1 && (
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-2 mb-3 no-scrollbar border-b border-[var(--border-subtle)] shrink-0">
+          <span className="text-[11px] font-mono text-[var(--text-muted)] shrink-0 mr-1 flex items-center gap-1">
+            <Monitor size={12} />
+            Source Node:
+          </span>
+          <button
+            onClick={() => setSelectedDeviceId('all')}
+            className={`h-6 px-2.5 rounded-full text-[10px] font-mono transition whitespace-nowrap ${
+              selectedDeviceId === 'all'
+                ? 'bg-[var(--accent-container)] text-[var(--accent-on-container)] font-semibold border border-[var(--border-active)]'
+                : 'bg-[var(--surface-base)] text-[var(--text-muted)] hover:text-[var(--text-heading)] border border-[var(--border-subtle)]'
+            }`}
+          >
+            All Nodes ({peerApps.length})
+          </button>
+          {availableDevices.map(dev => (
+            <button
+              key={dev.id}
+              onClick={() => setSelectedDeviceId(dev.id)}
+              className={`h-6 px-2.5 rounded-full text-[10px] font-mono transition flex items-center gap-1.5 whitespace-nowrap ${
+                selectedDeviceId === dev.id
+                  ? 'bg-[var(--accent-container)] text-[var(--accent-on-container)] font-semibold border border-[var(--border-active)]'
+                  : 'bg-[var(--surface-base)] text-[var(--text-muted)] hover:text-[var(--text-heading)] border border-[var(--border-subtle)]'
+              }`}
+            >
+              <span style={{ color: dev.color }}>{getDeviceIcon(dev.type, 11)}</span>
+              <span>{dev.name}</span>
+              <span className="opacity-60">({dev.count})</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Pinned Feedback Toast */}
+      {pinnedFeedback && (
+        <div className="mb-3 px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-mono flex items-center gap-2 animate-in fade-in">
+          <Check size={14} className="text-emerald-400" />
+          <span>Pinned &quot;{pinnedFeedback}&quot; to your Launchpad!</span>
+        </div>
+      )}
+
       {/* Main Apps Grid Container */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {/* TAB 1: PEER WORKSTATION SHORTCUTS */}
         {activeSubTab === 'peer' && (
           filteredPeerApps.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-center text-[var(--text-muted)] space-y-2">
               <Layers size={32} className="opacity-40" />
               <p className="text-sm font-medium text-[var(--text-heading)]">No Workstation Shortcuts found</p>
               <p className="text-xs max-w-sm">
-                Shortcuts pinned on your host Workstation PC will automatically appear here for instant remote execution.
+                Shortcuts shared by your host PC ({activeTargetDevice?.name || 'PC'}) will appear here automatically.
               </p>
+              {onRefreshPeerShortcuts && (
+                <button
+                  onClick={onRefreshPeerShortcuts}
+                  className="text-xs text-[var(--accent-primary)] hover:underline mt-2 inline-flex items-center gap-1 font-mono"
+                >
+                  <RefreshCw size={12} /> Rescan shortcuts from {activeTargetDevice?.name || 'PC'}
+                </button>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5 pb-4">
@@ -407,16 +520,111 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
           )
         )}
 
+        {/* TAB 2: INSTALLED WINDOWS APPS */}
+        {activeSubTab === 'installed' && (
+          isScanningInstalled ? (
+            <div className="flex flex-col items-center justify-center h-64 text-center text-[var(--text-muted)] space-y-3">
+              <RefreshCw size={32} className="animate-spin text-[var(--accent-primary)]" />
+              <p className="text-sm font-medium text-[var(--text-heading)]">Scanning Host PC Applications...</p>
+              <p className="text-xs font-mono text-[var(--text-muted)]">Querying Workstation Start Menu, UWP, and Win32 applications...</p>
+            </div>
+          ) : filteredInstalledApps.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-64 text-center text-[var(--text-muted)] space-y-2">
+              <AppWindow size={32} className="opacity-40" />
+              <p className="text-sm font-medium text-[var(--text-heading)]">No Installed Applications discovered</p>
+              <button
+                onClick={fetchInstalledApps}
+                className="text-xs text-[var(--accent-primary)] hover:underline mt-1 font-mono flex items-center gap-1"
+              >
+                <RefreshCw size={12} /> Scan Windows applications now
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5 pb-4">
+              {filteredInstalledApps.map((app, idx) => {
+                const appId = `inst-${app.id || app.name}-${idx}`;
+                const isLaunched = launchedAppId === `inst-${app.id || app.name}`;
+                const iconSrc = formatIconSrc(app.icon || app.icon_base64);
+                const pinned = isAppPinned(app);
+                const targetDisplay = app.path_or_appid || app.path || 'System application';
+
+                return (
+                  <div
+                    key={appId}
+                    className="group relative bg-[var(--surface-elevated)] hover:bg-[var(--surface-base)] border border-[var(--border-subtle)] hover:border-[var(--border-active)] rounded-xl p-4 transition-all duration-200 flex flex-col justify-between gap-3 shadow-sm hover:shadow-md"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-lg bg-[var(--surface-container)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--accent-primary)] overflow-hidden shrink-0">
+                          {iconSrc ? (
+                            <img src={iconSrc} alt={app.name} className="w-7 h-7 object-contain" />
+                          ) : (
+                            <AppWindow size={20} className="text-[var(--accent-primary)]" />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-xs font-semibold text-[var(--text-heading)] truncate">{app.name}</h4>
+                          <p className="text-[11px] font-mono text-[var(--text-muted)] truncate" title={targetDisplay}>
+                            {targetDisplay}
+                          </p>
+                        </div>
+                      </div>
+
+                      {app.is_uwp && (
+                        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 shrink-0">
+                          UWP
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="pt-2 border-t border-[var(--border-subtle)]/60 flex items-center justify-between">
+                      <button
+                        onClick={() => handlePinInstalledApp(app)}
+                        disabled={pinned}
+                        title={pinned ? 'Already in Pinned Launchpad' : 'Pin to Launchpad'}
+                        className={`h-7 px-2.5 rounded-lg text-xs font-mono flex items-center gap-1 border transition active:scale-95 ${
+                          pinned
+                            ? 'bg-amber-500/10 text-amber-300 border-amber-500/25 opacity-70'
+                            : 'bg-[var(--surface-base)] text-[var(--text-muted)] hover:text-[var(--text-heading)] border-[var(--border-subtle)]'
+                        }`}
+                      >
+                        <BookmarkPlus size={12} className={pinned ? 'text-amber-400' : ''} />
+                        <span>{pinned ? 'Pinned' : 'Pin'}</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleLaunchInstalledApp(app)}
+                        className={`h-7 px-3 rounded-lg text-xs font-medium font-mono flex items-center gap-1.5 transition active:scale-95 shadow-sm ${
+                          isLaunched
+                            ? 'bg-emerald-600 text-white font-bold'
+                            : 'bg-[var(--accent-primary)] text-[var(--m3-on-primary)] hover:opacity-90'
+                        }`}
+                      >
+                        {isLaunched ? <Check size={12} /> : <Play size={12} />}
+                        <span>{isLaunched ? 'Launched' : 'Launch'}</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )
+        )}
+
+        {/* TAB 3: PINNED LAUNCHPAD */}
         {activeSubTab === 'mine' && (
           filteredMyApps.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-center text-[var(--text-muted)] space-y-2">
               <Compass size={32} className="opacity-40" />
               <p className="text-sm font-medium text-[var(--text-heading)]">No Pinned Shortcuts defined</p>
+              <p className="text-xs max-w-sm">
+                Create custom application triggers or pin discovered apps from the Installed Windows Apps tab.
+              </p>
               <button
                 onClick={() => setShowAddModal(true)}
-                className="text-xs text-[var(--accent-primary)] hover:underline mt-1"
+                className="text-xs text-[var(--accent-primary)] hover:underline mt-1 font-mono inline-flex items-center gap-1"
               >
-                Create your first custom shortcut
+                <Plus size={13} /> Create custom shortcut
               </button>
             </div>
           ) : (
@@ -443,7 +651,7 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
                         </div>
                         <div className="min-w-0">
                           <h4 className="text-xs font-semibold text-[var(--text-heading)] truncate">{app.name}</h4>
-                          <p className="text-[11px] font-mono text-[var(--text-muted)] truncate">{app.path || 'Local target'}</p>
+                          <p className="text-[11px] font-mono text-[var(--text-muted)] truncate">{app.path || 'Custom target'}</p>
                         </div>
                       </div>
 
@@ -459,9 +667,33 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
                       </span>
                     </div>
 
-                    <div className="pt-2 border-t border-[var(--border-subtle)]/60 flex items-center justify-end">
+                    {app.description && (
+                      <p className="text-xs text-[var(--text-muted)] line-clamp-2 leading-relaxed">
+                        {app.description}
+                      </p>
+                    )}
+
+                    <div className="pt-2 border-t border-[var(--border-subtle)]/60 flex items-center justify-between">
+                      {onDeleteMyApp ? (
+                        <button
+                          onClick={() => onDeleteMyApp(app.id)}
+                          title="Delete shortcut"
+                          className="w-7 h-7 rounded-lg text-rose-400/80 hover:text-rose-400 hover:bg-rose-500/10 flex items-center justify-center transition active:scale-95"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      ) : <div />}
+
                       <button
-                        onClick={() => handleLaunch(app)}
+                        onClick={() => {
+                          if (onLaunchMyApp) {
+                            onLaunchMyApp(app);
+                          } else {
+                            handleLaunch(app);
+                          }
+                          setLaunchedAppId(app.id);
+                          setTimeout(() => setLaunchedAppId(null), 2200);
+                        }}
                         className={`h-7 px-3 rounded-lg text-xs font-medium font-mono flex items-center gap-1.5 transition active:scale-95 shadow-sm ${
                           isLaunched
                             ? 'bg-emerald-600 text-white font-bold'
@@ -470,71 +702,6 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
                       >
                         {isLaunched ? <Check size={12} /> : <Play size={12} />}
                         <span>{isLaunched ? 'Launched' : 'Launch'}</span>
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )
-        )}
-
-        {activeSubTab === 'installed' && (
-          isScanningInstalled ? (
-            <div className="flex flex-col items-center justify-center h-64 text-center space-y-3">
-              <RefreshCw size={28} className="animate-spin text-[var(--accent-primary)]" />
-              <p className="text-xs font-mono text-[var(--text-muted)]">Querying Workstation installed apps and Start Menu...</p>
-            </div>
-          ) : filteredInstalledApps.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-center text-[var(--text-muted)] space-y-2">
-              <AppWindow size={32} className="opacity-40" />
-              <p className="text-sm font-medium text-[var(--text-heading)]">No Installed Applications discovered</p>
-              <button
-                onClick={fetchInstalledApps}
-                className="text-xs text-[var(--accent-primary)] hover:underline mt-1"
-              >
-                Scan Windows applications now
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5 pb-4">
-              {filteredInstalledApps.map((app, idx) => {
-                const appId = `inst-${app.name}-${idx}`;
-                const isLaunched = launchedAppId === appId;
-                const iconSrc = formatIconSrc(app.icon || app.icon_base64);
-
-                return (
-                  <div
-                    key={appId}
-                    className="group relative bg-[var(--surface-elevated)] hover:bg-[var(--surface-base)] border border-[var(--border-subtle)] hover:border-[var(--border-active)] rounded-xl p-4 transition-all duration-200 flex flex-col justify-between gap-3 shadow-sm hover:shadow-md"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-10 h-10 rounded-lg bg-[var(--surface-container)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--accent-primary)] overflow-hidden shrink-0">
-                          {iconSrc ? (
-                            <img src={iconSrc} alt={app.name} className="w-7 h-7 object-contain" />
-                          ) : (
-                            <AppWindow size={20} className="text-[var(--accent-primary)]" />
-                          )}
-                        </div>
-                        <div className="min-w-0">
-                          <h4 className="text-xs font-semibold text-[var(--text-heading)] truncate">{app.name}</h4>
-                          <p className="text-[11px] font-mono text-[var(--text-muted)] truncate">{app.path || 'System application'}</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="pt-2 border-t border-[var(--border-subtle)]/60 flex items-center justify-end">
-                      <button
-                        onClick={() => handleLaunchInstalledApp(app)}
-                        className={`h-7 px-3 rounded-lg text-xs font-medium font-mono flex items-center gap-1.5 transition active:scale-95 shadow-sm ${
-                          isLaunched
-                            ? 'bg-emerald-600 text-white font-bold'
-                            : 'bg-[var(--accent-primary)] text-[var(--m3-on-primary)] hover:opacity-90'
-                        }`}
-                      >
-                        {isLaunched ? <Check size={12} /> : <Play size={12} />}
-                        <span>{isLaunched ? 'Launched' : 'Launch on PC'}</span>
                       </button>
                     </div>
                   </div>
@@ -594,9 +761,11 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
                   onChange={(e) => setFormCategory(e.target.value as AppCategory)}
                   className="w-full h-8 px-2 text-xs bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg text-[var(--text-heading)] focus:outline-none focus:border-[var(--border-active)]"
                 >
-                  {(Object.keys(CATEGORY_ICONS) as AppCategory[]).map(cat => (
-                    <option key={cat} value={cat}>{CATEGORY_ICONS[cat].label}</option>
-                  ))}
+                  {(Object.keys(CATEGORY_ICONS) as AppCategory[])
+                    .filter(c => c !== 'all')
+                    .map(cat => (
+                      <option key={cat} value={cat}>{CATEGORY_ICONS[cat].label}</option>
+                    ))}
                 </select>
               </div>
 
@@ -622,7 +791,7 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
                 <button
                   type="submit"
                   disabled={!formName.trim() || !formPath.trim()}
-                  className="h-8 px-4 rounded-lg bg-[var(--accent-primary)] hover:opacity-90 disabled:opacity-50 text-[var(--m3-on-primary)] text-xs font-semibold shadow-sm"
+                  className="h-8 px-4 rounded-lg bg-[var(--accent-primary)] hover:opacity-90 disabled:opacity-50 text-[var(--m3-on-primary)] text-xs font-semibold shadow-sm active:scale-95"
                 >
                   Save Shortcut
                 </button>

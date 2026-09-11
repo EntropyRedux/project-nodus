@@ -132,10 +132,13 @@ export interface SharedApp {
 export interface RemoteAppShortcutsProps {
   myApps: SharedApp[];
   peerApps: SharedApp[];
+  targetDevice?: DeviceInfo;
+  devices?: DeviceInfo[];
   onToggleMyApp: (id: string, enabled: boolean) => void;
   onLaunchPeerApp: (app: SharedApp) => void;
   onLaunchMyApp?: (app: SharedApp) => void;
   onDeleteMyApp?: (id: string) => void;
   onRegisterApp?: (app: { name: string; path: string; category: AppCategory; description?: string }) => void;
   onAddMyApp?: () => void;
+  onRefreshPeerShortcuts?: () => void;
 }
