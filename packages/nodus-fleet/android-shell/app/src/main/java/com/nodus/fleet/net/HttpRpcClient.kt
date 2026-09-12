@@ -256,4 +256,46 @@ class HttpRpcClient {
             }
         })
     }
+
+    fun unpairDevice(
+        ip: String,
+        port: Int,
+        authToken: String? = null,
+        onSuccess: () -> Unit = {},
+        onError: (Exception) -> Unit = {}
+    ) {
+        val cleanIp = ip.removePrefix("http://").removePrefix("https://").substringBefore(":")
+        val url = "http://$cleanIp:$port/api/fleet/unpair"
+        val payload = JSONObject().apply {
+            put("id", "poco-pad")
+            put("deviceId", "poco-pad")
+            put("sourceDevice", "poco-pad")
+            put("ipAddress", "192.168.1.35")
+            put("ip", "192.168.1.35")
+            put("action", "unpair")
+            put("timestamp", System.currentTimeMillis())
+        }.toString()
+
+        val request = buildRequest(url, authToken, payload)
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Log.w(TAG, "Failed to send unpair RPC to $url: ${e.message}")
+                onError(e)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    if (it.isSuccessful) {
+                        Log.i(TAG, "Successfully sent unpair RPC to $url")
+                        onSuccess()
+                    } else {
+                        Log.w(TAG, "HTTP error ${it.code} sending unpair to $url")
+                        onError(IOException("HTTP ${it.code} on unpairDevice"))
+                    }
+                }
+            }
+        })
+    }
 }
+

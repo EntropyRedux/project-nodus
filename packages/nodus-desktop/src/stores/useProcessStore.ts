@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { DeviceInfo, DeviceProcess, SystemStats } from '../types/desktop';
-import { TauriService } from '../services/TauriCommands';
+import { TauriService, getStoredAuthToken } from '../services/TauriCommands';
 
 interface ProcessState {
   processes: DeviceProcess[];
@@ -99,7 +99,10 @@ export const useProcessStore = create<ProcessState>((set, get) => ({
         list = localProcs;
         stats = localStats;
       } else if (targetDevice && targetDevice.ipAddress) {
-        list = await TauriService.getRemoteProcesses(targetDevice.ipAddress, 9120);
+        const devToken = targetDevice.authToken || targetDevice.token || getStoredAuthToken();
+        const [remoteProcs, remoteStats] = await TauriService.getRemoteProcessesWithStats(targetDevice.ipAddress, 9120, devToken);
+        list = remoteProcs;
+        stats = remoteStats;
       }
 
       // Slice top-N if configured and not searching
@@ -132,7 +135,9 @@ export const useProcessStore = create<ProcessState>((set, get) => ({
     if (isLocal) {
       success = await TauriService.killProcess(pid);
     } else if (targetDevice && targetDevice.ipAddress) {
-      success = await TauriService.killRemoteProcess(targetDevice.ipAddress, 9120, pid);
+      const devToken = targetDevice.authToken || targetDevice.token || getStoredAuthToken();
+      const targetProc = get().processes.find((p) => p.pid === pid);
+      success = await TauriService.killRemoteProcess(targetDevice.ipAddress, 9120, pid, devToken, targetProc?.name);
     }
 
     if (success) {

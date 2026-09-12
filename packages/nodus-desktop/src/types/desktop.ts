@@ -21,6 +21,8 @@ export interface DeviceInfo {
   isCustom?: boolean;
   isLocal?: boolean;
   latencyMs?: number;
+  authToken?: string;
+  token?: string;
 }
 
 export interface DeviceProcess {

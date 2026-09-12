@@ -50,7 +50,15 @@ class FleetDaemonService : Service() {
         super.onCreate()
         instance = this
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildNotification("Nodus Fleet Mesh Active"))
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                NOTIFICATION_ID,
+                buildNotification("Nodus Fleet Mesh Active"),
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, buildNotification("Nodus Fleet Mesh Active"))
+        }
 
         // Register local tablet node
         registerLocalDevice()
@@ -110,15 +118,34 @@ class FleetDaemonService : Service() {
         return START_STICKY
     }
 
+    private fun getLocalWifiIp(): String {
+        try {
+            val interfaces = java.net.NetworkInterface.getNetworkInterfaces()
+            while (interfaces.hasMoreElements()) {
+                val iface = interfaces.nextElement()
+                if (iface.isLoopback || !iface.isUp) continue
+                val addrs = iface.inetAddresses
+                while (addrs.hasMoreElements()) {
+                    val addr = addrs.nextElement()
+                    if (addr is java.net.Inet4Address && !addr.isLoopbackAddress) {
+                        return addr.hostAddress ?: "127.0.0.1"
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+        return "127.0.0.1"
+    }
+
     private fun registerLocalDevice() {
         val dm = resources.displayMetrics
+        val realIp = getLocalWifiIp()
         val localDevice = JSONObject().apply {
             put("id", "poco-pad")
             put("name", "POCO Pad")
             put("type", "tablet")
             put("os", "android")
             put("status", "online")
-            put("ipAddress", "127.0.0.1")
+            put("ipAddress", realIp)
             put("resolution", "${dm.widthPixels}x${dm.heightPixels}")
             put("battery", 85)
             put("cpuLoad", 12)
@@ -185,12 +212,26 @@ class FleetDaemonService : Service() {
         notifyStateChanged()
     }
 
-    fun removeRemoteDevice(id: String) {
-        val removed = connectedDevices.remove(id)
-        discoveredPeers.remove(id)
+    fun getConnectedDevice(id: String): JSONObject? = connectedDevices[id]
+
+    fun removeRemoteDevice(idOrIp: String) {
+        var removed = connectedDevices.remove(idOrIp)
+        if (removed == null) {
+            val clean = idOrIp.split(":")[0].trim()
+            val matchKey = connectedDevices.entries.find { (_, dev) ->
+                val devIp = dev.optString("ipAddress").split(":")[0].trim()
+                devIp == clean
+            }?.key
+            if (matchKey != null) {
+                removed = connectedDevices.remove(matchKey)
+            }
+        }
+        discoveredPeers.remove(idOrIp)
         savePairedDevices()
         if (removed != null) {
             val ip = removed.optString("ipAddress").split(":")[0].trim()
+            val port = removed.optInt("httpPort", removed.optInt("port", 9120))
+            val token = removed.optString("authToken", removed.optString("token", "NODUS-FLEET-SECURE"))
             if (ip.isNotEmpty()) {
                 try {
                     val prefs = getSharedPreferences("nodus_fleet_prefs", Context.MODE_PRIVATE)
@@ -198,6 +239,9 @@ class FleetDaemonService : Service() {
                     set.remove(ip)
                     prefs.edit().putStringSet("known_companion_ips", set).apply()
                 } catch (_: Exception) {}
+
+                // Send unpair notification to remote peer node
+                httpRpcClient.unpairDevice(ip, port, token)
             }
             Log.i(TAG, "Peer disconnected: ${removed.optString("name")}")
             val intent = Intent(NodusIpcContract.ACTION_DEVICE_DISCONNECTED).apply {
@@ -206,6 +250,36 @@ class FleetDaemonService : Service() {
             sendBroadcast(intent, NodusIpcContract.PERMISSION_FLEET_ACCESS)
             notifyStateChanged()
         }
+    }
+
+    fun disconnectAll(reason: String = "server_stopped") {
+        val toRemove = mutableListOf<JSONObject>()
+        for ((id, dev) in connectedDevices) {
+            if (id != "poco-pad" && !dev.optBoolean("isLocal", false)) {
+                toRemove.add(dev)
+            }
+        }
+
+        for (dev in toRemove) {
+            val ip = dev.optString("ipAddress").split(":")[0].trim()
+            val port = dev.optInt("httpPort", dev.optInt("port", 9120))
+            val token = dev.optString("authToken", dev.optString("token", "NODUS-FLEET-SECURE"))
+            if (ip.isNotEmpty()) {
+                httpRpcClient.unpairDevice(ip, port, token)
+            }
+        }
+
+        connectedDevices.clear()
+        discoveredPeers.clear()
+        registerLocalDevice()
+        savePairedDevices()
+        try {
+            val prefs = getSharedPreferences("nodus_fleet_prefs", Context.MODE_PRIVATE)
+            prefs.edit().putStringSet("known_companion_ips", emptySet()).apply()
+        } catch (_: Exception) {}
+
+        Log.i(TAG, "All fleet connections disconnected (reason=$reason)")
+        notifyStateChanged()
     }
 
     private fun savePairedDevices() {
@@ -289,7 +363,8 @@ class FleetDaemonService : Service() {
             val port = dev.optInt("httpPort", dev.optInt("port", 9120))
             if (ip.isEmpty()) continue
 
-            httpRpcClient.fetchStats(ip, port,
+            val token = dev.optString("authToken", dev.optString("token", "NODUS-FLEET-SECURE"))
+            httpRpcClient.fetchStats(ip, port, token,
                 onSuccess = { stats ->
                     val cpu = stats.optInt("cpuLoad", stats.optInt("cpu", dev.optInt("cpuLoad", 15)))
                     val ram = stats.optString("ramUsage", dev.optString("ramUsage", "Active"))
@@ -302,11 +377,14 @@ class FleetDaemonService : Service() {
                     dev.put("cpuLoad", cpu)
                     dev.put("ramUsage", ram)
                     dev.put("battery", battery)
+                    val wasOffline = dev.optString("status") != "connected"
                     dev.put("status", "connected")
                     dev.put("lastSeen", System.currentTimeMillis())
 
                     connectedDevices[id] = dev
-                    notifyStateChanged()
+                    if (wasOffline) {
+                        notifyStateChanged()
+                    }
                 },
                 onError = {
                     // Node did not respond to this poll
@@ -317,18 +395,21 @@ class FleetDaemonService : Service() {
 
     private fun pruneStaleDevices() {
         val now = System.currentTimeMillis()
-        val staleIds = mutableListOf<String>()
+        var stateChanged = false
 
-        for ((id, dev) in connectedDevices) {
+        for ((_, dev) in connectedDevices) {
             if (dev.optBoolean("isLocal", false)) continue
             val lastSeen = dev.optLong("lastSeen", now)
             if (now - lastSeen > DEVICE_TIMEOUT_MS) {
-                staleIds.add(id)
+                if (dev.optString("status") != "offline") {
+                    dev.put("status", "offline")
+                    stateChanged = true
+                }
             }
         }
 
-        for (id in staleIds) {
-            removeRemoteDevice(id)
+        if (stateChanged) {
+            notifyStateChanged()
         }
     }
 
@@ -484,6 +565,7 @@ class FleetDaemonService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        disconnectAll("service_destroyed")
         telemetryRunnable?.let { mainHandler.removeCallbacks(it) }
         udpDiscoveryManager?.stop()
         udpDiscoveryManager = null

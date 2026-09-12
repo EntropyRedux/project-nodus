@@ -133,5 +133,7 @@ export interface RemoteAppShortcutsProps {
   onDeleteMyApp?: (id: string) => void;
   onRegisterApp?: (app: { name: string; path: string; category: AppCategory; description?: string }) => void;
   onAddMyApp?: () => void;
+  onRefreshPeerShortcuts?: () => void;
+  isSyncingPeerShortcuts?: boolean;
 }
 

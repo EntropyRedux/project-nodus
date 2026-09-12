@@ -94,7 +94,9 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
   onLaunchMyApp,
   onDeleteMyApp,
   onRegisterApp,
-  onAddMyApp
+  onAddMyApp,
+  onRefreshPeerShortcuts,
+  isSyncingPeerShortcuts = false
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'mine' | 'installed' | 'watched' | 'peer'>('mine');
   const [searchQuery, setSearchQuery] = useState('');
@@ -419,6 +421,17 @@ export const RemoteAppShortcuts: React.FC<RemoteAppShortcutsProps> = ({
             >
               <RefreshCw size={13} className={isScanningWatched ? 'animate-spin' : ''} />
               <span>{isScanningWatched ? 'Scanning Folders...' : 'Re-Scan All'}</span>
+            </button>
+          )}
+
+          {activeSubTab === 'peer' && (
+            <button
+              onClick={onRefreshPeerShortcuts}
+              disabled={isSyncingPeerShortcuts}
+              className="h-8 px-3 rounded-lg bg-[var(--surface-elevated)] hover:bg-[var(--surface-base)] text-xs font-mono font-medium text-[var(--text-heading)] border border-[var(--border-subtle)] flex items-center gap-1.5 transition disabled:opacity-50 cursor-pointer"
+            >
+              <RefreshCw size={13} className={isSyncingPeerShortcuts ? 'animate-spin' : ''} />
+              <span>{isSyncingPeerShortcuts ? 'Syncing Peers...' : 'Sync Peer Shortcuts'}</span>
             </button>
           )}
 

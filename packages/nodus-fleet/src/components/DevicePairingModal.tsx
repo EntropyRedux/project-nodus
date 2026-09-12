@@ -54,7 +54,7 @@ export const DevicePairingModal: React.FC<DevicePairingModalProps> = ({
 }) => {
   const [authToken, setAuthToken] = useState('');
   const [showToken, setShowToken] = useState(false);
-  const [pairedEndpoints, setPairedEndpoints] = useState<Set<string>>(new Set());
+  const [connectingEndpoints, setConnectingEndpoints] = useState<Set<string>>(new Set());
 
   // Direct manual IP connect form
   const [manualIp, setManualIp] = useState('');
@@ -67,8 +67,15 @@ export const DevicePairingModal: React.FC<DevicePairingModalProps> = ({
   if (!isOpen) return null;
 
   const handlePairClick = (peer: ScannedPeer) => {
-    const key = `${peer.ip}:${peer.port}`;
-    setPairedEndpoints(prev => new Set(prev).add(key));
+    const key = `${peer.ip}:${peer.port || 9120}`;
+    setConnectingEndpoints(prev => new Set(prev).add(key));
+    setTimeout(() => {
+      setConnectingEndpoints(prev => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }, 5000);
     onPair(peer.ip, peer.port, authToken, peer);
   };
 
@@ -78,7 +85,14 @@ export const DevicePairingModal: React.FC<DevicePairingModalProps> = ({
     const cleanIp = manualIp.trim();
     const portNum = parseInt(manualPort, 10) || 9120;
     const key = `${cleanIp}:${portNum}`;
-    setPairedEndpoints(prev => new Set(prev).add(key));
+    setConnectingEndpoints(prev => new Set(prev).add(key));
+    setTimeout(() => {
+      setConnectingEndpoints(prev => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }, 5000);
 
     const manualPeer: ScannedPeer = {
       ip: cleanIp,
@@ -369,19 +383,18 @@ export const DevicePairingModal: React.FC<DevicePairingModalProps> = ({
             </div>
           ) : (
             scannedPeers.map(peer => {
-              const endpointKey = `${peer.ip}:${peer.port}`;
+              const endpointKey = `${peer.ip}:${peer.port || 9120}`;
               const cleanPeerIp = (peer.ip || '').split(':')[0].trim();
-              const isPaired =
-                pairedEndpoints.has(endpointKey) ||
-                peer.isInFleet === true ||
-                Boolean(
-                  devices &&
-                    devices.some(d => {
-                      if (d.isLocal || d.id === 'poco-pad' || d.id === 'local') return false;
-                      const cleanDevIp = (d.ipAddress || '').split(':')[0].trim();
-                      return cleanDevIp === cleanPeerIp;
-                    })
-                );
+              const isPaired = Boolean(
+                devices &&
+                  devices.some(d => {
+                    if (d.isLocal || d.id === 'poco-pad' || d.id === 'local') return false;
+                    if (d.status !== 'connected' && d.status !== 'online') return false;
+                    const cleanDevIp = (d.ipAddress || '').split(':')[0].trim();
+                    return cleanDevIp === cleanPeerIp;
+                  })
+              );
+              const isConnecting = connectingEndpoints.has(endpointKey) && !isPaired;
               const isEditing = editingIp === peer.ip;
               const displayName = peer.nickname || peer.hostname || `Device (${peer.ip})`;
               const isUntrusted = peer.isUnknown === true || (!peer.isTrusted && !peer.hasAgent);
@@ -527,18 +540,20 @@ export const DevicePairingModal: React.FC<DevicePairingModalProps> = ({
                     {/* Connect Action Button */}
                     <button
                       onClick={() => handlePairClick(peer)}
-                      disabled={isPaired}
+                      disabled={isPaired || isConnecting}
                       className={`h-8 px-3.5 rounded-lg text-xs font-semibold font-mono flex items-center gap-1.5 transition active:scale-95 ${
                         isPaired
                           ? 'bg-emerald-600 text-white border border-emerald-500/30 cursor-default'
+                          : isConnecting
+                          ? 'bg-amber-600/80 text-white border border-amber-500/30 cursor-wait'
                           : peer.hasAgent
                           ? 'bg-[var(--accent-primary)] hover:opacity-90 text-[var(--m3-on-primary)] shadow-sm'
                           : 'bg-[var(--surface-elevated)] hover:bg-[var(--surface-container)] text-[var(--text-heading)] border border-[var(--border-active)] hover:border-[var(--accent-primary)] shadow-sm'
                       }`}
-                      title={isPaired ? 'Device already connected to fleet' : peer.hasAgent ? 'Pair with Nodus node' : `Pair with endpoint ${peer.ip}:${peer.port || 9120}`}
+                      title={isPaired ? 'Device already connected to fleet' : isConnecting ? 'Connecting...' : peer.hasAgent ? 'Pair with Nodus node' : `Pair with endpoint ${peer.ip}:${peer.port || 9120}`}
                     >
-                      {isPaired ? <Check size={14} /> : <Plus size={14} />}
-                      <span>{isPaired ? 'Connected' : 'Connect'}</span>
+                      {isPaired ? <Check size={14} /> : isConnecting ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                      <span>{isPaired ? 'Connected' : isConnecting ? 'Connecting...' : 'Connect'}</span>
                     </button>
                   </div>
                 </div>

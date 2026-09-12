@@ -162,31 +162,29 @@ class FleetHttpServer(
             }
 
             // Mandatory Token Authentication Gate on non-public endpoints
-            val isPublic = uri == "/api/status" || uri == "/api/info" || uri == "/api/ping" || uri == "/api/health" || uri == "/" || uri.startsWith("/api/fleet/pair-request") || uri.startsWith("/api/pair")
-            if (!isPublic) {
-                val isLoopback = clientIp == "127.0.0.1" || clientIp == "::1" || clientIp == "localhost"
-                val authHeader = headers["authorization"] ?: headers["x-nodus-auth-token"] ?: ""
-                val tokenCandidate = if (authHeader.startsWith("Bearer ", ignoreCase = true)) {
-                    authHeader.substring(7).trim()
-                } else {
-                    authHeader.trim()
-                }
+            val isLoopback = clientIp == "127.0.0.1" || clientIp == "::1" || clientIp == "localhost"
+            val authHeader = headers["authorization"] ?: headers["x-nodus-auth-token"] ?: ""
+            val tokenCandidate = if (authHeader.startsWith("Bearer ", ignoreCase = true)) {
+                authHeader.substring(7).trim()
+            } else {
+                authHeader.trim()
+            }
+            val isAuthed = isLoopback || tokenCandidate == "NODUS-FLEET-SECURE" || FleetDaemonService.instance?.isValidAuthToken(tokenCandidate) == true
 
-                val isAuthed = isLoopback || tokenCandidate == "NODUS-FLEET-SECURE" || FleetDaemonService.instance?.isValidAuthToken(tokenCandidate) == true
-                if (!isAuthed) {
-                    val errBytes = "{\"ok\":false,\"status\":\"error\",\"message\":\"Unauthorized: valid X-Nodus-Auth-Token required\"}".toByteArray(Charsets.UTF_8)
-                    val os: OutputStream = socket.getOutputStream()
-                    val allowOriginHeader = "Access-Control-Allow-Origin: ${origin ?: "*"}\r\n"
-                    val header = "HTTP/1.1 401 Unauthorized\r\n" +
-                            "Content-Type: application/json; charset=utf-8\r\n" +
-                            "Content-Length: ${errBytes.size}\r\n" +
-                            allowOriginHeader +
-                            "Connection: close\r\n\r\n"
-                    os.write(header.toByteArray(Charsets.UTF_8))
-                    os.write(errBytes)
-                    os.flush()
-                    return
-                }
+            val isPublic = uri == "/api/status" || uri == "/api/info" || uri == "/api/ping" || uri == "/api/health" || uri == "/" || uri.startsWith("/api/fleet/pair-request") || uri.startsWith("/api/pair") || uri.startsWith("/api/fleet/unpair") || uri.startsWith("/api/unpair")
+            if (!isPublic && !isAuthed) {
+                val errBytes = "{\"ok\":false,\"status\":\"error\",\"message\":\"Unauthorized: valid X-Nodus-Auth-Token required\"}".toByteArray(Charsets.UTF_8)
+                val os: OutputStream = socket.getOutputStream()
+                val allowOriginHeader = "Access-Control-Allow-Origin: ${origin ?: "*"}\r\n"
+                val header = "HTTP/1.1 401 Unauthorized\r\n" +
+                        "Content-Type: application/json; charset=utf-8\r\n" +
+                        "Content-Length: ${errBytes.size}\r\n" +
+                        allowOriginHeader +
+                        "Connection: close\r\n\r\n"
+                os.write(header.toByteArray(Charsets.UTF_8))
+                os.write(errBytes)
+                os.flush()
+                return
             }
 
             // Route dispatch
@@ -306,11 +304,19 @@ class FleetHttpServer(
                             put("lastSeen", System.currentTimeMillis())
                         }
 
-                        if (isAck) {
-                            val token = "nodus-fleet-" + java.util.UUID.randomUUID().toString()
+                        val providedToken = reqObj.optString("token", reqObj.optString("authToken", ""))
+                        val hasValidSecret = isAuthed || providedToken == "NODUS-FLEET-SECURE" || (providedToken.isNotBlank() && FleetDaemonService.instance?.isValidAuthToken(providedToken) == true)
+
+                        if (isAck || hasValidSecret) {
+                            val token = if (providedToken.isNotBlank()) providedToken else "nodus-fleet-" + java.util.UUID.randomUUID().toString()
                             pairedDevice.put("token", token)
                             pairedDevice.put("authToken", token)
                             FleetDaemonService.instance?.addOrUpdateRemoteDevice(pairedDevice)
+
+                            // Also notify WebView so IncomingPairModal closes or state refreshes
+                            com.nodus.fleet.FleetActivity.instance?.evaluateJs(
+                                "window.dispatchEvent(new CustomEvent('fleet-state-changed'));"
+                            )
 
                             val resp = JSONObject().apply {
                                 put("status", "success")
@@ -342,6 +348,40 @@ class FleetHttpServer(
                     } catch (e: Exception) {
                         statusCode = 400
                         responseBytes = "{\"error\":\"Invalid pair request\"}".toByteArray(Charsets.UTF_8)
+                        contentType = "application/json; charset=utf-8"
+                    }
+                }
+
+                uri.startsWith("/api/fleet/unpair") || uri.startsWith("/api/unpair") -> {
+                    try {
+                        val clientIp = socket.inetAddress?.hostAddress ?: "127.0.0.1"
+                        val reqObj = if (body.isNotBlank()) JSONObject(body) else JSONObject()
+                        val devId = reqObj.optString("deviceId", reqObj.optString("id", reqObj.optString("sourceDevice", "")))
+                        val senderIp = reqObj.optString("ipAddress", reqObj.optString("ip", clientIp))
+
+                        Log.i(TAG, "Incoming unpair request from ID='$devId', IP='$senderIp'")
+                        if (devId.isNotBlank()) {
+                            FleetDaemonService.instance?.removeRemoteDevice(devId)
+                        }
+                        if (senderIp.isNotBlank()) {
+                            FleetDaemonService.instance?.removeRemoteDevice(senderIp)
+                        }
+
+                        com.nodus.fleet.FleetActivity.instance?.evaluateJs(
+                            "window.dispatchEvent(new CustomEvent('fleet-state-changed'));"
+                        )
+
+                        val resp = JSONObject().apply {
+                            put("ok", true)
+                            put("status", "success")
+                            put("message", "Device unpaired successfully")
+                        }
+                        responseBytes = resp.toString().toByteArray(Charsets.UTF_8)
+                        contentType = "application/json; charset=utf-8"
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error handling unpair request: ${e.message}", e)
+                        statusCode = 400
+                        responseBytes = "{\"ok\":false,\"error\":\"Invalid unpair request\"}".toByteArray(Charsets.UTF_8)
                         contentType = "application/json; charset=utf-8"
                     }
                 }
@@ -423,14 +463,23 @@ class FleetHttpServer(
                         val pid = reqObj.optInt("pid", 0)
                         val pkg = reqObj.optString("package", reqObj.optString("name", ""))
                         val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-                        if (pkg.isNotBlank()) {
+                        var killed = false
+                        if (pkg.isNotBlank() && !pkg.contains("com.nodus")) {
                             am?.killBackgroundProcesses(pkg)
-                        } else if (pid > 0) {
+                            try {
+                                val pb = ProcessBuilder("/system/bin/sh", "-c", "am force-stop $pkg")
+                                val p = pb.start()
+                                p.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)
+                                killed = true
+                            } catch (_: Exception) {}
+                        } else if (pid > 0 && pid != android.os.Process.myPid()) {
                             android.os.Process.killProcess(pid)
+                            killed = true
                         }
                         val resp = JSONObject().apply {
                             put("ok", true)
                             put("status", "success")
+                            put("killed", killed)
                         }
                         responseBytes = resp.toString().toByteArray(Charsets.UTF_8)
                         contentType = "application/json; charset=utf-8"
@@ -620,6 +669,33 @@ class FleetHttpServer(
                                 executed = NodusAccessibilityService.performPowerDialog()
                                 if (!executed) message = "Accessibility permission required for Power Dialog"
                             }
+                            "screenshot", "take_screenshot" -> {
+                                executed = NodusAccessibilityService.performTakeScreenshot()
+                                if (!executed) message = "Accessibility permission required for Screenshot action"
+                            }
+                            "select_all", "selectall" -> {
+                                executed = NodusAccessibilityService.performContextAction("select_all")
+                                if (!executed) message = "No active text field focused or Accessibility disabled"
+                            }
+                            "cut" -> {
+                                executed = NodusAccessibilityService.performContextAction("cut")
+                                if (!executed) message = "No active text field focused or Accessibility disabled"
+                            }
+                            "copy" -> {
+                                executed = NodusAccessibilityService.performContextAction("copy")
+                                if (!executed) message = "No active text field focused or Accessibility disabled"
+                            }
+                            "paste" -> {
+                                executed = NodusAccessibilityService.performContextAction("paste")
+                                if (!executed) message = "No active text field focused or Accessibility disabled"
+                            }
+                            "undo" -> {
+                                executed = NodusAccessibilityService.performContextAction("undo")
+                                if (!executed) message = "No active text field focused or Accessibility disabled"
+                            }
+                            "keyboard", "toggle_keyboard" -> {
+                                executed = NodusAccessibilityService.toggleSoftKeyboard(context)
+                            }
                         }
 
                         val resp = JSONObject().apply {
@@ -638,23 +714,239 @@ class FleetHttpServer(
                     }
                 }
 
+                uri.startsWith("/api/system/overlay") -> {
+                    try {
+                        val reqObj = if (body.isNotBlank()) JSONObject(body) else JSONObject()
+                        val action = reqObj.optString("action", "status")
+                        val hasPermission = com.nodus.fleet.overlay.MouseOverlayManager.isPermissionGranted(context)
+
+                        if (reqObj.has("autoHide")) {
+                            com.nodus.fleet.overlay.MouseOverlayManager.autoHide = reqObj.optBoolean("autoHide", false)
+                        }
+
+                        if (action == "request_permission" && !hasPermission) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                                val intent = Intent(
+                                    android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    android.net.Uri.parse("package:${context.packageName}")
+                                ).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                context.startActivity(intent)
+                            }
+                        } else if (action == "enable" || action == "show") {
+                            com.nodus.fleet.overlay.MouseOverlayManager.setEnabled(true, context)
+                        } else if (action == "disable" || action == "hide") {
+                            com.nodus.fleet.overlay.MouseOverlayManager.setEnabled(false, context)
+                        } else if (action == "toggle") {
+                            com.nodus.fleet.overlay.MouseOverlayManager.toggle(context)
+                        }
+
+                        val hotspot = com.nodus.fleet.overlay.MouseOverlayManager.getHotspot()
+                        val dm = context.resources.displayMetrics
+                        val resp = JSONObject().apply {
+                            put("ok", true)
+                            put("hasPermission", hasPermission)
+                            put("isEnabled", com.nodus.fleet.overlay.MouseOverlayManager.isEnabled)
+                            put("isActive", com.nodus.fleet.overlay.MouseOverlayManager.isOverlayActive())
+                            put("isVisible", com.nodus.fleet.overlay.MouseOverlayManager.isCursorVisible())
+                            put("autoHide", com.nodus.fleet.overlay.MouseOverlayManager.autoHide)
+                            put("x", hotspot.first)
+                            put("y", hotspot.second)
+                            put("screenWidth", dm.widthPixels)
+                            put("screenHeight", dm.heightPixels)
+                        }
+                        responseBytes = resp.toString().toByteArray(Charsets.UTF_8)
+                        contentType = "application/json; charset=utf-8"
+                    } catch (e: Exception) {
+                        statusCode = 500
+                        responseBytes = "{\"ok\":false,\"error\":\"${e.message}\"}".toByteArray(Charsets.UTF_8)
+                        contentType = "application/json; charset=utf-8"
+                    }
+                }
+
                 uri.startsWith("/api/input/mouse/click") || uri.startsWith("/api/input/click") -> {
                     try {
                         val reqObj = if (body.isNotBlank()) JSONObject(body) else JSONObject()
                         val dm = context.resources.displayMetrics
-                        val rawX = reqObj.optDouble("x", reqObj.optDouble("click_x", 0.0))
-                        val rawY = reqObj.optDouble("y", reqObj.optDouble("click_y", 0.0))
-                        
-                        val targetX = if (rawX <= 100.0 && rawX > 0.0) (rawX / 100.0 * dm.widthPixels).toFloat() else rawX.toFloat()
-                        val targetY = if (rawY <= 100.0 && rawY > 0.0) (rawY / 100.0 * dm.heightPixels).toFloat() else rawY.toFloat()
+                        val rawX = reqObj.optDouble("x", reqObj.optDouble("click_x", -1.0))
+                        val rawY = reqObj.optDouble("y", reqObj.optDouble("click_y", -1.0))
+                        val button = reqObj.optString("button", "left").lowercase()
 
-                        val executed = NodusAccessibilityService.dispatchTap(targetX, targetY)
+                        val hotspot = com.nodus.fleet.overlay.MouseOverlayManager.getHotspot()
+                        val targetX = if (rawX in 0.0..100.0) {
+                            (rawX / 100.0 * dm.widthPixels).toFloat()
+                        } else if (rawX > 100.0) {
+                            rawX.toFloat()
+                        } else {
+                            hotspot.first
+                        }
+
+                        val targetY = if (rawY in 0.0..100.0) {
+                            (rawY / 100.0 * dm.heightPixels).toFloat()
+                        } else if (rawY > 100.0) {
+                            rawY.toFloat()
+                        } else {
+                            hotspot.second
+                        }
+
+                        val executed = if (button == "right") {
+                            NodusAccessibilityService.performBack()
+                        } else {
+                            NodusAccessibilityService.dispatchTap(targetX, targetY)
+                        }
                         val resp = JSONObject().apply {
                             put("ok", executed)
                             put("status", if (executed) "success" else "action_requires_accessibility")
                             put("x", targetX)
                             put("y", targetY)
+                            put("button", button)
                             put("accessibilityEnabled", NodusAccessibilityService.isEnabled(context))
+                        }
+                        responseBytes = resp.toString().toByteArray(Charsets.UTF_8)
+                        contentType = "application/json; charset=utf-8"
+                    } catch (e: Exception) {
+                        statusCode = 500
+                        responseBytes = "{\"ok\":false,\"error\":\"${e.message}\"}".toByteArray(Charsets.UTF_8)
+                        contentType = "application/json; charset=utf-8"
+                    }
+                }
+
+                uri.startsWith("/api/input/mouse/scroll") || uri.startsWith("/api/input/scroll") -> {
+                    try {
+                        val reqObj = if (body.isNotBlank()) JSONObject(body) else JSONObject()
+                        val dy = reqObj.optDouble("dy", 0.0)
+                        val dm = context.resources.displayMetrics
+                        val centerX = dm.widthPixels / 2f
+                        val centerY = dm.heightPixels / 2f
+                        val endY = if (dy > 0) (centerY - 350f).coerceAtLeast(100f) else (centerY + 350f).coerceAtMost(dm.heightPixels - 100f)
+                        val executed = NodusAccessibilityService.dispatchSwipe(centerX, centerY, centerX, endY, 200)
+                        val resp = JSONObject().apply {
+                            put("ok", executed)
+                            put("status", if (executed) "success" else "action_requires_accessibility")
+                            put("accessibilityEnabled", NodusAccessibilityService.isEnabled(context))
+                        }
+                        responseBytes = resp.toString().toByteArray(Charsets.UTF_8)
+                        contentType = "application/json; charset=utf-8"
+                    } catch (e: Exception) {
+                        statusCode = 500
+                        responseBytes = "{\"ok\":false,\"error\":\"${e.message}\"}".toByteArray(Charsets.UTF_8)
+                        contentType = "application/json; charset=utf-8"
+                    }
+                }
+
+                uri.startsWith("/api/input/mouse/move") -> {
+                    try {
+                        val reqObj = if (body.isNotBlank()) JSONObject(body) else JSONObject()
+                        val dx = reqObj.optDouble("dx", 0.0).toFloat()
+                        val dy = reqObj.optDouble("dy", 0.0).toFloat()
+                        val isDrag = reqObj.optBoolean("isDrag", false) || reqObj.optBoolean("isClickHeld", false)
+                        
+                        // 1. Move the visible floating mouse cursor overlay: prioritize exact screen percentage
+                        if (reqObj.has("pctX") && reqObj.has("pctY")) {
+                            val px = reqObj.optDouble("pctX", 50.0).toFloat()
+                            val py = reqObj.optDouble("pctY", 50.0).toFloat()
+                            com.nodus.fleet.overlay.MouseOverlayManager.moveToPercent(px, py, context)
+                        } else if (dx != 0f || dy != 0f) {
+                            com.nodus.fleet.overlay.MouseOverlayManager.moveTo(dx, dy, context)
+                        }
+
+                        // 2. Continuous gesture swipe when dragging
+                        if (isDrag && (Math.abs(dx) > 1f || Math.abs(dy) > 1f)) {
+                            val hotspot = com.nodus.fleet.overlay.MouseOverlayManager.getHotspot()
+                            val dm = context.resources.displayMetrics
+                            val startX = hotspot.first
+                            val startY = hotspot.second
+                            val endX = (startX + dx * 2.5f).coerceIn(50f, dm.widthPixels - 50f)
+                            val endY = (startY + dy * 2.5f).coerceIn(50f, dm.heightPixels - 50f)
+                            NodusAccessibilityService.dispatchSwipe(startX, startY, endX, endY, 100)
+                        }
+                    } catch (_: Exception) {}
+
+                    val resp = JSONObject().apply {
+                        put("ok", true)
+                        put("status", "success")
+                    }
+                    responseBytes = resp.toString().toByteArray(Charsets.UTF_8)
+                    contentType = "application/json; charset=utf-8"
+                }
+
+                uri.startsWith("/api/input/keyboard/text") || uri.startsWith("/api/input/text") -> {
+                    try {
+                        val reqObj = if (body.isNotBlank()) JSONObject(body) else JSONObject()
+                        val text = reqObj.optString("text", reqObj.optString("content", ""))
+                        if (text.isNotEmpty()) {
+                            // 1. Try first via Accessibility Service on focused field
+                            var injected = NodusAccessibilityService.performInjectText(text)
+                            if (!injected) {
+                                // 2. Copy to clipboard as universal fallback and paste
+                                try {
+                                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                                    val clip = android.content.ClipData.newPlainText("Nodus Remote Text", text)
+                                    cm?.setPrimaryClip(clip)
+                                    NodusAccessibilityService.performContextAction("paste")
+                                    injected = true
+                                } catch (_: Exception) {}
+                            }
+                            if (!injected) {
+                                val cleanText = text.replace(" ", "%s").replace("'", "\\'").replace("\"", "\\\"").replace("&", "\\&")
+                                try {
+                                    val pb = ProcessBuilder("/system/bin/sh", "-c", "input text \"$cleanText\"")
+                                    val p = pb.start()
+                                    p.waitFor(1, java.util.concurrent.TimeUnit.SECONDS)
+                                } catch (_: Exception) {}
+                            }
+
+                            if (text.endsWith("\n") || text.contains("\n")) {
+                                try {
+                                    val ep = ProcessBuilder("/system/bin/sh", "-c", "input keyevent 66").start()
+                                    ep.waitFor(1, java.util.concurrent.TimeUnit.SECONDS)
+                                } catch (_: Exception) {}
+                            }
+                        }
+                        val resp = JSONObject().apply {
+                            put("ok", true)
+                            put("status", "success")
+                            put("injected", text)
+                        }
+                        responseBytes = resp.toString().toByteArray(Charsets.UTF_8)
+                        contentType = "application/json; charset=utf-8"
+                    } catch (e: Exception) {
+                        statusCode = 500
+                        responseBytes = "{\"ok\":false,\"error\":\"${e.message}\"}".toByteArray(Charsets.UTF_8)
+                        contentType = "application/json; charset=utf-8"
+                    }
+                }
+
+                uri.startsWith("/api/input/keyboard/hotkey") || uri.startsWith("/api/input/hotkey") -> {
+                    try {
+                        val reqObj = if (body.isNotBlank()) JSONObject(body) else JSONObject()
+                        val keys = reqObj.optJSONArray("keys") ?: JSONArray()
+                        for (i in 0 until keys.length()) {
+                            val k = keys.optString(i, "").toLowerCase()
+                            val keycode = when (k) {
+                                "enter", "return" -> 66
+                                "backspace", "delete" -> 67
+                                "tab" -> 61
+                                "space" -> 62
+                                "escape", "esc" -> 111
+                                "home" -> 3
+                                "back" -> 4
+                                "volume_up" -> 24
+                                "volume_down" -> 25
+                                "media_play_pause" -> 85
+                                else -> null
+                            }
+                            if (keycode != null) {
+                                try {
+                                    val p = ProcessBuilder("/system/bin/sh", "-c", "input keyevent $keycode").start()
+                                    p.waitFor(1, java.util.concurrent.TimeUnit.SECONDS)
+                                } catch (_: Exception) {}
+                            }
+                        }
+                        val resp = JSONObject().apply {
+                            put("ok", true)
+                            put("status", "success")
                         }
                         responseBytes = resp.toString().toByteArray(Charsets.UTF_8)
                         contentType = "application/json; charset=utf-8"

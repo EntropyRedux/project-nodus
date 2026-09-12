@@ -23,12 +23,14 @@ interface FleetState {
   selectDevice: (id: string | null) => void;
   setDevices: (devices: DeviceInfo[]) => void;
   setDiscoveredNodes: (nodes: any[]) => void;
-  removeDevice: (id: string) => void;
+  removeDevice: (id: string, notifyRemote?: boolean) => void;
   setSubnet: (subnet: string) => void;
   scanSubnet: (subnet: string) => Promise<void>;
-  connectDeviceManual: (device: { name: string; ip: string; port: number; type: DeviceType; os?: string }) => void;
+  connectDeviceManual: (device: { id?: string; name: string; ip: string; port?: number; type: DeviceType; os?: string; authToken?: string; token?: string }) => void;
+  resetAllFleetData: () => void;
   pingDevice: (id: string) => Promise<{ ok: boolean; latencyMs: number }>;
   syncDeviceState: (id: string) => Promise<boolean>;
+  pollRemoteDevices: () => Promise<void>;
   setScanning: (isScanning: boolean) => void;
   lockWorkstation: () => Promise<boolean>;
 }
@@ -137,9 +139,50 @@ export const useFleetStore = create<FleetState>((set, get) => ({
 
   refreshLanCount: async () => {
     try {
-      const count = await TauriService.getLanDeviceCount(get().subnet);
-      if (count > 0 || get().lanDeviceCount === 0) {
-        set({ lanDeviceCount: count });
+      const devices = await TauriService.getLanDevices(get().subnet);
+      if (devices && devices.length > 0) {
+        set({ lanDeviceCount: devices.length });
+
+        const existing = get().scannedPeers;
+        const trusted = get().trustedDevices;
+        const currentDevices = get().devices;
+
+        const enriched: ScannedPeer[] = devices.map((peer: ScannedPeer) => {
+          const trustInfo = trusted[peer.ip];
+          const isTrusted = Boolean(trustInfo && trustInfo.trusted);
+          const isUnknown = !trustInfo;
+          const cleanPeerIp = (peer.ip || '').split(':')[0].trim();
+          const isInFleet = currentDevices.some((d) => {
+            if (d.isLocal || d.id === 'this-pc' || d.id === 'local') return false;
+            if (d.status !== 'connected' && d.status !== 'online') return false;
+            return (d.ipAddress || '').split(':')[0].trim() === cleanPeerIp;
+          });
+          const existingPeer = existing.find((p) => (p.ip || '').split(':')[0].trim() === cleanPeerIp);
+
+          return {
+            ...peer,
+            ...(existingPeer || {}),
+            isInFleet,
+            nickname: trustInfo?.nickname || existingPeer?.nickname,
+            isTrusted,
+            isUnknown,
+          };
+        });
+
+        // Retain any existing peers not found in the current ARP table
+        for (const ex of existing) {
+          const cleanIp = (ex.ip || '').split(':')[0].trim();
+          if (!enriched.some((e) => (e.ip || '').split(':')[0].trim() === cleanIp)) {
+            enriched.push(ex);
+          }
+        }
+
+        set({ scannedPeers: enriched });
+      } else {
+        const count = await TauriService.getLanDeviceCount(get().subnet);
+        if (count > 0 || get().lanDeviceCount === 0) {
+          set({ lanDeviceCount: count });
+        }
       }
     } catch (_) {}
   },
@@ -183,19 +226,60 @@ export const useFleetStore = create<FleetState>((set, get) => ({
     const current = get().isServerRunning;
     const target = !current;
     const port = get().serverConfig.port || 9120;
-    const result = await TauriService.setServerRunning(target, port);
-    set({ isServerRunning: result });
-    set((state) => ({
-      devices: state.devices.map((d) =>
-        d.isLocal
-          ? {
-              ...d,
-              status: result ? 'online' : 'offline',
-            }
-          : d
-      ),
-    }));
-    if (result) {
+
+    if (!target) {
+      // Stopping server: Notify all connected companion devices and drop connections
+      const remoteDevices = get().devices.filter((d) => !d.isLocal && d.id !== 'this-pc' && d.id !== 'local');
+      for (const d of remoteDevices) {
+        const cleanIp = (d.ipAddress || '').split(':')[0].trim();
+        const peerPort = (d as any).port || (d as any).httpPort || 9120;
+        const token = (d as any).authToken || (d as any).token || get().serverConfig.auth_token || 'NODUS-FLEET-SECURE';
+        if (cleanIp && cleanIp !== '127.0.0.1') {
+          fetch(`http://${cleanIp}:${peerPort}/api/fleet/unpair`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Nodus-Auth-Token': token,
+            },
+            body: JSON.stringify({
+              id: 'desktop-host',
+              deviceId: 'desktop-host',
+              name: 'Redux (PC)',
+              ipAddress: '192.168.1.177',
+              action: 'server_stopped',
+              timestamp: Date.now(),
+            }),
+          }).catch(() => {});
+        }
+        TauriService.unregisterNode(d.id);
+        if (cleanIp) TauriService.unregisterNode(cleanIp);
+      }
+
+      const localOnly = get().devices.filter((d) => d.isLocal || d.id === 'this-pc' || d.id === 'local')
+        .map((d) => ({ ...d, status: 'offline' as const }));
+
+      set({
+        isServerRunning: false,
+        devices: localOnly,
+        activeDeviceId: 'local',
+        scannedPeers: [],
+      });
+
+      try {
+        localStorage.setItem('nodus_desktop_paired_devices', JSON.stringify(localOnly));
+      } catch (_) {}
+
+      await TauriService.setServerRunning(false, port);
+    } else {
+      const result = await TauriService.setServerRunning(true, port);
+      set({ isServerRunning: result });
+      set((state) => ({
+        devices: state.devices.map((d) =>
+          d.isLocal || d.id === 'this-pc' || d.id === 'local'
+            ? { ...d, status: 'online' as const }
+            : d
+        ),
+      }));
       get().refreshLanCount();
     }
   },
@@ -224,15 +308,14 @@ export const useFleetStore = create<FleetState>((set, get) => ({
       const currentDevices = get().devices;
       const enrichedResults: ScannedPeer[] = (results || []).map((peer) => {
         const trustInfo = trusted[peer.ip];
-        const isTrusted = Boolean(peer.hasAgent || (trustInfo && trustInfo.trusted));
-        const isUnknown = !peer.hasAgent && !trustInfo;
+        const isTrusted = Boolean(trustInfo && trustInfo.trusted);
+        const isUnknown = !trustInfo;
         const cleanPeerIp = (peer.ip || '').split(':')[0].trim();
-        const isInFleet =
-          peer.isInFleet ||
-          currentDevices.some((d) => {
-            if (d.isLocal || d.id === 'this-pc' || d.id === 'local') return false;
-            return (d.ipAddress || '').split(':')[0].trim() === cleanPeerIp;
-          });
+        const isInFleet = currentDevices.some((d) => {
+          if (d.isLocal || d.id === 'this-pc' || d.id === 'local') return false;
+          if (d.status !== 'connected' && d.status !== 'online') return false;
+          return (d.ipAddress || '').split(':')[0].trim() === cleanPeerIp;
+        });
 
         return {
           ...peer,
@@ -280,7 +363,7 @@ export const useFleetStore = create<FleetState>((set, get) => ({
         nickname: trustInfo?.nickname,
         hasAgent: true,
         isInFleet: current.some(
-          (d) => (!d.isLocal && (d.ipAddress || '').split(':')[0].trim() === ip) || d.id === n.id
+          (d) => !d.isLocal && (d.status === 'connected' || d.status === 'online') && (((d.ipAddress || '').split(':')[0].trim() === ip) || d.id === n.id)
         ),
         isTrusted: Boolean(trustInfo && trustInfo.trusted),
         isUnknown: !trustInfo,
@@ -350,33 +433,82 @@ export const useFleetStore = create<FleetState>((set, get) => ({
     });
   },
 
-  removeDevice: (id) => {
+  removeDevice: (id, notifyRemote = true) => {
     if (id === 'this-pc' || id === 'local') return; // Protect local host workstation
-    TauriService.unregisterNode(id);
-    const targetDev = get().devices.find((d) => d.id === id);
-    const targetIp = targetDev ? (targetDev.ipAddress || '').split(':')[0].trim() : '';
+    const cleanId = id.trim();
+    const cleanTarget = cleanId.split(':')[0].trim();
+    TauriService.unregisterNode(cleanId);
+    if (cleanTarget !== cleanId) {
+      TauriService.unregisterNode(cleanTarget);
+    }
+    const targetDev = get().devices.find((d) =>
+      d.id === cleanId ||
+      (d.ipAddress && (d.ipAddress.split(':')[0].trim() === cleanTarget || d.ipAddress === cleanId))
+    );
+    const targetIp = targetDev ? (targetDev.ipAddress || '').split(':')[0].trim() : (cleanTarget.includes('.') ? cleanTarget : '');
+    const targetPort = targetDev ? ((targetDev as any).port || (targetDev as any).httpPort || 9120) : 9120;
+    const targetToken = targetDev ? ((targetDev as any).authToken || (targetDev as any).token || get().serverConfig.auth_token || get().serverConfig.pairingSecret || 'NODUS-FLEET-SECURE') : 'NODUS-FLEET-SECURE';
+
+    // Dispatch unpair notification to remote peer so it also drops Desktop
+    if (notifyRemote && targetIp && targetIp !== '127.0.0.1') {
+      fetch(`http://${targetIp}:${targetPort}/api/fleet/unpair`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Nodus-Auth-Token': targetToken,
+        },
+        body: JSON.stringify({
+          id: 'desktop-host',
+          deviceId: 'desktop-host',
+          ipAddress: '192.168.1.177',
+          action: 'unpair',
+        }),
+      }).catch(() => {});
+    }
+
     set((state) => {
-      const nextDevices = state.devices.filter((d) => d.id !== id);
+      const nextDevices = state.devices.filter((d) => {
+        if (d.isLocal || d.id === 'this-pc' || d.id === 'local') return true;
+        const dIp = (d.ipAddress || '').split(':')[0].trim();
+        if (d.id === cleanId) return false;
+        if (targetIp && dIp === targetIp) return false;
+        if (cleanTarget && (dIp === cleanTarget || d.id === `node-${cleanTarget.replace(/[\.:]/g, '-')}`)) return false;
+        return true;
+      });
       try {
         localStorage.setItem('nodus_desktop_paired_devices', JSON.stringify(nextDevices));
       } catch (_) {}
+
+      const nextTrusted = { ...state.trustedDevices };
+      if (targetIp && nextTrusted[targetIp]) {
+        delete nextTrusted[targetIp];
+      }
+      if (cleanTarget && nextTrusted[cleanTarget]) {
+        delete nextTrusted[cleanTarget];
+      }
+      try {
+        localStorage.setItem('nodus_trusted_devices', JSON.stringify(nextTrusted));
+      } catch (_) {}
+
       return {
         devices: nextDevices,
+        trustedDevices: nextTrusted,
         scannedPeers: targetIp
           ? state.scannedPeers.map((p) =>
               (p.ip || '').split(':')[0].trim() === targetIp ? { ...p, isInFleet: false } : p
             )
           : state.scannedPeers,
-        selectedDeviceId: state.selectedDeviceId === id ? null : state.selectedDeviceId,
-        activeDeviceId: state.activeDeviceId === id ? null : state.activeDeviceId,
+        selectedDeviceId: state.selectedDeviceId === cleanId ? null : state.selectedDeviceId,
+        activeDeviceId: state.activeDeviceId === cleanId ? null : state.activeDeviceId,
       };
     });
   },
 
   connectDeviceManual: (device) => {
     const cleanIp = device.ip.split(':')[0].trim();
+    const token = (device as any).authToken || (device as any).token || '';
     const newDevice: DeviceInfo = {
-      id: `node-${cleanIp.replace(/[\.:]/g, '-')}`,
+      id: (device as any).id || `node-${cleanIp.replace(/[\.:]/g, '-')}`,
       name: device.name || `Node (${cleanIp})`,
       type: device.type || 'tablet',
       os: (device.os as any) || 'android',
@@ -387,6 +519,8 @@ export const useFleetStore = create<FleetState>((set, get) => ({
       cpuLoad: 12,
       latencyMs: 12,
       isLocal: false,
+      authToken: token,
+      token: token,
     };
 
     set((state) => {
@@ -397,15 +531,50 @@ export const useFleetStore = create<FleetState>((set, get) => ({
       try {
         localStorage.setItem('nodus_desktop_paired_devices', JSON.stringify(updatedDevices));
       } catch (_) {}
+
+      const updatedTrusted = {
+        ...state.trustedDevices,
+        [cleanIp]: {
+          nickname: newDevice.name,
+          trusted: true,
+          addedAt: Date.now(),
+        },
+      };
+      try {
+        localStorage.setItem('nodus_trusted_devices', JSON.stringify(updatedTrusted));
+      } catch (_) {}
+
       const updatedPeers = state.scannedPeers.map((p) =>
-        (p.ip || '').split(':')[0].trim() === cleanIp ? { ...p, isInFleet: true } : p
+        (p.ip || '').split(':')[0].trim() === cleanIp
+          ? { ...p, isInFleet: true, isTrusted: true, isUnknown: false, nickname: newDevice.name }
+          : p
       );
       return {
         devices: updatedDevices,
+        trustedDevices: updatedTrusted,
         scannedPeers: updatedPeers,
         selectedDeviceId: newDevice.id,
         activeDeviceId: newDevice.id,
       };
+    });
+  },
+
+  resetAllFleetData: () => {
+    try {
+      localStorage.removeItem('nodus_desktop_paired_devices');
+      localStorage.removeItem('nodus_trusted_devices');
+      localStorage.removeItem('nodus_clipboard_history');
+    } catch (_) {}
+
+    TauriService.unregisterAllNodes().catch(() => {});
+
+    set({
+      devices: [DEFAULT_LOCAL_HOST],
+      trustedDevices: {},
+      scannedPeers: [],
+      selectedDeviceId: 'this-pc',
+      activeDeviceId: 'this-pc',
+      lanDeviceCount: 0,
     });
   },
 
@@ -433,13 +602,68 @@ export const useFleetStore = create<FleetState>((set, get) => ({
 
   syncDeviceState: async (id: string) => {
     const res = await get().pingDevice(id);
-    if (res.ok) {
-      set((state) => ({
-        devices: state.devices.map((d) => (d.id === id ? { ...d, status: 'connected', latencyMs: res.latencyMs } : d)),
-      }));
-      return true;
+    set((state) => ({
+      devices: state.devices.map((d) => (d.id === id ? { ...d, status: res.ok ? 'connected' : 'offline', latencyMs: res.latencyMs } : d)),
+    }));
+    return res.ok;
+  },
+
+  pollRemoteDevices: async () => {
+    const devices = get().devices;
+    const remoteDevices = devices.filter((d) => !d.isLocal);
+    if (remoteDevices.length === 0) return;
+
+    let hasChanged = false;
+    const updated = await Promise.all(
+      devices.map(async (dev) => {
+        if (dev.isLocal) return dev;
+        const rawIp = (dev.ipAddress || '').split(':')[0].trim();
+        if (!rawIp || rawIp === '127.0.0.1' || rawIp === 'localhost') return dev;
+
+        const port = (dev as any).port || (dev as any).httpPort || 9120;
+        const token = (dev as any).authToken || (dev as any).token || get().serverConfig.auth_token || get().serverConfig.pairingSecret || 'NODUS-FLEET-SECURE';
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 2500);
+          const start = performance.now();
+          const res = await fetch(`http://${rawIp}:${port}/api/status`, {
+            headers: { 'X-Nodus-Auth-Token': token },
+            signal: controller.signal,
+          });
+          clearTimeout(timer);
+          const latencyMs = Math.round(performance.now() - start);
+
+          if (res.ok) {
+            const data = await res.json();
+            const nextStatus: 'connected' = 'connected';
+            const nextBattery = data.battery ?? dev.battery;
+            const nextCpu = data.cpuLoad ?? dev.cpuLoad;
+            const nextRam = data.ramUsage ?? dev.ramUsage;
+            if (dev.status !== nextStatus || dev.cpuLoad !== nextCpu || dev.battery !== nextBattery) {
+              hasChanged = true;
+            }
+            return {
+              ...dev,
+              status: nextStatus,
+              latencyMs,
+              battery: nextBattery,
+              cpuLoad: nextCpu,
+              ramUsage: nextRam,
+            };
+          } else {
+            if (dev.status !== 'offline') hasChanged = true;
+            return { ...dev, status: 'offline' as const, latencyMs: -1 };
+          }
+        } catch (_) {
+          if (dev.status !== 'offline') hasChanged = true;
+          return { ...dev, status: 'offline' as const, latencyMs: -1 };
+        }
+      })
+    );
+
+    if (hasChanged) {
+      set({ devices: updated });
     }
-    return false;
   },
 
   setScanning: (isScanning) => set({ isScanning }),

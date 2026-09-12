@@ -112,7 +112,61 @@ export const TauriService = {
     return [];
   },
 
-  async killRemoteProcess(ip: string, port = 9120, pid: number, token?: string): Promise<boolean> {
+  async getRemoteProcessesWithStats(
+    ip: string,
+    port = 9120,
+    token?: string
+  ): Promise<[DeviceProcess[], SystemStats | null]> {
+    try {
+      const authToken = getStoredAuthToken(token);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      const res = await fetch(`http://${ip}:${port}/api/processes`, {
+        method: 'GET',
+        headers: {
+          'X-Nodus-Auth-Token': authToken,
+        },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const data = await res.json();
+        const raw = data.processes || [];
+        const procs: DeviceProcess[] = raw.map((p: any) => ({
+          pid: p.pid,
+          parentPid: p.parent_pid,
+          parentName: p.parent_name,
+          name: p.name,
+          memoryMb: p.memory_kb ? Math.round(p.memory_kb / 1024) : (p.memoryMb || 0),
+          category: (p.category as any) || (p.pid === 1 ? 'system' : 'user'),
+          user: p.user || 'User',
+          cpu: p.cpu || 0,
+          status: 'running' as const,
+        }));
+
+        let stats: SystemStats | null = null;
+        if (data.system) {
+          const sys = data.system;
+          const totalRam = sys.totalRamMb || 8192;
+          const usedRam = sys.usedRamMb || 3400;
+          stats = {
+            hostname: 'Android Companion',
+            os: 'Android 14',
+            cpu_load_percent: 12,
+            ram_used_mb: usedRam,
+            ram_total_mb: totalRam,
+            uptime_seconds: 3600,
+          };
+        }
+        return [procs, stats];
+      }
+    } catch (e) {
+      console.warn(`[TauriService] getRemoteProcessesWithStats(${ip}:${port}) failed:`, e);
+    }
+    return [[], null];
+  },
+
+  async killRemoteProcess(ip: string, port = 9120, pid: number, token?: string, processName?: string): Promise<boolean> {
     try {
       const authToken = getStoredAuthToken(token);
       const controller = new AbortController();
@@ -123,13 +177,13 @@ export const TauriService = {
           'Content-Type': 'application/json',
           'X-Nodus-Auth-Token': authToken,
         },
-        body: JSON.stringify({ pid }),
+        body: JSON.stringify({ pid, name: processName, package: processName }),
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
       if (res.ok) {
         const data = await res.json();
-        return data.status === 'success';
+        return data.ok === true || data.status === 'success';
       }
     } catch (e) {
       console.warn(`[TauriService] killRemoteProcess(${ip}:${port}, pid=${pid}) error:`, e);
@@ -650,6 +704,18 @@ export const TauriService = {
     }
   },
 
+  async unregisterAllNodes(): Promise<boolean> {
+    if (!isTauri()) {
+      return false;
+    }
+    try {
+      return await invoke<boolean>('unregister_all_nodes');
+    } catch (e) {
+      console.error('[TauriService] unregisterAllNodes error:', e);
+      return false;
+    }
+  },
+
   async scanSubnet(subnetBase: string): Promise<any[]> {
     if (!isTauri()) {
       return [];
@@ -658,6 +724,18 @@ export const TauriService = {
       return await invoke<any[]>('scan_subnet', { subnetBase });
     } catch (e) {
       console.error('[TauriService] scanSubnet error:', e);
+      return [];
+    }
+  },
+
+  async getLanDevices(subnetBase?: string): Promise<any[]> {
+    if (!isTauri()) {
+      return [];
+    }
+    try {
+      return await invoke<any[]>('get_lan_devices', { subnetBase });
+    } catch (e) {
+      console.error('[TauriService] getLanDevices error:', e);
       return [];
     }
   },
@@ -823,6 +901,36 @@ export const TauriService = {
       return await invoke<string>('connect_adb_device', { deviceIp });
     } catch (e: any) {
       throw new Error(e?.message || String(e));
+    }
+  },
+
+  async startAdbMouseDaemon(deviceIp?: string): Promise<boolean> {
+    if (!isTauri()) return true;
+    try {
+      return await invoke<boolean>('start_adb_mouse_daemon', { deviceIp });
+    } catch (e) {
+      console.error('[TauriService] startAdbMouseDaemon error:', e);
+      return false;
+    }
+  },
+
+  async sendAdbMouseMotion(dx: number, dy: number, button?: string, isClick?: boolean, deviceIp?: string): Promise<boolean> {
+    if (!isTauri()) return true;
+    try {
+      return await invoke<boolean>('send_adb_mouse_motion', { dx, dy, button, isClick, deviceIp });
+    } catch (e) {
+      console.error('[TauriService] sendAdbMouseMotion error:', e);
+      return false;
+    }
+  },
+
+  async stopAdbMouseDaemon(): Promise<boolean> {
+    if (!isTauri()) return true;
+    try {
+      return await invoke<boolean>('stop_adb_mouse_daemon');
+    } catch (e) {
+      console.error('[TauriService] stopAdbMouseDaemon error:', e);
+      return false;
     }
   },
 

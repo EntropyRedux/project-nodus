@@ -65,13 +65,8 @@ remix-*/
 *replica*
 shortcuts/
 *.lnk
-*_REPORT.md
-*_STATUS.md
-*_STRATEGY.md
 
-# Generated Documents (DO NOT PUSH)
-generated_documents/
-**/generated_documents/
+# Generated Documents (Do Not Push scratch dumps)
 generated_documents_do_not_push/
 **/generated_documents_do_not_push/
 

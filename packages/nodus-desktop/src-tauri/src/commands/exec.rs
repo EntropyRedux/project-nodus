@@ -3,7 +3,9 @@
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio, Child, ChildStdin};
+use std::sync::Mutex;
+use std::io::Write;
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 
@@ -101,6 +103,149 @@ pub async fn connect_adb_device(device_ip: String) -> Result<String, String> {
                 }
             }
             Err(e) => Err(format!("Failed to execute adb connect: {}", e)),
+        }
+    })
+    .await
+    .map_err(|e| format!("Task error: {}", e))?
+}
+
+struct AdbMouseSession {
+    child: Child,
+    stdin: ChildStdin,
+    #[allow(dead_code)]
+    target: String,
+}
+
+static ADB_MOUSE_SESSION: Mutex<Option<AdbMouseSession>> = Mutex::new(None);
+
+#[tauri::command]
+pub async fn start_adb_mouse_daemon(device_ip: Option<String>) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let adb_bin = resolve_adb_bin();
+        let target = device_ip.unwrap_or_else(|| "192.168.1.35:5555".to_string());
+        let target = if target.contains(':') { target } else { format!("{}:5555", target) };
+
+        // 1. Ensure device is connected via ADB
+        let mut conn_cmd = Command::new(&adb_bin);
+        #[cfg(windows)]
+        conn_cmd.creation_flags(0x08000000);
+        conn_cmd.arg("connect").arg(&target);
+        let _ = conn_cmd.output();
+
+        // 2. Push mouse registration JSON to device
+        // Using base64 encoding to prevent shell escaping corruption
+        let config_b64 = "eyJpZCI6MSwiY29tbWFuZCI6InJlZ2lzdGVyIiwibmFtZSI6Ik5vZHVzIFZpcnR1YWwgTW91c2UiLCJ2aWQiOjEsInBpZCI6MSwiYnVzIjoidXNiIiwiY29uZmlndXJhdGlvbiI6W3sidHlwZSI6IlVJX1NFVF9FVkJJVCIsImRhdGEiOlsiRVZfS0VZIiwiRVZfUkVMIiwiRVZfU1lOIl19LHsidHlwZSI6IlVJX1NFVF9LRVlCSVQiLCJkYXRhIjpbIkJUTl9MRUZUIiwiQlROX1JJR0hUIiwiQlROX01JRERMRSJdfSx7InR5cGUiOiJVSV9TRVRfUkVMQklUIiwiZGF0YSI6WyJSRUxfWCIsIlJFTF9ZIiwiUkVMX1dIRUVMIl19XX0K";
+        
+        let mut push_cmd = Command::new(&adb_bin);
+        #[cfg(windows)]
+        push_cmd.creation_flags(0x08000000);
+        push_cmd.arg("-s").arg(&target).arg("shell").arg(format!("echo '{}' | base64 -d > /data/local/tmp/nodus_mouse.json", config_b64));
+        let _ = push_cmd.output();
+
+        // 3. Spawn persistent uinput process
+        let mut uinput_cmd = Command::new(&adb_bin);
+        #[cfg(windows)]
+        uinput_cmd.creation_flags(0x08000000);
+        uinput_cmd.arg("-s").arg(&target).arg("shell").arg("uinput /data/local/tmp/nodus_mouse.json");
+        uinput_cmd.stdin(Stdio::piped());
+        uinput_cmd.stdout(Stdio::null());
+        uinput_cmd.stderr(Stdio::null());
+
+        match uinput_cmd.spawn() {
+            Ok(mut child) => {
+                if let Some(stdin) = child.stdin.take() {
+                    let mut lock = ADB_MOUSE_SESSION.lock().map_err(|e| e.to_string())?;
+                    if let Some(mut prev) = lock.take() {
+                        let _ = prev.child.kill();
+                    }
+                    *lock = Some(AdbMouseSession {
+                        child,
+                        stdin,
+                        target,
+                    });
+                    Ok(true)
+                } else {
+                    let _ = child.kill();
+                    Err("Failed to open uinput process stdin".to_string())
+                }
+            }
+            Err(e) => Err(format!("Failed to spawn uinput daemon: {}", e)),
+        }
+    })
+    .await
+    .map_err(|e| format!("Task error: {}", e))?
+}
+
+#[tauri::command]
+pub async fn send_adb_mouse_motion(dx: i32, dy: i32, button: Option<String>, is_click: Option<bool>, device_ip: Option<String>) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut lock = ADB_MOUSE_SESSION.lock().map_err(|e| e.to_string())?;
+        if let Some(session) = lock.as_mut() {
+            let mut payload = String::new();
+            if dx != 0 || dy != 0 {
+                payload.push_str(&format!(
+                    r#"{{"id":1,"command":"inject","events":["EV_REL","REL_X",{},"EV_REL","REL_Y",{},"EV_SYN","SYN_REPORT",0]}}"#,
+                    dx, dy
+                ));
+                payload.push('\n');
+            }
+            if is_click.unwrap_or(false) {
+                let btn = match button.as_deref() {
+                    Some("right") => "BTN_RIGHT",
+                    Some("middle") => "BTN_MIDDLE",
+                    _ => "BTN_LEFT",
+                };
+                payload.push_str(&format!(
+                    r#"{{"id":1,"command":"inject","events":["EV_KEY","{}",1,"EV_SYN","SYN_REPORT",0]}}"#,
+                    btn
+                ));
+                payload.push('\n');
+                payload.push_str(&format!(
+                    r#"{{"id":1,"command":"inject","events":["EV_KEY","{}",0,"EV_SYN","SYN_REPORT",0]}}"#,
+                    btn
+                ));
+                payload.push('\n');
+            }
+
+            if !payload.is_empty() {
+                if let Err(e) = session.stdin.write_all(payload.as_bytes()) {
+                    let _ = session.stdin.flush();
+                    return Err(format!("Failed to write to uinput stream: {}", e));
+                }
+                let _ = session.stdin.flush();
+            }
+            Ok(true)
+        } else {
+            // Fast fallback: dispatch via adb input command
+            let adb_bin = resolve_adb_bin();
+            let target = device_ip.unwrap_or_else(|| "192.168.1.35:5555".to_string());
+            let target = if target.contains(':') { target } else { format!("{}:5555", target) };
+            let mut cmd = Command::new(&adb_bin);
+            #[cfg(windows)]
+            cmd.creation_flags(0x08000000);
+            cmd.arg("-s").arg(&target).arg("shell");
+            if is_click.unwrap_or(false) {
+                cmd.arg("input mouse tap 1280 800");
+            } else {
+                cmd.arg(format!("input mouse roll {} {}", dx, dy));
+            }
+            let _ = cmd.spawn();
+            Ok(true)
+        }
+    })
+    .await
+    .map_err(|e| format!("Task error: {}", e))?
+}
+
+#[tauri::command]
+pub async fn stop_adb_mouse_daemon() -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut lock = ADB_MOUSE_SESSION.lock().map_err(|e| e.to_string())?;
+        if let Some(mut session) = lock.take() {
+            let _ = session.child.kill();
+            Ok(true)
+        } else {
+            Ok(false)
         }
     })
     .await

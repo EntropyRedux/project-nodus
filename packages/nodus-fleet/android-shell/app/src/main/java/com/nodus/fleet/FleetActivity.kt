@@ -55,6 +55,7 @@ class FleetActivity : AppCompatActivity() {
         if (autoStart) {
             startFleetServices()
         }
+        com.nodus.fleet.overlay.MouseOverlayManager.init(this)
 
         assetLoader = WebViewAssetLoader.Builder()
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
@@ -132,6 +133,13 @@ class FleetActivity : AppCompatActivity() {
         super.onResume()
         registerClipboardListener()
         checkAndSyncPrimaryClip()
+
+        val prefs = getSharedPreferences("nodus_fleet_prefs", Context.MODE_PRIVATE)
+        val autoStart = prefs.getBoolean("auto_start_daemon", true)
+        if (autoStart && FleetDaemonService.instance == null) {
+            Log.i(TAG, "FleetDaemonService was inactive on resume, restarting...")
+            startFleetServices()
+        }
     }
 
     override fun onPause() {
@@ -264,12 +272,22 @@ class FleetActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun setDaemonRunning(running: Boolean) {
+            context.getSharedPreferences("nodus_fleet_prefs", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("auto_start_daemon", running)
+                .apply()
             if (running) {
                 startFleetServices()
             } else {
+                FleetDaemonService.instance?.disconnectAll("server_stopped")
                 stopService(Intent(this@FleetActivity, FleetDaemonService::class.java))
                 stopService(Intent(this@FleetActivity, ClipboardSyncService::class.java))
             }
+        }
+
+        @JavascriptInterface
+        fun disconnectAll() {
+            FleetDaemonService.instance?.disconnectAll("user_disconnect_all")
         }
 
         @JavascriptInterface
@@ -292,6 +310,11 @@ class FleetActivity : AppCompatActivity() {
         @JavascriptInterface
         fun getDevices(): String {
             return FleetDaemonService.instance?.getDevicesJson() ?: "[]"
+        }
+
+        @JavascriptInterface
+        fun getLocalIp(): String {
+            return getLocalWifiIp() ?: "127.0.0.1"
         }
 
         private var lastScannedLanCount: Int = 0

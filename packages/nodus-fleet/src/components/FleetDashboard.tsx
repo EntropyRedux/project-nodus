@@ -266,7 +266,7 @@ export const FleetDashboard: React.FC = () => {
             const cleanIp = (p.ipAddress || p.ip || '').split(':')[0].trim();
             if (cleanIp && cleanIp !== '127.0.0.1' && p.id !== 'poco-pad' && !p.isLocal) {
               const trustInfo = trustedDevices[cleanIp];
-              const isInFleet = devices.some(d => !d.isLocal && (d.ipAddress || '').split(':')[0].trim() === cleanIp);
+              const isInFleet = devices.some(d => !d.isLocal && d.id !== 'poco-pad' && d.id !== 'local' && (d.status === 'connected' || d.status === 'online') && (d.ipAddress || '').split(':')[0].trim() === cleanIp);
               const existing = map.get(cleanIp);
               map.set(cleanIp, {
                 ip: cleanIp,
@@ -540,7 +540,7 @@ export const FleetDashboard: React.FC = () => {
               nickname: trustInfo?.nickname || undefined,
               isTrusted,
               isUnknown: !isTrusted,
-              isInFleet: devices.some(d => !d.isLocal && (d.ipAddress || '').split(':')[0].trim() === cleanPeerIp),
+              isInFleet: devices.some(d => !d.isLocal && d.id !== 'poco-pad' && d.id !== 'local' && (d.status === 'connected' || d.status === 'online') && (d.ipAddress || '').split(':')[0].trim() === cleanPeerIp),
             };
           });
           setScannedPeers(mapped);
@@ -679,18 +679,24 @@ export const FleetDashboard: React.FC = () => {
     }
 
     const localDevice = devices.find(d => d.isLocal);
+    const bridgeLocalIp = bridge && typeof bridge.getLocalIp === 'function' ? bridge.getLocalIp() : null;
+    const resolvedLocalIp = (bridgeLocalIp && bridgeLocalIp !== '127.0.0.1')
+      ? bridgeLocalIp
+      : (localDevice?.ipAddress && localDevice.ipAddress !== '127.0.0.1')
+      ? localDevice.ipAddress
+      : '127.0.0.1';
 
     // 4. Send HTTP confirmation / bidirectional pair-confirm (ACK) back to sender
     universalNetworkFetch(`http://${cleanIp}:${port}/api/fleet/pair-confirm`, {
       method: 'POST',
       body: JSON.stringify({
-        id: localDevice?.id || 'fleet-tablet',
-        deviceId: localDevice?.id || 'fleet-tablet',
-        name: localDevice?.name || 'Fleet Tablet',
+        id: localDevice?.id || 'poco-pad',
+        deviceId: localDevice?.id || 'poco-pad',
+        name: localDevice?.name || 'POCO Pad',
         deviceType: localDevice?.type || 'tablet',
         type: localDevice?.type || 'tablet',
         os: localDevice?.os || 'Android 14',
-        ipAddress: localDevice?.ipAddress || '127.0.0.1',
+        ipAddress: resolvedLocalIp,
         httpPort: 9120,
         port: 9120,
         token: req.token || (localDevice as any)?.token || '',

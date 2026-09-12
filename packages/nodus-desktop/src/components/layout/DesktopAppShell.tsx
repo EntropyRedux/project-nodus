@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Grid,
   Sliders,
@@ -21,6 +21,7 @@ import {
   Pause,
   Filter,
 } from 'lucide-react';
+import { listen } from '@tauri-apps/api/event';
 import { useFleetStore } from '../../stores/useFleetStore';
 import { useProcessStore } from '../../stores/useProcessStore';
 import { useClipboardStore } from '../../stores/useClipboardStore';
@@ -39,7 +40,7 @@ import { AppSettingsPanel } from '../views/AppSettingsPanel';
 import { ClipboardDrawer } from '../views/ClipboardDrawer';
 import { DevicePairingModal } from '../views/DevicePairingModal';
 import { IncomingPairModal, IncomingPairRequest } from '../views/IncomingPairModal';
-import { TauriService } from '../../services/TauriCommands';
+import { TauriService, getStoredAuthToken } from '../../services/TauriCommands';
 import { ClipboardBroadcastService } from '../../services/ClipboardBroadcastService';
 import { SharedApp } from '../../types/ui-contracts';
 
@@ -75,6 +76,7 @@ export const DesktopAppShell: React.FC = () => {
     lanDeviceCount,
     trustedDevices,
     refreshLanCount,
+    pollRemoteDevices,
     setDeviceNickname,
     lockWorkstation,
     serverConfig,
@@ -142,11 +144,19 @@ export const DesktopAppShell: React.FC = () => {
   useEffect(() => {
     fetchServerStatus();
     loadShortcuts();
+    pollRemoteDevices();
     const interval = setInterval(() => {
       refreshLanCount();
-    }, 15000);
+      pollRemoteDevices();
+    }, 5000);
     return () => clearInterval(interval);
-  }, [loadShortcuts]);
+  }, [loadShortcuts, pollRemoteDevices]);
+
+  useEffect(() => {
+    if (activeTab === 'topology') {
+      pollRemoteDevices();
+    }
+  }, [activeTab, pollRemoteDevices]);
 
   // Auto-initialize default local terminal session when terminal tab is selected
   useEffect(() => {
@@ -167,20 +177,66 @@ export const DesktopAppShell: React.FC = () => {
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
+    let unlistenPaired: (() => void) | undefined;
+    let unlistenUnpaired: (() => void) | undefined;
     (async () => {
       try {
-        const { listen } = await import('@tauri-apps/api/event');
         unlisten = await listen<IncomingPairRequest>('incoming-pair-request', (event) => {
           if (event.payload) {
             setIncomingPairRequest(event.payload);
+          }
+        });
+        unlistenPaired = await listen<any>('fleet_device_paired', (event) => {
+          const d = event.payload;
+          if (d && d.ipAddress) {
+            const cleanIp = d.ipAddress.split(':')[0].trim();
+            connectDeviceManual({
+              id: d.id,
+              name: d.name || `Node (${cleanIp})`,
+              ip: cleanIp,
+              port: 9120,
+              type: d.type || 'tablet',
+              os: d.os || 'android',
+              authToken: d.authToken || '',
+            } as any);
+            setDeviceNickname(cleanIp, d.name || `Node (${cleanIp})`, true);
+          }
+        });
+        unlistenUnpaired = await listen<any>('fleet_device_unpaired', (event) => {
+          const d = event.payload;
+          if (d) {
+            const targetId = (d.id || d.deviceId || d.sourceDevice || '').trim().toLowerCase();
+            const targetIp = (d.ipAddress || d.ip || '').split(':')[0].trim();
+            const current = useFleetStore.getState().devices;
+            const matches = current.filter(dev => {
+              if (dev.isLocal || dev.id === 'this-pc' || dev.id === 'local') return false;
+              const devIp = (dev.ipAddress || '').split(':')[0].trim();
+              const devId = (dev.id || '').trim().toLowerCase();
+
+              // 1. Match by IP address
+              if (targetIp && (devIp === targetIp || devId === targetIp || devId.includes(targetIp.replace(/\./g, '-')))) {
+                return true;
+              }
+              // 2. Match by ID or nickname
+              if (targetId && (devId === targetId || devId.includes(targetId) || targetId.includes(devId))) {
+                return true;
+              }
+              return false;
+            });
+
+            for (const match of matches) {
+              useFleetStore.getState().removeDevice(match.id, false);
+            }
           }
         });
       } catch (_) {}
     })();
     return () => {
       if (unlisten) unlisten();
+      if (unlistenPaired) unlistenPaired();
+      if (unlistenUnpaired) unlistenUnpaired();
     };
-  }, []);
+  }, [connectDeviceManual, setDeviceNickname]);
 
   const handleAcceptPair = async (req: IncomingPairRequest) => {
     const cleanIp = req.ipAddress.trim();
@@ -196,7 +252,8 @@ export const DesktopAppShell: React.FC = () => {
       port: portNum,
       type: (req.deviceType as any) || (req.type as any) || 'tablet',
       os: req.os || 'android',
-    });
+      authToken: req.token || '',
+    } as any);
 
     // 3. Dispatch mutual pairing confirmation (ACK) back to target device
     try {
@@ -267,21 +324,26 @@ export const DesktopAppShell: React.FC = () => {
 
   // Remote Peer Shared Shortcuts
   const [peerApps, setPeerApps] = useState<SharedApp[]>([]);
+  const [isSyncingPeerShortcuts, setIsSyncingPeerShortcuts] = useState(false);
 
-  useEffect(() => {
-    if (activeTab !== 'shortcuts') return;
+  const syncPeerShortcuts = useCallback(async () => {
     const remoteDevs = devices.filter(d => !d.isLocal && d.ipAddress && d.ipAddress !== '127.0.0.1');
     if (remoteDevs.length === 0) {
       setPeerApps([]);
       return;
     }
 
-    let isMounted = true;
-    const fetchAllPeerShortcuts = async () => {
+    setIsSyncingPeerShortcuts(true);
+    try {
       const all: SharedApp[] = [];
       for (const dev of remoteDevs) {
         try {
-          const res = await fetch(`http://${dev.ipAddress}:9120/api/shortcuts`).then(r => r.json());
+          const devToken = (dev as any).authToken || (dev as any).token || getStoredAuthToken();
+          const res = await fetch(`http://${dev.ipAddress}:9120/api/shortcuts`, {
+            headers: {
+              'X-Nodus-Auth-Token': devToken,
+            },
+          }).then(r => r.json());
           if (res && (res.shortcuts || res.apps)) {
             const raw = res.shortcuts || res.apps || [];
             const remoteDevice = res.device || {};
@@ -310,16 +372,17 @@ export const DesktopAppShell: React.FC = () => {
           }
         } catch (_) {}
       }
-      if (isMounted) {
-        setPeerApps(all);
-      }
-    };
+      setPeerApps(all);
+    } finally {
+      setIsSyncingPeerShortcuts(false);
+    }
+  }, [devices]);
 
-    fetchAllPeerShortcuts();
-    return () => {
-      isMounted = false;
-    };
-  }, [activeTab, devices]);
+  useEffect(() => {
+    if (activeTab === 'shortcuts') {
+      syncPeerShortcuts();
+    }
+  }, [activeTab, syncPeerShortcuts]);
 
   const targetDevice = useMemo(() => {
     return (
@@ -478,7 +541,10 @@ export const DesktopAppShell: React.FC = () => {
         {/* Navigation Rail */}
         <nav className="w-20 border-r border-[var(--border-subtle)] bg-[var(--surface-base)] flex flex-col items-center py-5 gap-4 z-10 shrink-0 select-none">
           <button
-            onClick={() => setShowPairingModal(true)}
+            onClick={() => {
+              refreshLanCount();
+              setShowPairingModal(true);
+            }}
             title={`Pair New Mesh Node (${lanDeviceCount || 0} active LAN devices detected)`}
             className="w-11 h-11 rounded-lg bg-[var(--accent-primary)] hover:opacity-90 text-[var(--m3-on-primary)] shadow-md shadow-blue-950/20 transition-all flex items-center justify-center active:scale-95 group mb-1 relative"
           >
@@ -808,14 +874,21 @@ export const DesktopAppShell: React.FC = () => {
                   enabled: e.pinnedToDrawer ?? true,
                 }))}
                 peerApps={peerApps}
+                onRefreshPeerShortcuts={syncPeerShortcuts}
+                isSyncingPeerShortcuts={isSyncingPeerShortcuts}
                 onToggleMyApp={(id: string, enabled: boolean) => updateRemoteExecutable(id, { pinnedToDrawer: enabled })}
                 onLaunchPeerApp={async (app: SharedApp) => {
                   const peerIp = app.deviceIp || devices.find(d => d.id === app.deviceId)?.ipAddress;
                   if (peerIp) {
                     try {
+                      const targetDev = devices.find(d => d.ipAddress === peerIp);
+                      const devToken = (targetDev as any)?.authToken || (targetDev as any)?.token || getStoredAuthToken();
                       await fetch(`http://${peerIp}:9120/api/shortcuts/launch`, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'X-Nodus-Auth-Token': devToken,
+                        },
                         body: JSON.stringify({ command_or_path: app.path || app.name }),
                       });
                     } catch (e) {
@@ -922,13 +995,17 @@ export const DesktopAppShell: React.FC = () => {
               ip: cleanIp,
               port: portNum,
               type: devType,
-              os: devOs
-            });
+              os: devOs,
+              authToken: token || serverConfig?.auth_token || serverConfig?.pairingSecret || 'NODUS-FLEET-SECURE',
+            } as any);
 
-            // Send initial pair-request to target node so it prompts with confirmation modal
-            fetch(`http://${cleanIp}:${portNum}/api/fleet/pair-request`, {
+            // Send mutual pair confirmation to target node so it immediately registers Desktop
+            fetch(`http://${cleanIp}:${portNum}/api/fleet/pair-confirm`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Nodus-Auth-Token': token || serverConfig?.auth_token || serverConfig?.pairingSecret || 'NODUS-FLEET-SECURE',
+              },
               body: JSON.stringify({
                 id: 'desktop-host',
                 deviceId: 'desktop-host',
@@ -940,7 +1017,8 @@ export const DesktopAppShell: React.FC = () => {
                 httpPort: 9120,
                 port: 9120,
                 token: token || serverConfig?.auth_token || serverConfig?.pairingSecret || 'NODUS-FLEET-SECURE',
-                isAck: false,
+                isAck: true,
+                action: 'confirm',
               }),
             }).catch(() => {});
 

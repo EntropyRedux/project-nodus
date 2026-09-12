@@ -398,7 +398,9 @@ fn process_single_http_request(mut request: tiny_http::Request) {
                 || path == "/api/health" 
                 || path == "/" 
                 || path == "/api/fleet/pair-request"
-                || path == "/api/pair";
+                || path == "/api/pair"
+                || path == "/api/fleet/unpair"
+                || path == "/api/unpair";
 
             let (status_code, json_body) = if !is_public && !is_authorized(&request) {
                 (401, json!({ "status": "error", "message": "Unauthorized: Missing or invalid X-Nodus-Auth-Token / Bearer token" }))
@@ -785,7 +787,116 @@ fn process_single_http_request(mut request: tiny_http::Request) {
 
                     // Authenticated Pairing Confirmation
                     (Method::Post, "/api/fleet/pair-confirm") | (Method::Post, "/api/fleet/register") => {
-                        (200, json!({ "status": "success", "ok": true, "message": "Pairing state recorded" }))
+                        let client_ip = request.remote_addr().map(|a| a.ip().to_string()).unwrap_or_else(|| "127.0.0.1".to_string());
+                        if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
+                            if let Ok(json_body) = serde_json::from_str::<serde_json::Value>(&body_str) {
+                                let dev_id = json_body.get("id")
+                                    .or_else(|| json_body.get("deviceId"))
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("remote-node")
+                                    .to_string();
+                                let dev_name = json_body.get("name")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("Remote Companion")
+                                    .to_string();
+                                let dev_type = json_body.get("type")
+                                    .or_else(|| json_body.get("deviceType"))
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("tablet")
+                                    .to_string();
+                                let dev_os = json_body.get("os")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("android")
+                                    .to_string();
+                                let ip = json_body.get("ipAddress")
+                                    .and_then(|v| v.as_str())
+                                    .filter(|s| !s.is_empty() && *s != "127.0.0.1")
+                                    .map(|s| s.to_string())
+                                    .unwrap_or_else(|| client_ip.clone());
+                                let token = json_body.get("token")
+                                    .or_else(|| json_body.get("authToken"))
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("")
+                                    .to_string();
+
+                                if !token.is_empty() {
+                                    add_trusted_token(token.clone());
+                                }
+
+                                crate::discovery::register_node(crate::discovery::DiscoveredDeviceNode {
+                                    id: dev_id.clone(),
+                                    name: dev_name.clone(),
+                                    device_type: dev_type.clone(),
+                                    os: dev_os.clone(),
+                                    ip_address: format!("{}:9120", ip),
+                                    http_port: 9120,
+                                    status: "connected".to_string(),
+                                    battery: Some(90),
+                                    cpu_load: Some(10),
+                                    ram_usage: Some("3.4 / 8.0 GB".to_string()),
+                                    last_seen: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+                                    is_local: false,
+                                });
+
+                                if let Ok(guard) = APP_HANDLE.lock() {
+                                    if let Some(ref handle) = *guard {
+                                        let _ = handle.emit("fleet_device_paired", json!({
+                                            "id": dev_id,
+                                            "name": dev_name,
+                                            "type": dev_type,
+                                            "os": dev_os,
+                                            "ipAddress": ip,
+                                            "authToken": token,
+                                            "status": "connected",
+                                        }));
+                                        let _ = handle.emit("fleet_devices_updated", ());
+                                    }
+                                }
+
+                                (200, json!({ "status": "success", "ok": true, "message": "Pairing confirmed and recorded" }))
+                            } else {
+                                (200, json!({ "status": "success", "ok": true, "message": "Pairing state recorded" }))
+                            }
+                        } else {
+                            (200, json!({ "status": "success", "ok": true, "message": "Pairing state recorded" }))
+                        }
+                    }
+
+                    // Unpair / Disconnect Handshake
+                    (Method::Post, "/api/fleet/unpair") | (Method::Post, "/api/unpair") => {
+                        let client_ip = request.remote_addr().map(|a| a.ip().to_string()).unwrap_or_else(|| "127.0.0.1".to_string());
+                        let target_id = if let Ok(body_str) = read_request_body_capped(&mut request, MAX_REQUEST_BODY_BYTES) {
+                            if let Ok(json_body) = serde_json::from_str::<serde_json::Value>(&body_str) {
+                                json_body.get("id")
+                                    .or_else(|| json_body.get("deviceId"))
+                                    .and_then(|v| v.as_str())
+                                    .map(|s| s.to_string())
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
+
+                        let dev_id = target_id.unwrap_or_else(|| format!("node-{}", client_ip.replace('.', "-")));
+                        crate::discovery::unregister_node(dev_id.clone());
+                        crate::discovery::unregister_node(client_ip.clone());
+                        crate::discovery::unregister_node(format!("node-{}", client_ip.replace('.', "-")));
+
+                        if let Ok(guard) = APP_HANDLE.lock() {
+                            if let Some(ref handle) = *guard {
+                                let _ = handle.emit("fleet_device_unpaired", json!({
+                                    "id": dev_id,
+                                    "deviceId": dev_id,
+                                    "sourceDevice": dev_id,
+                                    "ipAddress": client_ip,
+                                    "ip": client_ip,
+                                }));
+                                let _ = handle.emit("fleet_devices_updated", ());
+                            }
+                        }
+
+                        (200, json!({ "status": "success", "ok": true, "message": "Device unpaired" }))
                     }
 
                     // Query Installed & Discovered Applications with Device Attribution

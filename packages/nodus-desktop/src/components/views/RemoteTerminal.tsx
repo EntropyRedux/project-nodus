@@ -193,40 +193,47 @@ const XTermView: React.FC<XTermViewProps> = ({ session, theme, isExpAdbEnabled =
       });
 
       // 2. Determine target process
-      if (isAndroidDevice && isExpAdbEnabled) {
+      if (isAndroidDevice) {
         const ip = session.targetDevice.ipAddress;
         term.writeln('\x1b[1;36m══════════════════════════════════════════════════════════════════\x1b[0m');
-        term.writeln(' \x1b[1;33m⚡ NODUS WIRELESS ADB SHELL BRIDGE (EXPERIMENTAL)\x1b[0m');
+        term.writeln(' \x1b[1;33m⚡ NODUS ANDROID SHELL BRIDGE\x1b[0m');
         term.writeln(` \x1b[90mTarget Companion: \x1b[37m${session.targetDevice.name}\x1b[90m (${ip || 'unknown'})\x1b[0m`);
         term.writeln('\x1b[1;36m══════════════════════════════════════════════════════════════════\x1b[0m\r\n');
 
+        let adbConnected = false;
         if (ip && ip !== '127.0.0.1' && ip !== 'localhost') {
           term.write(`\x1b[90m[bridge] Checking ADB daemon status for ${ip}:5555...\x1b[0m\r\n`);
           try {
             const status = await TauriService.checkAdbStatus(ip);
             if (!status.is_connected) {
-              term.write(`\x1b[33m[bridge] Device not connected. Attempting wireless handshake with ${ip}:5555...\x1b[0m\r\n`);
+              term.write(`\x1b[33m[bridge] Attempting wireless handshake with ${ip}:5555...\x1b[0m\r\n`);
               const connectRes = await TauriService.connectAdbDevice(ip);
               term.write(`\x1b[32m[bridge] Handshake response: ${connectRes.trim()}\x1b[0m\r\n\r\n`);
             } else {
-              term.write(`\x1b[32m[bridge] Verified active connection to ${ip}:5555.\x1b[0m\r\n\r\n`);
+              term.write(`\x1b[32m[bridge] Verified active ADB connection to ${ip}:5555.\x1b[0m\r\n\r\n`);
             }
+            adbConnected = true;
           } catch (err: any) {
-            term.write(`\x1b[31m[bridge] ADB handshake warning: ${err?.message || err}\x1b[0m\r\n\r\n`);
+            term.write(`\x1b[31m[bridge] ADB wireless connection notice: ${err?.message || err}\x1b[0m\r\n`);
           }
 
-          // Spawn ADB interactive shell via ConPTY
-          await TauriService.spawnPty(
-            session.id,
-            cols,
-            rows,
-            session.cwd,
-            'adb',
-            ['-s', `${ip}:5555`, 'shell']
-          );
-        } else {
-          // Local emulator or USB connected device fallback
-          term.write(`\x1b[33m[bridge] Spawning generic ADB shell for connected device...\x1b[0m\r\n\r\n`);
+          if (adbConnected) {
+            // Spawn ADB interactive shell via ConPTY
+            await TauriService.spawnPty(
+              session.id,
+              cols,
+              rows,
+              session.cwd,
+              'adb',
+              ['-s', `${ip}:5555`, 'shell']
+            );
+            return;
+          }
+        }
+
+        // Generic ADB shell fallback
+        try {
+          term.write(`\x1b[33m[bridge] Spawning ADB shell for companion device...\x1b[0m\r\n\r\n`);
           await TauriService.spawnPty(
             session.id,
             cols,
@@ -235,16 +242,12 @@ const XTermView: React.FC<XTermViewProps> = ({ session, theme, isExpAdbEnabled =
             'adb',
             ['shell']
           );
+        } catch (e: any) {
+          term.write(`\x1b[31m[bridge] ADB shell failed: ${e?.message || e}\x1b[0m\r\n`);
+          term.write(`\x1b[90m[bridge] Note: Enable Wireless Debugging on your Android device (Settings > Developer Options > Wireless Debugging).\x1b[0m\r\n`);
         }
       } else {
-        if (isAndroidDevice && !isExpAdbEnabled) {
-          term.writeln('\x1b[90m┌────────────────────────────────────────────────────────────────┐\x1b[0m');
-          term.writeln('\x1b[90m│ \x1b[33mTarget: Android Companion\x1b[90m • \x1b[37mLocal Host Shell Active\x1b[90m             │\x1b[0m');
-          term.writeln('\x1b[90m│ \x1b[90mTo spawn a direct remote Android shell via Wireless ADB,       │\x1b[0m');
-          term.writeln('\x1b[90m│ \x1b[36mclick "⚡ ADB Bridge: OFF" above or in Settings > Experimental.  \x1b[90m│\x1b[0m');
-          term.writeln('\x1b[90m└────────────────────────────────────────────────────────────────┘\x1b[0m\r\n');
-        }
-        // Spawn standard host shell
+        // Spawn standard host shell (Windows PowerShell) for desktop
         await TauriService.spawnPty(session.id, cols, rows, session.cwd);
       }
     };

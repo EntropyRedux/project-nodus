@@ -24,12 +24,16 @@ import {
   ChevronUp,
   Volume2,
   Navigation,
-  Palette
+  Palette,
+  MousePointer2,
+  Zap,
+  Sliders
 } from 'lucide-react';
 import { useProcessStore } from '../../stores/useProcessStore';
 import { useClipboardStore } from '../../stores/useClipboardStore';
 import { useFleetStore } from '../../stores/useFleetStore';
 import { Theme, THEMES } from '../theme/ThemePicker';
+import { TauriService, getStoredAuthToken } from '../../services/TauriCommands';
 
 interface AppSettingsPanelProps {
   currentTheme?: Theme;
@@ -95,6 +99,189 @@ export const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({
 
   const [showSetupGuide, setShowSetupGuide] = useState(false);
 
+  // Android Mouse Emulation Engine Mode ('overlay' | 'adb')
+  const [mouseEngineMode, setMouseEngineMode] = useState<'overlay' | 'adb'>(() => {
+    try {
+      const s = localStorage.getItem('nodus_android_mouse_mode');
+      return (s === 'adb' || s === 'overlay') ? s : 'overlay';
+    } catch (_) { return 'overlay'; }
+  });
+  const [isStartingAdbMouse, setIsStartingAdbMouse] = useState(false);
+
+  const handleSelectMouseMode = async (mode: 'overlay' | 'adb') => {
+    setMouseEngineMode(mode);
+    try {
+      localStorage.setItem('nodus_android_mouse_mode', mode);
+      window.dispatchEvent(new CustomEvent('nodus_mouse_mode_changed', { detail: mode }));
+    } catch (_) {}
+
+    if (mode === 'adb') {
+      setIsStartingAdbMouse(true);
+      showToast('Starting ADB Kernel Mouse daemon...');
+      try {
+        const ok = await TauriService.startAdbMouseDaemon();
+        if (ok) {
+          showToast('ADB Kernel Mouse daemon active (PointerController)');
+        } else {
+          showToast('ADB daemon start attempted (ensure ADB connected on :5555)');
+        }
+      } catch (e) {
+        showToast('ADB daemon start error');
+      } finally {
+        setIsStartingAdbMouse(false);
+      }
+    } else {
+      try {
+        await TauriService.stopAdbMouseDaemon();
+      } catch (_) {}
+      showToast('Switched to Standalone Overlay Cursor mode');
+    }
+  };
+
+  // Pointer Tracking Sensitivity Multiplier
+  const [pointerSensitivity, setPointerSensitivity] = useState<number>(() => {
+    try {
+      const s = localStorage.getItem('nodus_mouse_sensitivity');
+      if (s) {
+        const val = parseFloat(s);
+        if (!isNaN(val) && val >= 0.2 && val <= 3.5) return val;
+      }
+    } catch (_) {}
+    return 1.2;
+  });
+
+  // Floating Pointer Enable/Disable and Auto-Hide State
+  const [isPointerEnabled, setIsPointerEnabled] = useState<boolean>(() => {
+    try {
+      const s = localStorage.getItem('nodus_pointer_enabled');
+      if (s !== null) return s === 'true';
+      const legacy = localStorage.getItem('nodus_pointer_visible');
+      return legacy !== null ? legacy === 'true' : true;
+    } catch (_) {
+      return true;
+    }
+  });
+
+  const [isPointerAutoHide, setIsPointerAutoHide] = useState<boolean>(() => {
+    try {
+      const s = localStorage.getItem('nodus_pointer_autohide');
+      return s === 'true';
+    } catch (_) {
+      return false;
+    }
+  });
+
+  const updateSensitivity = (val: number) => {
+    const clamped = Math.max(0.2, Math.min(3.5, Math.round(val * 10) / 10));
+    setPointerSensitivity(clamped);
+    try {
+      localStorage.setItem('nodus_mouse_sensitivity', clamped.toString());
+      window.dispatchEvent(new CustomEvent('nodus_mouse_sensitivity_changed', { detail: clamped }));
+    } catch (_) {}
+    showToast(`Pointer Sensitivity: ${clamped.toFixed(1)}x`);
+  };
+
+  const updatePointerEnabled = async (enabled: boolean) => {
+    setIsPointerEnabled(enabled);
+    try {
+      localStorage.setItem('nodus_pointer_enabled', String(enabled));
+      localStorage.setItem('nodus_pointer_visible', String(enabled));
+      window.dispatchEvent(new CustomEvent('nodus_pointer_enabled_changed', { detail: enabled }));
+      window.dispatchEvent(new CustomEvent('nodus_pointer_visibility_changed', { detail: enabled }));
+    } catch (_) {}
+    showToast(enabled ? 'Mouse Pointer: Enabled' : 'Mouse Pointer: Disabled');
+
+    const paired = useFleetStore.getState().devices;
+    const androidDevice = paired.find((p: any) => p.os?.toLowerCase() === 'android' || p.type === 'tablet' || p.type === 'phone');
+    if (androidDevice?.ipAddress) {
+      try {
+        const token = (androidDevice as any)?.authToken || getStoredAuthToken() || 'NODUS-FLEET-SECURE';
+        await fetch(`http://${androidDevice.ipAddress}:9120/api/system/overlay`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Nodus-Auth-Token': token,
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            action: enabled ? 'enable' : 'disable',
+            autoHide: isPointerAutoHide
+          })
+        });
+      } catch (_) {}
+    }
+  };
+
+  const updatePointerAutoHide = async (autoHide: boolean) => {
+    setIsPointerAutoHide(autoHide);
+    try {
+      localStorage.setItem('nodus_pointer_autohide', String(autoHide));
+      window.dispatchEvent(new CustomEvent('nodus_pointer_autohide_changed', { detail: autoHide }));
+    } catch (_) {}
+    showToast(autoHide ? 'Pointer Auto-Hide: Enabled (3.5s)' : 'Pointer Auto-Hide: Disabled (Always Visible)');
+
+    const paired = useFleetStore.getState().devices;
+    const androidDevice = paired.find((p: any) => p.os?.toLowerCase() === 'android' || p.type === 'tablet' || p.type === 'phone');
+    if (androidDevice?.ipAddress) {
+      try {
+        const token = (androidDevice as any)?.authToken || getStoredAuthToken() || 'NODUS-FLEET-SECURE';
+        await fetch(`http://${androidDevice.ipAddress}:9120/api/system/overlay`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Nodus-Auth-Token': token,
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            autoHide: autoHide
+          })
+        });
+      } catch (_) {}
+    }
+  };
+
+  React.useEffect(() => {
+    const handleSensitivityChange = (e: any) => {
+      if (typeof e.detail === 'number') {
+        setPointerSensitivity(e.detail);
+      }
+    };
+    const handleEnabledChange = (e: any) => {
+      if (typeof e.detail === 'boolean') {
+        setIsPointerEnabled(e.detail);
+      }
+    };
+    const handleAutoHideChange = (e: any) => {
+      if (typeof e.detail === 'boolean') {
+        setIsPointerAutoHide(e.detail);
+      }
+    };
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'nodus_mouse_sensitivity' && e.newValue) {
+        const val = parseFloat(e.newValue);
+        if (!isNaN(val)) setPointerSensitivity(val);
+      }
+      if ((e.key === 'nodus_pointer_enabled' || e.key === 'nodus_pointer_visible') && e.newValue !== null) {
+        setIsPointerEnabled(e.newValue === 'true');
+      }
+      if (e.key === 'nodus_pointer_autohide' && e.newValue !== null) {
+        setIsPointerAutoHide(e.newValue === 'true');
+      }
+    };
+    window.addEventListener('nodus_mouse_sensitivity_changed', handleSensitivityChange);
+    window.addEventListener('nodus_pointer_enabled_changed', handleEnabledChange);
+    window.addEventListener('nodus_pointer_visibility_changed', handleEnabledChange);
+    window.addEventListener('nodus_pointer_autohide_changed', handleAutoHideChange);
+    window.addEventListener('storage', handleStorageChange);
+    return () => {
+      window.removeEventListener('nodus_mouse_sensitivity_changed', handleSensitivityChange);
+      window.removeEventListener('nodus_pointer_enabled_changed', handleEnabledChange);
+      window.removeEventListener('nodus_pointer_visibility_changed', handleEnabledChange);
+      window.removeEventListener('nodus_pointer_autohide_changed', handleAutoHideChange);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
+
   const showToast = (msg: string) => {
     setSaveFeedback(msg);
     setTimeout(() => setSaveFeedback(null), 2500);
@@ -107,9 +294,7 @@ export const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({
       return;
     }
     try {
-      localStorage.removeItem('nodus_desktop_paired_devices');
-      localStorage.removeItem('nodus_trusted_devices');
-      localStorage.removeItem('nodus_clipboard_history');
+      useFleetStore.getState().resetAllFleetData();
       clearClipboardHistory();
       showToast('Cache and Paired Devices Reset');
       setConfirmReset(false);
@@ -609,6 +794,215 @@ export const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({
             </div>
           </div>
 
+          {/* ── ANDROID MOUSE EMULATION ENGINE (STANDALONE OVERLAY VS ADB KERNEL) ── */}
+          <div className="p-4 rounded-xl bg-[var(--surface-base)] border border-[var(--border-subtle)] space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <MousePointer2 size={16} className="text-[var(--accent-primary)]" />
+                <span className="text-xs font-bold text-[var(--text-heading)]">
+                  Android Mouse Emulation Engine
+                </span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[var(--surface-container)] text-[var(--text-muted)] border border-[var(--border-subtle)]">
+                  Active: {mouseEngineMode === 'adb' ? '⚡ Native ADB Kernel' : '🖱️ System Overlay'}
+                </span>
+              </div>
+              <span className="text-[11px] font-mono text-[var(--text-muted)]">
+                Projects a visible hardware mouse pointer on your Android tablet
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              {/* Option A: Standalone Floating Overlay */}
+              <button
+                type="button"
+                onClick={() => handleSelectMouseMode('overlay')}
+                className={`p-3.5 rounded-xl border text-left transition flex flex-col justify-between gap-2.5 cursor-pointer ${
+                  mouseEngineMode === 'overlay'
+                    ? 'bg-[var(--surface-container)] border-sky-500/80 ring-2 ring-sky-500/30 shadow-sm'
+                    : 'bg-[var(--surface-container)]/50 border-[var(--border-subtle)] hover:border-[var(--border-active)]'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-lg bg-sky-500/15 text-sky-400 flex items-center justify-center">
+                      <MousePointer2 size={14} />
+                    </div>
+                    <span className="text-xs font-bold text-[var(--text-heading)]">
+                      Option A: System Overlay Cursor
+                    </span>
+                  </div>
+                  {mouseEngineMode === 'overlay' && (
+                    <span className="w-5 h-5 rounded-full bg-sky-500 text-white flex items-center justify-center shrink-0">
+                      <Check size={12} />
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-[var(--text-muted)] font-mono leading-relaxed">
+                  Zero ADB &amp; zero root required. Nodus Fleet renders a hardware-accelerated floating cursor across the screen via <code className="text-[10px] text-sky-400">SYSTEM_ALERT_WINDOW</code>. Auto-fades when idle and dispatches taps at the cursor tip.
+                </p>
+                <div className="flex items-center gap-2 text-[10px] font-mono text-sky-400">
+                  <span className="px-1.5 py-0.5 rounded bg-sky-500/10 border border-sky-500/20">Standalone WiFi</span>
+                  <span className="px-1.5 py-0.5 rounded bg-sky-500/10 border border-sky-500/20">Auto-Hide 3.5s</span>
+                  <span className="px-1.5 py-0.5 rounded bg-sky-500/10 border border-sky-500/20">Hardware Clamped</span>
+                </div>
+              </button>
+
+              {/* Option B: Native Kernel Mouse via ADB */}
+              <button
+                type="button"
+                onClick={() => handleSelectMouseMode('adb')}
+                disabled={isStartingAdbMouse}
+                className={`p-3.5 rounded-xl border text-left transition flex flex-col justify-between gap-2.5 cursor-pointer ${
+                  mouseEngineMode === 'adb'
+                    ? 'bg-[var(--surface-container)] border-amber-500/80 ring-2 ring-amber-500/30 shadow-sm'
+                    : 'bg-[var(--surface-container)]/50 border-[var(--border-subtle)] hover:border-[var(--border-active)]'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-lg bg-amber-500/15 text-amber-400 flex items-center justify-center">
+                      <Zap size={14} />
+                    </div>
+                    <span className="text-xs font-bold text-[var(--text-heading)]">
+                      Option B: Native Kernel Mouse
+                    </span>
+                  </div>
+                  {mouseEngineMode === 'adb' && (
+                    <span className="w-5 h-5 rounded-full bg-amber-500 text-black flex items-center justify-center shrink-0">
+                      <Check size={12} />
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-[var(--text-muted)] font-mono leading-relaxed">
+                  Registers a true virtual USB Linux mouse kernel device via Android's <code className="text-[10px] text-amber-400">/system/bin/uinput</code> daemon over wireless ADB. Triggers Android 14's native <code className="text-[10px] text-amber-400">PointerController</code> and official OS cursor.
+                </p>
+                <div className="flex items-center gap-2 text-[10px] font-mono text-amber-400">
+                  <span className="px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">Linux /dev/uinput</span>
+                  <span className="px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">PointerController</span>
+                  <span className="px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">Official System Pointer</span>
+                </div>
+              </button>
+            </div>
+
+            {/* Pointer Tracking Speed & Sensitivity Slider Section */}
+            <div className="p-3.5 rounded-xl bg-[var(--surface-container)] border border-[var(--border-subtle)] space-y-2.5 mt-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sliders size={15} className="text-[var(--accent-primary)]" />
+                  <span className="text-xs font-bold text-[var(--text-heading)]">
+                    Pointer Tracking Speed &amp; Sensitivity
+                  </span>
+                </div>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-[var(--accent-container)] text-[var(--accent-on-container)] border border-[var(--border-active)] shadow-sm">
+                  {pointerSensitivity.toFixed(1)}x Multiplier
+                </span>
+              </div>
+
+              <p className="text-[11px] text-[var(--text-muted)] font-mono">
+                Adjust how fast the mouse cursor responds to touch gestures across the tablet display.
+              </p>
+
+              <div className="flex items-center gap-3 pt-1">
+                <span className="text-[10px] font-mono text-[var(--text-muted)] font-semibold">Precise (0.2x)</span>
+                <input
+                  type="range"
+                  min="0.2"
+                  max="3.0"
+                  step="0.1"
+                  value={pointerSensitivity}
+                  onChange={e => updateSensitivity(parseFloat(e.target.value))}
+                  aria-label="Pointer Tracking Sensitivity"
+                  className="flex-1 h-2 bg-[var(--surface-base)] rounded-lg appearance-none cursor-pointer accent-[var(--accent-primary)]"
+                />
+                <span className="text-[10px] font-mono text-[var(--text-muted)] font-semibold">Fast (3.0x)</span>
+              </div>
+
+              {/* Quick Preset Chips */}
+              <div className="flex items-center gap-2 pt-1 flex-wrap">
+                <span className="text-[10px] font-mono text-[var(--text-muted)]">Quick Presets:</span>
+                {[
+                  { label: '0.5x Slow', val: 0.5 },
+                  { label: '1.0x Normal', val: 1.0 },
+                  { label: '1.5x Smooth', val: 1.5 },
+                  { label: '2.2x Rapid', val: 2.2 },
+                ].map(pre => (
+                  <button
+                    key={pre.val}
+                    type="button"
+                    onClick={() => updateSensitivity(pre.val)}
+                    className={`h-6 px-2.5 rounded-md text-[10px] font-mono transition border ${
+                      Math.abs(pointerSensitivity - pre.val) < 0.05
+                        ? 'bg-[var(--accent-primary)] text-[var(--m3-on-primary)] font-bold border-transparent shadow-sm'
+                        : 'bg-[var(--surface-base)] text-[var(--text-body)] hover:bg-[var(--surface-elevated)] border-[var(--border-subtle)]'
+                    }`}
+                  >
+                    {pre.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Pointer Enable & Screen Overlay Controls */}
+            <div className="p-3.5 rounded-xl bg-[var(--surface-container)] border border-[var(--border-subtle)] space-y-3 mt-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <MousePointer2 size={15} className="text-[var(--accent-primary)]" />
+                  <span className="text-xs font-bold text-[var(--text-heading)]">
+                    Hardware Pointer Overlay Control
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {/* Enable/Disable Toggle Button */}
+                  <button
+                    type="button"
+                    onClick={() => updatePointerEnabled(!isPointerEnabled)}
+                    title={isPointerEnabled ? 'Hardware Pointer overlay is ENABLED on target device screen. Click to DISABLE.' : 'Hardware Pointer overlay is DISABLED. Click to ENABLE.'}
+                    className={`h-7 px-3 rounded-lg text-xs font-mono font-semibold transition border flex items-center gap-1.5 ${
+                      isPointerEnabled
+                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25'
+                        : 'bg-zinc-500/15 text-zinc-400 border-zinc-500/30 hover:bg-zinc-500/25'
+                    }`}
+                  >
+                    {isPointerEnabled ? <Eye size={13} className="text-emerald-400" /> : <EyeOff size={13} className="text-zinc-400" />}
+                    <span>{isPointerEnabled ? 'Pointer Enabled' : 'Pointer Disabled'}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1 text-xs font-mono">
+                <div className="p-2.5 rounded-lg bg-[var(--surface-base)] border border-[var(--border-subtle)] flex items-center justify-between">
+                  <div>
+                    <span className="text-[var(--text-heading)] font-semibold block">Keep Visible Permanently</span>
+                    <span className="text-[10px] text-[var(--text-muted)] block">
+                      {isPointerAutoHide ? 'Auto-fades after 3.5s idle' : 'Stays visible on screen continuously'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => updatePointerAutoHide(!isPointerAutoHide)}
+                    className={`h-6 px-2.5 rounded-md text-[10px] font-mono font-bold transition border ${
+                      !isPointerAutoHide
+                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                        : 'bg-[var(--surface-container)] text-[var(--text-muted)] border-[var(--border-subtle)]'
+                    }`}
+                  >
+                    {!isPointerAutoHide ? 'ALWAYS ON' : 'AUTO-FADE'}
+                  </button>
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-[var(--surface-base)] border border-[var(--border-subtle)] flex items-center justify-between">
+                  <div>
+                    <span className="text-[var(--text-heading)] font-semibold block">Overlay Hotspot Tip</span>
+                    <span className="text-[10px] text-[var(--text-muted)] block">Hardware clamped screen coordinates</span>
+                  </div>
+                  <span className="text-[10px] text-sky-400 font-bold px-2 py-0.5 rounded bg-sky-500/10 border border-sky-500/20">
+                    SYSTEM_ALERT
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Collapsible Setup Guide */}
           <div className="border border-[var(--border-subtle)] rounded-xl overflow-hidden">
             <button
@@ -654,6 +1048,20 @@ export const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({
                   <p className="text-[var(--text-muted)]">
                     No extra setup is required! The Android tablet controls your Windows/Linux desktop mouse, keyboard, media, and shortcuts out-of-the-box using the Desktop Host Daemon.
                   </p>
+                </div>
+
+                <div className="pt-2 border-t border-[var(--border-subtle)]">
+                  <h4 className="font-bold text-[var(--text-heading)] text-xs mb-1">
+                    4. Android Mouse Emulation (Visible Hardware Cursor)
+                  </h4>
+                  <ul className="list-disc list-inside space-y-1 text-[var(--text-muted)] pl-1">
+                    <li>
+                      <strong className="text-[var(--text-heading)]">Option A (System Overlay Cursor):</strong> Operates over pure WiFi (port 9120) with zero ADB connection. If cursor is not visible, ensure &quot;Display over other apps&quot; permission is granted for Nodus Fleet in Android Settings &gt; Apps &gt; Special App Access &gt; Display Over Other Apps.
+                    </li>
+                    <li>
+                      <strong className="text-[var(--text-heading)]">Option B (ADB Kernel Mouse):</strong> Connect wireless ADB (<code className="text-amber-400">192.168.1.35:5555</code>). Spawns a real kernel uinput device that makes Android think a physical mouse is plugged in, activating the native OS pointer.
+                    </li>
+                  </ul>
                 </div>
               </div>
             )}

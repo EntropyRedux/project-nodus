@@ -93,9 +93,11 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       } catch (_) {}
     }
 
+    let running = true;
     if (typeof bridge.isDaemonRunning === 'function') {
       try {
-        setIsServerRunning(bridge.isDaemonRunning());
+        running = bridge.isDaemonRunning();
+        setIsServerRunning(running);
       } catch (_) {}
     }
 
@@ -113,7 +115,13 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
 
     // 1. Paired Fleet Devices (Connected Mesh)
-    if (rawDevicesStr) {
+    if (!running) {
+      setDevices([{
+        ...DEFAULT_LOCAL_TABLET,
+        status: 'offline',
+        isLocal: true,
+      }]);
+    } else if (rawDevicesStr) {
       try {
         const devList: any[] = JSON.parse(rawDevicesStr);
         if (Array.isArray(devList) && devList.length > 0) {
@@ -127,6 +135,7 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 deduplicated.push({
                   ...DEFAULT_LOCAL_TABLET,
                   ...d,
+                  status: 'online',
                   isLocal: true,
                 });
               }
@@ -147,19 +156,21 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             }
           }
           const hasLocal = deduplicated.some(d => d.isLocal || d.id === 'poco-pad' || d.id === 'local');
-          setDevices(hasLocal ? deduplicated : [DEFAULT_LOCAL_TABLET, ...deduplicated]);
+          setDevices(hasLocal ? deduplicated : [{ ...DEFAULT_LOCAL_TABLET, status: 'online' }, ...deduplicated]);
         } else {
-          setDevices([DEFAULT_LOCAL_TABLET]);
+          setDevices([{ ...DEFAULT_LOCAL_TABLET, status: 'online' }]);
         }
       } catch (e) {
         console.warn('Failed to parse devices from bridge', e);
       }
     } else {
-      setDevices([DEFAULT_LOCAL_TABLET]);
+      setDevices([{ ...DEFAULT_LOCAL_TABLET, status: 'online' }]);
     }
 
     // 2. Discovered UDP Beacon Candidates (Strictly for Pairing Modal, NEVER auto-added to active mesh)
-    if (rawPeersStr) {
+    if (!running) {
+      setDiscoveredPeers([]);
+    } else if (rawPeersStr) {
       try {
         const peerList: any[] = JSON.parse(rawPeersStr);
         if (Array.isArray(peerList)) {
@@ -216,19 +227,60 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setIsServerRunning(prev => {
       const next = !prev;
       const bridge = (window as any).NodusNativeBridge;
-      if (bridge && typeof bridge.setDaemonRunning === 'function') {
-        bridge.setDaemonRunning(next);
+
+      if (!next) {
+        // Stop server: Disconnect all remote connections bidirectionally
+        setDevices(current => {
+          const remoteDevices = current.filter(d => !d.isLocal && d.id !== 'poco-pad' && d.id !== 'local');
+          for (const target of remoteDevices) {
+            if (target.ipAddress) {
+              const cleanIp = target.ipAddress.split(':')[0].trim();
+              const port = (target as any).port || (target as any).httpPort || 9120;
+              fetch(`http://${cleanIp}:${port}/api/fleet/unpair`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': 'Bearer NODUS-FLEET-SECURE',
+                  'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE',
+                },
+                body: JSON.stringify({
+                  id: 'poco-pad',
+                  deviceId: 'poco-pad',
+                  sourceDevice: 'poco-pad',
+                  ipAddress: '192.168.1.35',
+                  ip: '192.168.1.35',
+                  action: 'server_stopped',
+                  timestamp: Date.now(),
+                }),
+              }).catch(() => {});
+            }
+          }
+          const localDev = current.find(d => d.isLocal || d.id === 'poco-pad') || DEFAULT_LOCAL_TABLET;
+          return [{ ...localDev, isLocal: true, status: 'offline' }];
+        });
+
+        setActiveDeviceId('local');
+        setDiscoveredPeers([]);
+
+        if (bridge && typeof bridge.disconnectAll === 'function') {
+          bridge.disconnectAll();
+        }
+        if (bridge && typeof bridge.setDaemonRunning === 'function') {
+          bridge.setDaemonRunning(false);
+        }
+      } else {
+        if (bridge && typeof bridge.setDaemonRunning === 'function') {
+          bridge.setDaemonRunning(true);
+        }
+        setDevices(current =>
+          current.map(d =>
+            d.isLocal || d.id === 'poco-pad'
+              ? { ...d, status: 'online' }
+              : d
+          )
+        );
       }
-      setDevices(current =>
-        current.map(d =>
-          d.isLocal || d.id === 'poco-pad'
-            ? {
-                ...d,
-                status: next ? 'online' : 'offline',
-              }
-            : d
-        )
-      );
+
       return next;
     });
   }, []);
@@ -271,12 +323,37 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const removeDevice = useCallback((id: string) => {
     if (id === 'poco-pad' || id === 'local') return; // Protect local tablet
+    const target = devices.find(d => d.id === id);
     setDevices(prev => prev.filter(d => d.id !== id));
+
+    // Dispatch unpair RPC directly to remote peer so it also drops this tablet immediately
+    if (target?.ipAddress) {
+      const cleanIp = target.ipAddress.split(':')[0].trim();
+      const port = (target as any).port || (target as any).httpPort || 9120;
+      fetch(`http://${cleanIp}:${port}/api/fleet/unpair`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer NODUS-FLEET-SECURE',
+          'X-Nodus-Auth-Token': 'NODUS-FLEET-SECURE',
+        },
+        body: JSON.stringify({
+          id: 'poco-pad',
+          deviceId: 'poco-pad',
+          sourceDevice: 'poco-pad',
+          ipAddress: '192.168.1.35',
+          ip: '192.168.1.35',
+          action: 'unpair',
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+    }
+
     const bridge = (window as any).NodusNativeBridge;
     if (bridge && typeof bridge.removeDevice === 'function') {
       bridge.removeDevice(id);
     }
-  }, []);
+  }, [devices]);
 
   const rebootDevice = useCallback((id: string) => {
     const bridge = (window as any).NodusNativeBridge;

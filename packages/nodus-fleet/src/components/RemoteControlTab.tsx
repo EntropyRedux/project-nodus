@@ -33,7 +33,9 @@ import {
   History,
   RotateCcw,
   Edit2,
-  Trash2
+  Trash2,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 interface ClickRipple {
@@ -235,7 +237,104 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
   const [cursorPos, setCursorPos] = useState({ x: 50, y: 50 });
   const [ripples, setRipples] = useState<ClickRipple[]>([]);
   const [isClickHeld, setIsClickHeld] = useState(false);
-  const [sensitivity, setSensitivity] = useState<'normal' | 'precision' | 'fast'>('normal');
+  const [pointerSensitivity, setPointerSensitivity] = useState<number>(() => {
+    try {
+      const s = localStorage.getItem('nodus_mouse_sensitivity');
+      if (s) {
+        const val = parseFloat(s);
+        if (!isNaN(val) && val >= 0.2 && val <= 3.5) return val;
+      }
+    } catch (_) {}
+    return 1.2;
+  });
+
+  // Target Device Screen Resolution for 1:1 Pixel Mapping
+  const [deviceScreen, setDeviceScreen] = useState<{ width: number; height: number }>({
+    width: 2560,
+    height: 1570
+  });
+
+  // Floating Pointer Enable/Disable State (default enabled/true)
+  const [isPointerEnabled, setIsPointerEnabled] = useState<boolean>(() => {
+    try {
+      const s = localStorage.getItem('nodus_pointer_enabled');
+      if (s !== null) return s === 'true';
+      const legacy = localStorage.getItem('nodus_pointer_visible');
+      return legacy !== null ? legacy === 'true' : true;
+    } catch (_) {
+      return true;
+    }
+  });
+
+  const updateSensitivity = (val: number) => {
+    const clamped = Math.max(0.2, Math.min(3.5, Math.round(val * 10) / 10));
+    setPointerSensitivity(clamped);
+    try {
+      localStorage.setItem('nodus_mouse_sensitivity', clamped.toString());
+      window.dispatchEvent(new CustomEvent('nodus_mouse_sensitivity_changed', { detail: clamped }));
+    } catch (_) {}
+  };
+
+  useEffect(() => {
+    const handleSensitivityChange = (e: any) => {
+      if (typeof e.detail === 'number') {
+        setPointerSensitivity(e.detail);
+      }
+    };
+    const handleEnabledChange = (e: any) => {
+      if (typeof e.detail === 'boolean') {
+        setIsPointerEnabled(e.detail);
+      }
+    };
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'nodus_mouse_sensitivity' && e.newValue) {
+        const val = parseFloat(e.newValue);
+        if (!isNaN(val)) setPointerSensitivity(val);
+      }
+      if ((e.key === 'nodus_pointer_enabled' || e.key === 'nodus_pointer_visible') && e.newValue !== null) {
+        setIsPointerEnabled(e.newValue === 'true');
+      }
+    };
+    window.addEventListener('nodus_mouse_sensitivity_changed', handleSensitivityChange);
+    window.addEventListener('nodus_pointer_enabled_changed', handleEnabledChange);
+    window.addEventListener('nodus_pointer_visibility_changed', handleEnabledChange);
+    window.addEventListener('storage', handleStorageChange);
+    return () => {
+      window.removeEventListener('nodus_mouse_sensitivity_changed', handleSensitivityChange);
+      window.removeEventListener('nodus_pointer_enabled_changed', handleEnabledChange);
+      window.removeEventListener('nodus_pointer_visibility_changed', handleEnabledChange);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
+
+  const togglePointerEnabled = async (forcedState?: boolean) => {
+    const nextEnabled = typeof forcedState === 'boolean' ? forcedState : !isPointerEnabled;
+    setIsPointerEnabled(nextEnabled);
+    try {
+      localStorage.setItem('nodus_pointer_enabled', String(nextEnabled));
+      localStorage.setItem('nodus_pointer_visible', String(nextEnabled));
+      window.dispatchEvent(new CustomEvent('nodus_pointer_enabled_changed', { detail: nextEnabled }));
+      window.dispatchEvent(new CustomEvent('nodus_pointer_visibility_changed', { detail: nextEnabled }));
+    } catch (_) {}
+
+    if (targetDevice?.ipAddress) {
+      try {
+        await universalNetworkFetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/system/overlay'), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${targetToken}`,
+            'X-Nodus-Auth-Token': targetToken
+          },
+          body: {
+            action: nextEnabled ? 'enable' : 'disable',
+            autoHide: false
+          }
+        });
+        showTelemetry(nextEnabled ? 'Pointer overlay enabled on device' : 'Pointer overlay disabled on device');
+      } catch (_) {}
+    }
+  };
 
   const targetDevice = devices.find(d => d.id === targetDeviceId) || devices.find(d => !d.isLocal) || devices[0] || null;
   const targetToken = (targetDevice as any)?.authToken || (targetDevice as any)?.token || 'NODUS-FLEET-SECURE';
@@ -300,13 +399,24 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
     const y = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
     setCursorPos({ x, y });
 
-    const dx = Math.round((e.movementX || 0) * (sensitivity === 'fast' ? 2.5 : sensitivity === 'precision' ? 0.6 : 1.2));
-    const dy = Math.round((e.movementY || 0) * (sensitivity === 'fast' ? 2.5 : sensitivity === 'precision' ? 0.6 : 1.2));
-    if (dx !== 0 || dy !== 0) {
+    const dx = Math.round((e.movementX || 0) * pointerSensitivity);
+    const dy = Math.round((e.movementY || 0) * pointerSensitivity);
+    if ((dx !== 0 || dy !== 0) && isPointerEnabled) {
+      const targetPixelX = Math.round((x / 100) * deviceScreen.width);
+      const targetPixelY = Math.round((y / 100) * deviceScreen.height);
       universalNetworkFetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/mouse/move'), {
         method: 'POST',
         headers: { 'X-Nodus-Auth-Token': targetToken },
-        body: { dx, dy },
+        body: {
+          pctX: x,
+          pctY: y,
+          x: targetPixelX,
+          y: targetPixelY,
+          dx,
+          dy,
+          isDrag: isClickHeld,
+          isClickHeld
+        },
         timeoutMs: 1500,
       }).catch(() => {});
     }
@@ -314,7 +424,7 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
 
   // Android Touch Event Listeners with Edge Inset to protect system back gesture
   const handleTrackpadTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (!targetDevice || !e.touches[0]) return;
+    if (!targetDevice || !targetDevice.ipAddress || !e.touches[0]) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const touch = e.touches[0];
 
@@ -335,15 +445,26 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
 
     const x = Math.max(0, Math.min(100, ((touch.clientX - rect.left) / rect.width) * 100));
     const y = Math.max(0, Math.min(100, ((touch.clientY - rect.top) / rect.height) * 100));
-    const dx = Math.round((x - cursorPos.x) * 4);
-    const dy = Math.round((y - cursorPos.y) * 4);
+    const dx = Math.round((x - cursorPos.x) * 3.5 * pointerSensitivity);
+    const dy = Math.round((y - cursorPos.y) * 3.5 * pointerSensitivity);
     setCursorPos({ x, y });
 
-    if (dx !== 0 || dy !== 0) {
+    if ((dx !== 0 || dy !== 0) && isPointerEnabled) {
+      const targetPixelX = Math.round((x / 100) * deviceScreen.width);
+      const targetPixelY = Math.round((y / 100) * deviceScreen.height);
       universalNetworkFetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/mouse/move'), {
         method: 'POST',
         headers: { 'X-Nodus-Auth-Token': targetToken },
-        body: { dx, dy },
+        body: {
+          pctX: x,
+          pctY: y,
+          x: targetPixelX,
+          y: targetPixelY,
+          dx,
+          dy,
+          isDrag: isClickHeld,
+          isClickHeld
+        },
         timeoutMs: 1500,
       }).catch(() => {});
     }
@@ -365,8 +486,8 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
     if (!targetDevice || !targetDevice.ipAddress) return;
     e.preventDefault();
     const rect = e.currentTarget.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
+    const x = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+    const y = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
     setIsClickHeld(true);
 
     const buttonName = e.button === 2 ? 'right' : e.button === 1 ? 'middle' : 'left';
@@ -374,10 +495,19 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
     triggerRipple(x, y, buttonName === 'left' ? '#9ECAFF' : buttonName === 'middle' ? '#82D5A5' : '#D4AAFF');
     showTelemetry(`${buttonName.toUpperCase()} Click sent to ${targetDevice.name}`);
 
+    const targetPixelX = Math.round((x / 100) * deviceScreen.width);
+    const targetPixelY = Math.round((y / 100) * deviceScreen.height);
+
     universalNetworkFetch(getDeviceEndpoint(targetDevice.ipAddress, '/api/input/mouse/click'), {
       method: 'POST',
       headers: { 'X-Nodus-Auth-Token': targetToken },
-      body: { button: buttonName },
+      body: {
+        button: buttonName,
+        x: targetPixelX,
+        y: targetPixelY,
+        pctX: x,
+        pctY: y
+      },
       timeoutMs: 1500,
     }).catch(() => {});
   };
@@ -824,23 +954,40 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
             <span className="hidden xs:inline">SYNCED</span>
           </div>
 
-          {/* Sensitivity Switcher */}
-          <div className="hidden md:flex items-center gap-1 bg-[var(--surface-base)] p-1 rounded-lg border border-[var(--border-subtle)] text-[11px] font-mono">
-            <span className="text-[var(--text-muted)] px-1.5 text-[10px]">Speed</span>
-            {(['normal', 'fast', 'precision'] as const).map(mode => (
-              <button
-                key={mode}
-                onClick={() => setSensitivity(mode)}
-                className={`h-6 px-2 rounded-md capitalize font-medium transition ${
-                  sensitivity === mode
-                    ? 'bg-[var(--accent-primary)] text-[var(--m3-on-primary)] shadow-sm font-semibold'
-                    : 'text-[var(--text-muted)] hover:text-[var(--text-body)]'
-                }`}
-              >
-                {mode}
-              </button>
-            ))}
+          {/* Sensitivity Slider Control */}
+          <div className="hidden md:flex items-center gap-2 bg-[var(--surface-base)] px-3 py-1.5 rounded-lg border border-[var(--border-subtle)] text-[11px] font-mono shadow-sm">
+            <Sliders size={13} className="text-[var(--accent-primary)] shrink-0" />
+            <span className="text-[var(--text-muted)] text-[10px] hidden sm:inline font-semibold">Speed</span>
+            <input
+              type="range"
+              min="0.2"
+              max="3.0"
+              step="0.1"
+              value={pointerSensitivity}
+              onChange={e => updateSensitivity(parseFloat(e.target.value))}
+              aria-label="Pointer Sensitivity Slider"
+              className="w-16 sm:w-24 h-1.5 bg-[var(--surface-container)] rounded-lg appearance-none cursor-pointer accent-[var(--accent-primary)]"
+              title={`Pointer Sensitivity: ${pointerSensitivity.toFixed(1)}x`}
+            />
+            <span className="w-8 text-right font-bold text-[var(--accent-primary)] text-[11px]">
+              {pointerSensitivity.toFixed(1)}x
+            </span>
           </div>
+
+          {/* Show/Hide Mouse Pointer Quick Toggle */}
+          <button
+            type="button"
+            onClick={() => togglePointerEnabled()}
+            title={isPointerEnabled ? 'Hardware Pointer overlay is ENABLED on target device screen. Click to DISABLE.' : 'Hardware Pointer overlay is DISABLED. Click to ENABLE.'}
+            className={`hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-mono font-semibold transition shadow-sm ${
+              isPointerEnabled
+                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25'
+                : 'bg-zinc-500/15 text-zinc-400 border-zinc-500/30 hover:bg-zinc-500/25'
+            }`}
+          >
+            {isPointerEnabled ? <Eye size={12} className="text-emerald-400" /> : <EyeOff size={12} className="text-zinc-400" />}
+            <span>{isPointerEnabled ? 'Pointer Enabled' : 'Pointer Disabled'}</span>
+          </button>
         </div>
       </div>
 
@@ -873,86 +1020,140 @@ export const RemoteControlTab: React.FC<RemoteControlTabProps> = ({
                 : undefined
             }
           >
-          {/* Virtual Precision Trackpad */}
-          <div
-            onMouseMove={handleTrackpadMove}
-            onMouseDown={handleTrackpadMouseDown}
-            onMouseUp={() => setIsClickHeld(false)}
-            onMouseLeave={() => setIsClickHeld(false)}
-            onTouchStart={handleTrackpadTouchStart}
-            onTouchMove={handleTrackpadTouchMove}
-            onTouchEnd={handleTrackpadTouchEnd}
-            onTouchCancel={handleTrackpadTouchEnd}
-            onWheel={handleTrackpadWheel}
-            onContextMenu={e => e.preventDefault()}
-            style={{ touchAction: 'none' }}
-            className="flex-1 bg-[var(--surface-base)] border border-[var(--border-subtle)] rounded-xl relative cursor-crosshair overflow-hidden group flex flex-col justify-between p-5 min-h-[250px] select-none shadow-inner"
-          >
-            {/* Ambient Tech Grid */}
-            <div className="absolute inset-0 bg-[linear-gradient(to_right,var(--border-subtle)_1px,transparent_1px),linear-gradient(to_bottom,var(--border-subtle)_1px,transparent_1px)] bg-[size:2rem_2rem] opacity-30 pointer-events-none" />
+          {/* Virtual Precision Trackpad Container (Strictly preserves target device screen aspect ratio) */}
+          <div className="w-full flex items-center justify-center shrink-0">
+            <div
+              onMouseMove={handleTrackpadMove}
+              onMouseDown={handleTrackpadMouseDown}
+              onMouseUp={() => setIsClickHeld(false)}
+              onMouseLeave={() => setIsClickHeld(false)}
+              onTouchStart={handleTrackpadTouchStart}
+              onTouchMove={handleTrackpadTouchMove}
+              onTouchEnd={handleTrackpadTouchEnd}
+              onTouchCancel={handleTrackpadTouchEnd}
+              onWheel={handleTrackpadWheel}
+              onContextMenu={e => e.preventDefault()}
+              style={{
+                touchAction: 'none',
+                aspectRatio: `${deviceScreen.width} / ${deviceScreen.height}`,
+                width: '100%',
+                maxWidth: `calc((min(440px, 48vh)) * (${deviceScreen.width} / ${deviceScreen.height}))`,
+                maxHeight: 'min(440px, 48vh)'
+              }}
+              className="bg-[var(--surface-base)] border border-[var(--border-subtle)] rounded-xl relative cursor-crosshair overflow-hidden group flex flex-col justify-between p-4 sm:p-5 select-none shadow-inner"
+            >
+              {/* Ambient Tech Grid */}
+              <div className="absolute inset-0 bg-[linear-gradient(to_right,var(--border-subtle)_1px,transparent_1px),linear-gradient(to_bottom,var(--border-subtle)_1px,transparent_1px)] bg-[size:2rem_2rem] opacity-30 pointer-events-none" />
 
-            {/* Active Cursor Dot with Halo */}
-            {targetDevice && (
-              <div
-                className="absolute -translate-x-1/2 -translate-y-1/2 pointer-events-none transition-all duration-75 ease-out"
-                style={{
-                  left: `${cursorPos.x}%`,
-                  top: `${cursorPos.y}%`,
-                  zIndex: 10
-                }}
-              >
+              {/* Active Cursor Dot with Halo */}
+              {targetDevice && (
                 <div
-                  className={`rounded-full transition-all duration-100 ${
-                    isClickHeld ? 'w-5 h-5 bg-[var(--accent-primary)]' : 'w-4 h-4 bg-[var(--accent-primary)]'
-                  }`}
+                  className="absolute -translate-x-1/2 -translate-y-1/2 pointer-events-none transition-all duration-75 ease-out"
                   style={{
-                    boxShadow: '0 0 16px var(--accent-primary)'
+                    left: `${cursorPos.x}%`,
+                    top: `${cursorPos.y}%`,
+                    zIndex: 10
+                  }}
+                >
+                  <div
+                    className={`rounded-full transition-all duration-100 ${
+                      !isPointerEnabled
+                        ? 'w-3.5 h-3.5 border-2 border-dashed border-zinc-400 bg-zinc-600/50 opacity-60'
+                        : isClickHeld
+                        ? 'w-5 h-5 bg-[var(--accent-primary)]'
+                        : 'w-4 h-4 bg-[var(--accent-primary)]'
+                    }`}
+                    style={{
+                      boxShadow: isPointerEnabled ? '0 0 16px var(--accent-primary)' : 'none'
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* Disabled Overlay Floating Notice */}
+              {!isPointerEnabled && (
+                <div className="absolute top-12 left-1/2 -translate-x-1/2 z-20 px-3 py-1 rounded-full bg-zinc-950/85 border border-zinc-700/80 text-zinc-300 text-[10px] font-mono flex items-center gap-1.5 shadow-xl pointer-events-none backdrop-blur-sm">
+                  <EyeOff size={11} className="text-amber-400" />
+                  <span>Hardware Pointer Disabled</span>
+                </div>
+              )}
+
+              {/* Click Ripple Animations */}
+              {ripples.map(ripple => (
+                <div
+                  key={ripple.id}
+                  className="absolute -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full border-2 pointer-events-none animate-ping"
+                  style={{
+                    left: `${ripple.x}%`,
+                    top: `${ripple.y}%`,
+                    borderColor: ripple.color,
+                    zIndex: 8
                   }}
                 />
+              ))}
+
+              {/* Top Info Bar inside Trackpad */}
+              <div className="relative z-10 flex items-center justify-between text-xs font-mono text-[var(--text-muted)] pointer-events-none">
+                <div className="flex items-center gap-2 pointer-events-auto">
+                  <span className="flex items-center gap-1.5 text-[var(--accent-primary)] font-medium">
+                    <MousePointer2 className="w-3.5 h-3.5" />
+                    Virtual Precision Trackpad
+                  </span>
+                  <button
+                    type="button"
+                    onClick={e => {
+                      e.stopPropagation();
+                      togglePointerEnabled();
+                    }}
+                    title={
+                      isPointerEnabled
+                        ? 'Pointer overlay is currently ENABLED. Click to DISABLE completely.'
+                        : 'Pointer overlay is currently DISABLED. Click to ENABLE.'
+                    }
+                    className={`h-5 px-2 rounded-full text-[10px] font-mono font-bold flex items-center gap-1 transition shadow-sm border ${
+                      isPointerEnabled
+                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25'
+                        : 'bg-zinc-500/15 text-zinc-400 border-zinc-500/30 hover:bg-zinc-500/25'
+                    }`}
+                  >
+                    {isPointerEnabled ? (
+                      <>
+                        <Eye size={10} className="text-emerald-400" />
+                        <span>Pointer ON</span>
+                      </>
+                    ) : (
+                      <>
+                        <EyeOff size={10} className="text-zinc-400" />
+                        <span>Pointer OFF</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[var(--text-muted)] font-mono text-[11px] hidden sm:inline">
+                    {Math.round((cursorPos.x / 100) * deviceScreen.width)} × {Math.round((cursorPos.y / 100) * deviceScreen.height)} px
+                  </span>
+                  <span className="text-[10px] font-mono text-[var(--accent-primary)] bg-[var(--accent-container)] px-1.5 py-0.5 rounded font-semibold">
+                    {Math.round(cursorPos.x)}%, {Math.round(cursorPos.y)}%
+                  </span>
+                </div>
               </div>
-            )}
 
-            {/* Click Ripple Animations */}
-            {ripples.map(ripple => (
-              <div
-                key={ripple.id}
-                className="absolute -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full border-2 pointer-events-none animate-ping"
-                style={{
-                  left: `${ripple.x}%`,
-                  top: `${ripple.y}%`,
-                  borderColor: ripple.color,
-                  zIndex: 8
-                }}
-              />
-            ))}
+              {/* Center Watermark / Helper */}
+              <div className="relative z-0 my-auto text-center pointer-events-none">
+                <p className="text-xs font-medium text-[var(--text-body)]">
+                  Touch or drag anywhere to steer cursor
+                </p>
+                <p className="text-[11px] text-[var(--text-muted)] font-mono mt-1">
+                  Tap to click · Two-finger drag to scroll · Press &amp; hold for drag
+                </p>
+              </div>
 
-            {/* Top Info Bar inside Trackpad */}
-            <div className="relative z-10 flex items-center justify-between text-xs font-mono text-[var(--text-muted)] pointer-events-none">
-              <span className="flex items-center gap-1.5 text-[var(--accent-primary)] font-medium">
-                <MousePointer2 className="w-3.5 h-3.5" />
-                Virtual Precision Trackpad
-              </span>
-              <span className="text-[var(--text-muted)] font-mono">
-                X: {Math.round(cursorPos.x)}% · Y: {Math.round(cursorPos.y)}%
-              </span>
-            </div>
-
-            {/* Center Watermark / Helper */}
-            <div className="relative z-0 my-auto text-center pointer-events-none">
-              <p className="text-xs font-medium text-[var(--text-body)]">
-                Touch or drag anywhere to steer cursor
-              </p>
-              <p className="text-[11px] text-[var(--text-muted)] font-mono mt-1">
-                Tap to click · Two-finger drag to scroll · Press & hold for drag
-              </p>
-            </div>
-
-            {/* Bottom Status label */}
-            <div className="absolute bottom-4 left-5 text-[11px] font-mono text-[var(--text-muted)] pointer-events-none">
-              Low-Latency RPC Bridge
-            </div>
-            <div className="absolute bottom-4 right-5 text-[11px] font-mono text-[var(--text-muted)] pointer-events-none">
-              ~1.2ms
+              {/* Bottom Status label */}
+              <div className="relative z-10 flex items-center justify-between text-[11px] font-mono text-[var(--text-muted)] pointer-events-none mt-auto pt-2">
+                <span>Low-Latency RPC Bridge</span>
+                <span>~1.2ms</span>
+              </div>
             </div>
           </div>
 

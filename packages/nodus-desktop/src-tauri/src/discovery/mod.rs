@@ -57,6 +57,8 @@ pub struct ScannedPeerResult {
     pub os: Option<String>,
     #[serde(rename = "latencyMs")]
     pub latency_ms: Option<u64>,
+    #[serde(default)]
+    pub mac: Option<String>,
 }
 
 #[allow(dead_code)]
@@ -75,12 +77,47 @@ pub fn unregister_node(id: String) -> bool {
     if id == "this-pc" || id == "local" {
         return false; // Prevent unregistering the host controller itself
     }
+    let clean_id = id.trim().to_string();
+    let clean_ip = clean_id.replace("node-", "").replace('-', ".");
+
     let mut lock = DISCOVERED_DEVICES.lock().unwrap();
     if let Some(ref mut map) = *lock {
-        map.remove(&id).is_some()
-    } else {
-        false
+        let to_remove: Vec<String> = map.iter()
+            .filter(|(k, v)| {
+                k.as_str() == clean_id.as_str()
+                    || k.as_str() == clean_ip.as_str()
+                    || v.id == clean_id
+                    || v.ip_address.starts_with(&clean_ip)
+            })
+            .map(|(k, _)| k.clone())
+            .collect();
+        for k in to_remove {
+            map.remove(&k);
+        }
     }
+
+    let mut beacons_lock = PEER_BEACONS_CACHE.lock().unwrap();
+    if let Some(ref mut bmap) = *beacons_lock {
+        if let Some(peer) = bmap.get_mut(&clean_ip) {
+            peer.is_in_fleet = false;
+        }
+        bmap.remove(&clean_ip);
+    }
+
+    true
+}
+
+#[tauri::command]
+pub fn unregister_all_nodes() -> bool {
+    let mut lock = DISCOVERED_DEVICES.lock().unwrap();
+    if let Some(ref mut map) = *lock {
+        map.clear();
+    }
+    let mut beacons_lock = PEER_BEACONS_CACHE.lock().unwrap();
+    if let Some(ref mut bmap) = *beacons_lock {
+        bmap.clear();
+    }
+    true
 }
 
 #[tauri::command]
@@ -162,8 +199,8 @@ fn get_local_host_ips() -> Vec<String> {
     ips
 }
 
-fn get_arp_ips(base_prefix: &str) -> Vec<String> {
-    let mut ips = Vec::new();
+fn get_arp_entries(base_prefix: &str) -> Vec<(String, String)> {
+    let mut entries = Vec::new();
 
     #[cfg(windows)]
     {
@@ -191,14 +228,19 @@ fn get_arp_ips(base_prefix: &str) -> Vec<String> {
                         && !ip.starts_with("224.")
                         && !ip.starts_with("239.")
                     {
-                        ips.push(ip.to_string());
+                        entries.push((ip.to_string(), mac.to_string()));
                     }
                 }
             }
         }
     }
 
-    ips
+    entries
+}
+
+#[allow(dead_code)]
+fn get_arp_ips(base_prefix: &str) -> Vec<String> {
+    get_arp_entries(base_prefix).into_iter().map(|(ip, _)| ip).collect()
 }
 
 fn resolve_device_hostname(ip: &str) -> Option<String> {
@@ -209,6 +251,9 @@ fn resolve_device_hostname(ip: &str) -> Option<String> {
                 return Some(host_str.to_string());
             }
         }
+    }
+    if ip.ends_with(".1") {
+        return Some("Gateway Router".to_string());
     }
     None
 }
@@ -274,7 +319,7 @@ fn scan_subnet_internal(subnet_base: String) -> Result<Vec<ScannedPeerResult>, S
     };
 
     // 1. Initial quick ARP snapshot (fast, native cache)
-    let initial_arp_ips = get_arp_ips(&base_prefix);
+    let initial_arp_entries = get_arp_entries(&base_prefix);
 
     // 2. Parallel sweep across all 254 IPs using lightweight worker pool
     let ips: Vec<u8> = (1..=254).collect();
@@ -331,6 +376,7 @@ fn scan_subnet_internal(subnet_base: String) -> Result<Vec<ScannedPeerResult>, S
                             device_type: dev_type.or(Some("tablet".to_string())),
                             os: os.or(Some("Android 14 (HyperOS)".to_string())),
                             latency_ms: Some(latency),
+                            mac: None,
                         });
                         return;
                     }
@@ -353,6 +399,7 @@ fn scan_subnet_internal(subnet_base: String) -> Result<Vec<ScannedPeerResult>, S
                                 device_type: Some("desktop".to_string()),
                                 os: Some("LAN Device".to_string()),
                                 latency_ms: Some(latency),
+                                mac: None,
                             });
                             return;
                         }
@@ -367,25 +414,39 @@ fn scan_subnet_internal(subnet_base: String) -> Result<Vec<ScannedPeerResult>, S
     }
 
     // 3. Post-sweep: Check updated ARP cache
-    let post_arp_ips = get_arp_ips(&base_prefix);
-    let mut all_discovered_ips = initial_arp_ips;
-    for a_ip in post_arp_ips {
-        if !all_discovered_ips.contains(&a_ip) {
-            all_discovered_ips.push(a_ip);
+    let post_arp_entries = get_arp_entries(&base_prefix);
+    let mut all_discovered_entries = initial_arp_entries;
+    for (a_ip, a_mac) in post_arp_entries {
+        if !all_discovered_entries.iter().any(|(ip, _)| ip == &a_ip) {
+            all_discovered_entries.push((a_ip, a_mac));
         }
     }
 
     // 4. Record remaining ARP neighbors without launching ping subprocesses
     {
         let mut lock = results.lock().unwrap();
-        for a_ip in all_discovered_ips {
+        for (a_ip, a_mac) in all_discovered_entries {
             if local_ips.iter().any(|lip| lip == &a_ip) {
                 continue;
             }
-            if !lock.contains_key(&a_ip) {
+            if let Some(existing) = lock.get_mut(&a_ip) {
+                if existing.mac.is_none() {
+                    existing.mac = Some(a_mac.clone());
+                }
+            } else {
                 let resolved = resolve_device_hostname(&a_ip);
-                let host_display = resolved.clone().unwrap_or_else(|| format!("LAN Device ({})", a_ip));
-                let dev_type = resolved.as_deref().map(infer_device_type).unwrap_or_else(|| "desktop".to_string());
+                let host_display = resolved.clone().unwrap_or_else(|| {
+                    if a_ip.ends_with(".1") {
+                        "Gateway Router".to_string()
+                    } else {
+                        format!("LAN Device ({})", a_ip)
+                    }
+                });
+                let dev_type = if a_ip.ends_with(".1") {
+                    "desktop".to_string()
+                } else {
+                    resolved.as_deref().map(infer_device_type).unwrap_or_else(|| "desktop".to_string())
+                };
                 lock.insert(a_ip.clone(), ScannedPeerResult {
                     ip: a_ip.clone(),
                     port: 80,
@@ -395,6 +456,7 @@ fn scan_subnet_internal(subnet_base: String) -> Result<Vec<ScannedPeerResult>, S
                     device_type: Some(dev_type),
                     os: Some("LAN Device".to_string()),
                     latency_ms: Some(10),
+                    mac: Some(a_mac),
                 });
             }
         }
@@ -407,7 +469,13 @@ fn scan_subnet_internal(subnet_base: String) -> Result<Vec<ScannedPeerResult>, S
             let mut lock = results.lock().unwrap();
             for (p_ip, peer) in map {
                 if p_ip.starts_with(&base_prefix) && !local_ips.iter().any(|lip| lip == p_ip) {
-                    lock.insert(p_ip.clone(), peer.clone());
+                    let mut p = peer.clone();
+                    if let Some(existing) = lock.get(p_ip) {
+                        if p.mac.is_none() {
+                            p.mac = existing.mac.clone();
+                        }
+                    }
+                    lock.insert(p_ip.clone(), p);
                 }
             }
         }
@@ -433,6 +501,84 @@ fn scan_subnet_internal(subnet_base: String) -> Result<Vec<ScannedPeerResult>, S
 }
 
 #[tauri::command]
+pub async fn get_lan_devices(subnet_base: Option<String>) -> Vec<ScannedPeerResult> {
+    tauri::async_runtime::spawn_blocking(move || {
+        get_lan_devices_internal(subnet_base)
+    })
+    .await
+    .unwrap_or_default()
+}
+
+fn get_lan_devices_internal(subnet_base: Option<String>) -> Vec<ScannedPeerResult> {
+    let local_ips = get_local_host_ips();
+    let base = subnet_base.unwrap_or_else(|| "192.168.1".to_string());
+    let clean_base = base.trim().trim_end_matches(".0").trim_end_matches('.');
+    let prefix = format!("{}.", clean_base);
+
+    let arp_entries = get_arp_entries(&prefix);
+    let mut results: HashMap<String, ScannedPeerResult> = HashMap::new();
+
+    for (a_ip, a_mac) in arp_entries {
+        if local_ips.iter().any(|lip| lip == &a_ip) {
+            continue;
+        }
+        let resolved = resolve_device_hostname(&a_ip);
+        let host_display = resolved.clone().unwrap_or_else(|| {
+            if a_ip.ends_with(".1") {
+                "Gateway Router".to_string()
+            } else {
+                format!("LAN Device ({})", a_ip)
+            }
+        });
+        let dev_type = if a_ip.ends_with(".1") {
+            "desktop".to_string()
+        } else {
+            resolved.as_deref().map(infer_device_type).unwrap_or_else(|| "desktop".to_string())
+        };
+        results.insert(a_ip.clone(), ScannedPeerResult {
+            ip: a_ip.clone(),
+            port: 80,
+            hostname: Some(host_display),
+            has_agent: false,
+            is_in_fleet: false,
+            device_type: Some(dev_type),
+            os: Some("LAN Device".to_string()),
+            latency_ms: Some(10),
+            mac: Some(a_mac),
+        });
+    }
+
+    // Overlay known beacon nodes (e.g. tablet with Nodus agent)
+    if let Ok(beacon_lock) = PEER_BEACONS_CACHE.lock() {
+        if let Some(ref map) = *beacon_lock {
+            for (p_ip, peer) in map {
+                if p_ip.starts_with(&prefix) && !local_ips.iter().any(|lip| lip == p_ip) {
+                    let mut p = peer.clone();
+                    if let Some(existing) = results.get(p_ip) {
+                        if p.mac.is_none() {
+                            p.mac = existing.mac.clone();
+                        }
+                    }
+                    results.insert(p_ip.clone(), p);
+                }
+            }
+        }
+    }
+
+    let mut list: Vec<ScannedPeerResult> = results.into_values().collect();
+    list.sort_by(|a, b| {
+        if a.has_agent != b.has_agent {
+            b.has_agent.cmp(&a.has_agent)
+        } else {
+            let a_last: u32 = a.ip.split('.').last().and_then(|s| s.parse().ok()).unwrap_or(0);
+            let b_last: u32 = b.ip.split('.').last().and_then(|s| s.parse().ok()).unwrap_or(0);
+            a_last.cmp(&b_last)
+        }
+    });
+    list
+}
+
+#[tauri::command]
 pub async fn get_lan_device_count(subnet_base: Option<String>) -> usize {
     tauri::async_runtime::spawn_blocking(move || {
         get_lan_device_count_internal(subnet_base)
@@ -447,9 +593,9 @@ fn get_lan_device_count_internal(subnet_base: Option<String>) -> usize {
     let clean_base = base.trim().trim_end_matches(".0").trim_end_matches('.');
     let prefix = format!("{}.", clean_base);
 
-    let arp_ips = get_arp_ips(&prefix);
+    let arp_entries = get_arp_entries(&prefix);
     let mut count = 0;
-    for ip in arp_ips {
+    for (ip, _) in arp_entries {
         if !local_ips.iter().any(|lip| lip == &ip) {
             count += 1;
         }
@@ -594,6 +740,7 @@ fn handle_probe(socket: &UdpSocket, src: SocketAddr, msg: &str, http_port: u16) 
                 device_type: Some(final_type.clone()),
                 os: Some(final_os.clone()),
                 latency_ms: Some(5),
+                mac: None,
             });
         }
 
