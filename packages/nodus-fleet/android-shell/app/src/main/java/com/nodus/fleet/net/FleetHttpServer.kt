@@ -143,14 +143,6 @@ class FleetHttpServer(
             }
 
             val clientIp = socket.inetAddress?.hostAddress ?: "127.0.0.1"
-            if (clientIp != "127.0.0.1" && !clientIp.startsWith("127.")) {
-                try {
-                    val prefs = context.getSharedPreferences("nodus_fleet_prefs", Context.MODE_PRIVATE)
-                    val set = prefs.getStringSet("known_companion_ips", mutableSetOf())?.toMutableSet() ?: mutableSetOf()
-                    set.add(clientIp)
-                    prefs.edit().putStringSet("known_companion_ips", set).apply()
-                } catch (_: Exception) {}
-            }
 
             val origin = headers["origin"]
 
@@ -314,31 +306,39 @@ class FleetHttpServer(
                             put("lastSeen", System.currentTimeMillis())
                         }
 
-                        FleetDaemonService.instance?.addOrUpdateRemoteDevice(pairedDevice)
+                        if (isAck) {
+                            val token = "nodus-fleet-" + java.util.UUID.randomUUID().toString()
+                            pairedDevice.put("token", token)
+                            pairedDevice.put("authToken", token)
+                            FleetDaemonService.instance?.addOrUpdateRemoteDevice(pairedDevice)
 
-                        // ONLY trigger confirmation dialog if this is an INITIAL pair request, NOT an ACK/confirmation
-                        if (!isAck) {
+                            val resp = JSONObject().apply {
+                                put("status", "success")
+                                put("ok", true)
+                                put("accepted", true)
+                                put("message", "Device paired successfully")
+                                put("authToken", token)
+                                put("deviceId", "poco-pad")
+                                put("name", "POCO Pad")
+                            }
+                            responseBytes = resp.toString().toByteArray(Charsets.UTF_8)
+                            contentType = "application/json; charset=utf-8"
+                        } else {
+                            // Initial pair request: Prompt user via IncomingPairModal and wait for explicit acceptance
                             val jsonStr = pairedDevice.toString()
                             com.nodus.fleet.FleetActivity.instance?.evaluateJs(
                                 "window.dispatchEvent(new CustomEvent('incoming-pair-request', { detail: $jsonStr }));"
                             )
-                        }
 
-                        val token = "nodus-fleet-" + java.util.UUID.randomUUID().toString()
-                        pairedDevice.put("token", token)
-                        pairedDevice.put("authToken", token)
-
-                        val resp = JSONObject().apply {
-                            put("status", "success")
-                            put("ok", true)
-                            put("accepted", true)
-                            put("message", "Device paired successfully")
-                            put("authToken", token)
-                            put("deviceId", "poco-pad")
-                            put("name", "POCO Pad")
+                            val resp = JSONObject().apply {
+                                put("status", "pending")
+                                put("ok", true)
+                                put("accepted", false)
+                                put("message", "Pairing request received, awaiting user confirmation")
+                            }
+                            responseBytes = resp.toString().toByteArray(Charsets.UTF_8)
+                            contentType = "application/json; charset=utf-8"
                         }
-                        responseBytes = resp.toString().toByteArray(Charsets.UTF_8)
-                        contentType = "application/json; charset=utf-8"
                     } catch (e: Exception) {
                         statusCode = 400
                         responseBytes = "{\"error\":\"Invalid pair request\"}".toByteArray(Charsets.UTF_8)

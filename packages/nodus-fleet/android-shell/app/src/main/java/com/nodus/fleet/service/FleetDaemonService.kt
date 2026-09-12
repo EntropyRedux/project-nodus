@@ -190,6 +190,15 @@ class FleetDaemonService : Service() {
         discoveredPeers.remove(id)
         savePairedDevices()
         if (removed != null) {
+            val ip = removed.optString("ipAddress").split(":")[0].trim()
+            if (ip.isNotEmpty()) {
+                try {
+                    val prefs = getSharedPreferences("nodus_fleet_prefs", Context.MODE_PRIVATE)
+                    val set = prefs.getStringSet("known_companion_ips", mutableSetOf<String>())?.toMutableSet() ?: mutableSetOf<String>()
+                    set.remove(ip)
+                    prefs.edit().putStringSet("known_companion_ips", set).apply()
+                } catch (_: Exception) {}
+            }
             Log.i(TAG, "Peer disconnected: ${removed.optString("name")}")
             val intent = Intent(NodusIpcContract.ACTION_DEVICE_DISCONNECTED).apply {
                 putExtra(NodusIpcContract.EXTRA_DEVICE_JSON, removed.toString())
@@ -336,13 +345,6 @@ class FleetDaemonService : Service() {
             val ip = device.optString("ipAddress").split(":")[0].trim()
             if (ip.isNotEmpty()) seenIps.add(ip)
             array.put(device)
-        }
-        for (peer in discoveredPeers.values) {
-            val ip = peer.optString("ipAddress").split(":")[0].trim()
-            if (ip.isNotEmpty() && !seenIps.contains(ip)) {
-                seenIps.add(ip)
-                array.put(peer)
-            }
         }
         return array.toString()
     }

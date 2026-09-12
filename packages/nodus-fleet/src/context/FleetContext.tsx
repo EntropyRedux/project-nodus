@@ -8,6 +8,7 @@ import {
 
 interface FleetContextType {
   devices: DeviceInfo[];
+  discoveredPeers: DeviceInfo[];
   clipboardItems: ClipboardItem[];
   serverConfig: NetworkServerConfig;
   isHomeInstalled: boolean;
@@ -60,6 +61,7 @@ const FleetContext = createContext<FleetContextType | null>(null);
 
 export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [devices, setDevices] = useState<DeviceInfo[]>([DEFAULT_LOCAL_TABLET]);
+  const [discoveredPeers, setDiscoveredPeers] = useState<DeviceInfo[]>([]);
   const [isServerRunning, setIsServerRunning] = useState<boolean>(true);
   const [isClipboardSyncEnabled, setIsClipboardSyncEnabled] = useState<boolean>(() => {
     try {
@@ -80,6 +82,7 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       // Browser mock fallback
       setIsHomeInstalled(false);
       setDevices([DEFAULT_LOCAL_TABLET]);
+      setDiscoveredPeers([]);
       setClipboardItems([]);
       return;
     }
@@ -109,16 +112,14 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       try { rawPeersStr = bridge.getDiscoveredPeers(); } catch (_) {}
     }
 
-    if (rawDevicesStr || rawPeersStr) {
+    // 1. Paired Fleet Devices (Connected Mesh)
+    if (rawDevicesStr) {
       try {
-        const devList: any[] = rawDevicesStr ? JSON.parse(rawDevicesStr) : [];
-        const peerList: any[] = rawPeersStr ? JSON.parse(rawPeersStr) : [];
-        const all = [...(Array.isArray(devList) ? devList : []), ...(Array.isArray(peerList) ? peerList : [])];
-
-        if (all.length > 0) {
+        const devList: any[] = JSON.parse(rawDevicesStr);
+        if (Array.isArray(devList) && devList.length > 0) {
           const deduplicated: DeviceInfo[] = [];
           const seenIps = new Set<string>();
-          for (const d of all) {
+          for (const d of devList) {
             const cleanIp = (d.ipAddress || d.ip || '').split(':')[0].trim();
             if (d.isLocal || d.id === 'poco-pad' || d.id === 'local' || cleanIp === '127.0.0.1') {
               if (!seenIps.has('local')) {
@@ -147,10 +148,48 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           }
           const hasLocal = deduplicated.some(d => d.isLocal || d.id === 'poco-pad' || d.id === 'local');
           setDevices(hasLocal ? deduplicated : [DEFAULT_LOCAL_TABLET, ...deduplicated]);
+        } else {
+          setDevices([DEFAULT_LOCAL_TABLET]);
         }
       } catch (e) {
         console.warn('Failed to parse devices from bridge', e);
       }
+    } else {
+      setDevices([DEFAULT_LOCAL_TABLET]);
+    }
+
+    // 2. Discovered UDP Beacon Candidates (Strictly for Pairing Modal, NEVER auto-added to active mesh)
+    if (rawPeersStr) {
+      try {
+        const peerList: any[] = JSON.parse(rawPeersStr);
+        if (Array.isArray(peerList)) {
+          const peers: DeviceInfo[] = [];
+          const seenPeerIps = new Set<string>();
+          for (const p of peerList) {
+            const cleanIp = (p.ipAddress || p.ip || '').split(':')[0].trim();
+            if (cleanIp && cleanIp !== '127.0.0.1' && p.id !== 'poco-pad' && !p.isLocal && !seenPeerIps.has(cleanIp)) {
+              seenPeerIps.add(cleanIp);
+              peers.push({
+                id: p.id || `node-${cleanIp.replace(/\./g, '-')}`,
+                name: p.name || p.hostname || `Discovered Node (${cleanIp})`,
+                type: (p.type || p.deviceType || 'desktop') as any,
+                os: (p.os || 'windows') as any,
+                status: 'online',
+                ipAddress: cleanIp,
+                batteryPercent: p.batteryPercent ?? p.battery ?? 100,
+                cpuUsagePercent: p.cpuUsagePercent ?? p.cpuLoad ?? 0,
+                isLocal: false,
+                latencyMs: p.latencyMs ?? 5,
+              });
+            }
+          }
+          setDiscoveredPeers(peers);
+        }
+      } catch (e) {
+        console.warn('Failed to parse discovered peers from bridge', e);
+      }
+    } else {
+      setDiscoveredPeers([]);
     }
 
     if (typeof bridge.getClipboardHistory === 'function') {
@@ -361,6 +400,7 @@ export const FleetProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     <FleetContext.Provider
       value={{
         devices,
+        discoveredPeers,
         clipboardItems,
         serverConfig,
         isHomeInstalled,

@@ -241,6 +241,58 @@ export const FleetDashboard: React.FC = () => {
     }
   }, [scannedPeers.length]);
 
+  // Sync discovered UDP beacons into scannedPeers (as candidates for pairing, NOT active mesh)
+  useEffect(() => {
+    const bridge = typeof window !== 'undefined' ? (window as any).NodusNativeBridge : null;
+    const syncDiscoveredPeers = () => {
+      let peers: any[] = [];
+      if (bridge && typeof bridge.getDiscoveredPeers === 'function') {
+        try {
+          const raw = bridge.getDiscoveredPeers();
+          if (raw) peers = JSON.parse(raw);
+        } catch (_) {}
+      } else if (fleetContext?.discoveredPeers) {
+        peers = fleetContext.discoveredPeers;
+      }
+
+      if (Array.isArray(peers) && peers.length > 0) {
+        setScannedPeers(prev => {
+          const map = new Map<string, ScannedPeer>();
+          for (const p of prev) {
+            const cleanIp = (p.ip || '').split(':')[0].trim();
+            if (cleanIp) map.set(cleanIp, p);
+          }
+          for (const p of peers) {
+            const cleanIp = (p.ipAddress || p.ip || '').split(':')[0].trim();
+            if (cleanIp && cleanIp !== '127.0.0.1' && p.id !== 'poco-pad' && !p.isLocal) {
+              const trustInfo = trustedDevices[cleanIp];
+              const isInFleet = devices.some(d => !d.isLocal && (d.ipAddress || '').split(':')[0].trim() === cleanIp);
+              const existing = map.get(cleanIp);
+              map.set(cleanIp, {
+                ip: cleanIp,
+                port: p.httpPort || p.port || 9120,
+                hostname: p.name || p.hostname || `Node (${cleanIp})`,
+                nickname: trustInfo?.nickname || existing?.nickname,
+                hasAgent: true,
+                isInFleet,
+                isTrusted: trustInfo ? trustInfo.trusted : true,
+                isUnknown: !trustInfo,
+                deviceType: (p.type || p.deviceType || 'desktop') as any,
+                os: p.os || 'windows',
+                latencyMs: existing?.latencyMs || 5,
+              });
+            }
+          }
+          return Array.from(map.values());
+        });
+      }
+    };
+
+    syncDiscoveredPeers();
+    const timer = setInterval(syncDiscoveredPeers, 3000);
+    return () => clearInterval(timer);
+  }, [fleetContext?.discoveredPeers, devices, trustedDevices]);
+
   useEffect(() => {
     try {
       localStorage.setItem('nodus_lan_device_count', String(lanDeviceCount));
