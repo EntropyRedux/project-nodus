@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **APK Release Automation**: New `.github/workflows/release-apk.yml` builds `nodus-home` and `nodus-fleet` debug APKs on every `v*` tag (plus manual dispatch) and attaches them to the GitHub Release.
+- **README Download Section**: Added a "Download & Install" section with a latest-release badge, per-app APK naming, and ADB install instructions.
+
 ### Removed
 - **`packages/nodus-legacy/`**: Deleted the obsolete legacy launcher implementation (duplicate `LauncherActivity.kt` shell, Go agent, and full UI tree) that duplicated `nodus-home` functionality and caused architectural confusion.
 - **`packages/nodus-assistive/`**: Removed the superseded standalone assistive-touch package; assistive functionality now lives inside `nodus-home`.

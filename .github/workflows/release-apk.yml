@@ -1,0 +1,80 @@
+name: Release APKs
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-apk-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-apk:
+    name: Build & Publish Android APKs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build Frontend Bundles
+        run: |
+          npm run --prefix packages/nodus-home build
+          npm run --prefix packages/nodus-fleet build
+
+      - name: Sync Bundles into Android Shells
+        run: node scripts/sync-android-assets.mjs
+
+      - name: Build Nodus Home APK
+        working-directory: packages/nodus-home/android-shell
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Build Nodus Fleet APK
+        working-directory: packages/nodus-fleet/android-shell
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Stage APK Artifacts
+        run: |
+          mkdir -p dist-apks
+          cp packages/nodus-home/android-shell/app/build/outputs/apk/debug/app-debug.apk "dist-apks/nodus-home-${GITHUB_REF_NAME}-debug.apk"
+          cp packages/nodus-fleet/android-shell/app/build/outputs/apk/debug/app-debug.apk "dist-apks/nodus-fleet-${GITHUB_REF_NAME}-debug.apk"
+          ls -lh dist-apks
+
+      - name: Upload APKs as Workflow Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nodus-apks-${{ github.ref_name }}
+          path: dist-apks/*.apk
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist-apks/*.apk
+          generate_release_notes: true

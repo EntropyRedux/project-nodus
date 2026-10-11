@@ -15,6 +15,29 @@
 
 ---
 
+## ⬇️ Download & Install
+
+[![Latest Release](https://img.shields.io/github/v/release/EntropyRedux/project-nodus?sort=semver&label=latest%20release)](https://github.com/EntropyRedux/project-nodus/releases/latest)
+
+Every `v*` tag publishes CI-built debug APKs ([`.github/workflows/release-apk.yml`](.github/workflows/release-apk.yml)):
+
+| App | Package | APK asset (per release) |
+| :--- | :--- | :--- |
+| **Nodus Home** | `com.nodus.home` | `nodus-home-<tag>-debug.apk` |
+| **Nodus Fleet** | `com.nodus.fleet` | `nodus-fleet-<tag>-debug.apk` |
+
+➡️ **[Browse all releases →](https://github.com/EntropyRedux/project-nodus/releases)** and download the APKs for the newest tag.
+
+```bash
+# Install the downloaded APK over an existing install
+adb install -r nodus-home-<tag>-debug.apk
+adb install -r nodus-fleet-<tag>-debug.apk
+```
+
+> Prefer building locally? See the **Build & Dev Commands** section below — run `./gradlew assembleDebug` inside each package's `android-shell/`.
+
+---
+
 ## 🌟 Overview
 **Project Nodus** is a universal cross-device desktop and launcher ecosystem engineered for **Android tablets** (supporting Android 10–14+, foldables, and OEM multitasking environments like Xiaomi HyperOS, Samsung One UI, and Lenovo ZUI), paired with Windows companion bridges and multi-device workstation control.
 
