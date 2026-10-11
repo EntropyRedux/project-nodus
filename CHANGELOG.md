@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Removed
+- **`packages/nodus-legacy/`**: Deleted the obsolete legacy launcher implementation (duplicate `LauncherActivity.kt` shell, Go agent, and full UI tree) that duplicated `nodus-home` functionality and caused architectural confusion.
+- **`packages/nodus-assistive/`**: Removed the superseded standalone assistive-touch package; assistive functionality now lives inside `nodus-home`.
+- **Legacy Release Artifacts**: Dropped tracked `releases/*.apk` binaries from version control (APKs are never committed; see `.gitignore`).
+
+### Changed
+- **Documentation Folder Standardization**: Migrated `generated_documents/` to `generated-documents/` and updated all README/CHANGELOG references.
+- **Stale Lockfile Entry**: Pruned the extraneous `packages/nodus-legacy` record from `package-lock.json`.
+
+### Fixed
+- **Broken Documentation Link**: Removed the dead `REFACTOR_AND_UPDATE_STRATEGY_PLAN_2026.md` link from `README.md`.
+
+---
+
 ## [1.4.0] - 2026-09-13
 
 ### Added
@@ -30,7 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Remote volume adjustments (0–100%, volume up/down, mute toggle).
   - Hardware media transport controls (`Play/Pause`, `Next`, `Previous`).
   - Remote screen wake and sleep/lock actions.
-- **Project Status Report**: Published comprehensive milestone documentation in `generated_documents/PROJECT_STATUS_REPORT_2026_09_13.md`.
+- **Project Status Report**: Published comprehensive milestone documentation in `generated-documents/PROJECT_STATUS_REPORT_2026_09_13.md`.
 
 ### Changed
 - **Trackpad Aspect Ratio Invariance**: Bound the virtual trackpad DOM element strictly to `aspectRatio: width / height`, preventing coordinate distortion during column or window resizing.
