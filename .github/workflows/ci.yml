@@ -28,13 +28,16 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Typecheck Nodus Home
-        run: npx --prefix packages/nodus-home tsc --noEmit
+        working-directory: packages/nodus-home
+        run: npm run lint
 
       - name: Typecheck Nodus Fleet
-        run: npx --prefix packages/nodus-fleet tsc --noEmit
+        working-directory: packages/nodus-fleet
+        run: npm run lint
 
       - name: Typecheck Nodus Desktop
-        run: npx --prefix packages/nodus-desktop tsc --noEmit
+        working-directory: packages/nodus-desktop
+        run: npx tsc --noEmit
 
       - name: Run Tests (Nodus Home)
         run: npm run --prefix packages/nodus-home test
