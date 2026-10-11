@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Documentation Folder Standardization**: Migrated `generated_documents/` to `generated-documents/` and updated all README/CHANGELOG references.
+- **Generated-Documents Tracking Policy**: `.gitignore` now tracks only `generated-documents/context/` (living context, project briefs, contracts), `plans/`, and `issues/`; ephemeral artifacts (`audits/`, `handoffs/`, `gaps/`, `test-reports/`, `archives/`) are ignored.
 - **Stale Lockfile Entry**: Pruned the extraneous `packages/nodus-legacy` record from `package-lock.json`.
 
 ### Fixed

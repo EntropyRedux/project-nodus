@@ -10,7 +10,6 @@
 
 ## 📚 Documentation & Quick Links
 
-- **📊 [v1.2.0 Project Status Report](generated-documents/PROJECT_STATUS_REPORT_2026_09_13.md)**: Comprehensive milestone engineering report covering dual mouse emulation, ConPTY terminal, and mesh architecture.
 - **📖 [User & Operations Guide](USER_GUIDE.md)**: Full instructions for tablet setup, gesture controls, window management & settings.
 - **📝 [Version Changelog](CHANGELOG.md)**: Detailed historical release notes across ecosystem versions.
 
@@ -74,8 +73,9 @@ project-nodus/
 ├── CHANGELOG.md                        # Historical Release Notes & Changelogs
 ├── LICENSE                             # GNU AGPLv3 License
 ├── package.json                        # Root NPM Workspace (v1.2.0)
-├── generated-documents/                # Engineering status reports, audit logs & plans
-│   └── PROJECT_STATUS_REPORT_2026_09_13.md # v1.2.0 Comprehensive Milestone Report
+├── generated-documents/                # Engineering memory (tracked: context/, plans/)
+│   ├── context/                        # living_context.md, project_brief_v*.md, contracts/
+│   └── plans/                          # feature-group & refactor plans
 ├── scripts/                            # Cross-platform maintenance & asset sync tools
 │   └── sync-android-assets.mjs         # Safe bundle synchronization script
 │

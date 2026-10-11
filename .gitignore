@@ -70,6 +70,19 @@ shortcuts/
 generated_documents_do_not_push/
 **/generated_documents_do_not_push/
 
+# Generated Documents — lifecycle tracking rules
+# Tracked: context/ (living_context.md, project_brief_v*.md, contracts/), plans/, issues/
+# Ignored: audits/, handoffs/, gaps/, test-reports/, archives/, and loose reports
+generated-documents/*
+!generated-documents/context/
+!generated-documents/plans/
+!generated-documents/issues/
+generated-documents/archives/
+generated-documents/audits/
+generated-documents/handoffs/
+generated-documents/gaps/
+generated-documents/test-reports/
+
 # Fleet Design & Prototypes
 packages/nodus-fleet/Nodus Fleet Component Design/
 packages/nodus-fleet/nodus-fleet_uiux_prototype/
