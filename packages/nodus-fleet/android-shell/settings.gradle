@@ -13,5 +13,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "NodusHome"
+rootProject.name = "NodusFleet"
 include ':app'

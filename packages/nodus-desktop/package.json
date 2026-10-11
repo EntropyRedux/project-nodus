@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.2.0",
   "type": "module",
-  "description": "Nodus Home Windows � Desktop HUD Companion with Hot-Corner Gestures",
+  "description": "Nodus Home Windows — Desktop HUD Companion with Hot-Corner Gestures",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
